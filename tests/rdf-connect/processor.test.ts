@@ -114,5 +114,6 @@ describe("Tests for rdfc:LdesClient processor", () => {
 
         expect(proc.url).toBe("https://era.ilabt.imec.be/rinf/ldes");
         expect(proc.ordered).toBe("none");
+        expect(proc.pollInterval).toBe(1000);
     });
 });

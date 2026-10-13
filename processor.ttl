@@ -132,6 +132,7 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:codeIdentifier "pollInterval";
     sh:name "Poll Interval";
     sh:description "Polling interval in milliseconds used when follow mode is enabled.";
+    sh:defaultValue 1000;
     sh:maxCount 1;
   ], [
     sh:datatype xsd:string;

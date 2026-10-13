@@ -18,7 +18,7 @@ type LDESClientArgs = {
     after?: Date;
     ordered: Ordered;
     follow?: boolean;
-    pollInterval?: number;
+    pollInterval: number;
     shapeFile?: string;
     noShape?: boolean;
     savePath?: string;
