@@ -16,7 +16,7 @@ type LDESClientArgs = {
     output: Writer;
     before?: Date;
     after?: Date;
-    ordered?: string;
+    ordered: Ordered;
     follow?: boolean;
     pollInterval?: number;
     shapeFile?: string;
@@ -70,7 +70,7 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
                 startFresh: this.startFresh,
                 concurrentFetches: this.fetchConfig?.concurrent,
             }),
-            <Ordered>this.ordered || "none",
+            this.ordered,
             undefined,
             this.streamId ? df.namedNode(this.streamId) : undefined,
         );

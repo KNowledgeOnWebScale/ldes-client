@@ -93,4 +93,26 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(proc.streamId).toBe("MyStream");
         expect(proc.sdsify).toBeTruthy();
     });
+
+    test("rdfc:LdesClient falls back to its default values", async () => {
+        const processor = `
+        @prefix rdfc: <https://w3id.org/rdf-connect#>.
+
+        <http://example.com/ns#processor> a rdfc:LdesClient;
+            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfc:output <jw>.
+        `;
+
+        const configLocation = process.cwd() + "/processor.ttl";
+
+        const procHelper = new ProcHelper<FullProc<LDESClientProcessor>>();
+        await procHelper.importFile(configLocation);
+        await procHelper.importInline("pipeline.ttl", processor);
+        procHelper.getConfig("LdesClient");
+
+        const proc: FullProc<LDESClientProcessor> = await procHelper.getProcessor("http://example.com/ns#processor");
+
+        expect(proc.url).toBe("https://era.ilabt.imec.be/rinf/ldes");
+        expect(proc.ordered).toBe("none");
+    });
 });

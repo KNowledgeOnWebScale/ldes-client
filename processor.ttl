@@ -117,6 +117,7 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:name "Ordering";
     sh:description "Ordering strategy to use while reading the LDES.";
     sh:in ( "none" "ascending" "descending" );
+    sh:defaultValue "none";
     sh:maxCount 1;
   ], [
     sh:datatype xsd:boolean;
