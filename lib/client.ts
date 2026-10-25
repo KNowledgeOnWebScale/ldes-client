@@ -18,6 +18,10 @@ import {
     extractMainNodeShape,
     getObjects,
     maybeVersionMaterialize,
+    shaclPathKey,
+    shaclPathTerms,
+    parseQuads,
+    serializeQuads,
     streamToArray,
     getLoggerFor,
     handleExit,
@@ -29,6 +33,13 @@ import type { Config } from "./config";
 import { ClientStateManager } from "./state";
 import type { Ordered, StrategyEvents } from "./strategy";
 import type { LDESInfo, Notifier, FetchedPage, Member } from "./fetcher";
+
+type CachedRoot = {
+    url: string;
+    quads: string;
+    immutable: boolean;
+    etag?: string;
+};
 
 // RDF-JS data factory
 const df = new DataFactory();
@@ -131,12 +142,53 @@ export class Client {
         // Initialize the client state manager
         this.clientStateManager.init();
 
-        // Fetch the given root URL
-        const root: FetchedPage = await statelessPageFetch(
-            this.config.url,
-            this.dereferencer,
-            this.config.fetch,
-        );
+        const rootState = this.clientStateManager.build<string, CachedRoot>("root");
+        let root: FetchedPage | undefined;
+        let cached: CachedRoot | undefined;
+        if (this.config.statePath) {
+            cached = await rootState.get(this.config.url).catch(() => undefined);
+            if (cached?.immutable) {
+                const data = RdfStore.createDefault();
+                parseQuads(cached.quads).forEach((quad) => data.addQuad(quad));
+                root = {
+                    url: cached.url,
+                    data,
+                    immutable: true,
+                    memberCount: 0,
+                };
+                this.logger.debug(`Reusing persisted immutable root ${cached.url}`);
+            }
+        }
+        if (!root) {
+            const headers = cached?.etag
+                ? { "If-None-Match": cached.etag }
+                : undefined;
+            root = await statelessPageFetch(
+                this.config.url,
+                this.dereferencer,
+                this.config.fetch,
+                headers,
+            );
+            if (root.status === 304 && cached) {
+                parseQuads(cached.quads).forEach((quad) => root!.data.addQuad(quad));
+            }
+            root.immutable = root.data
+                .getQuads(
+                    df.namedNode(root.url),
+                    LDES.terms.custom("immutable"),
+                    null,
+                    null,
+                )
+                .some((quad) => quad.object.value === "true" || quad.object.value === "1");
+            if (this.config.statePath) {
+                await rootState.put(this.config.url, {
+                    url: root.url,
+                    quads: serializeQuads(root.data.getQuads()),
+                    immutable: root.immutable,
+                    etag: root.etag ?? cached?.etag,
+                });
+            }
+        }
         this.fragmentCount++;
         this.emit("fragment", root);
 
@@ -148,30 +200,62 @@ export class Client {
             ? df.namedNode("file://" + this.config.url)
             : df.namedNode(this.config.url);
 
-        //*****************************************************************
-        // TODO: Handle the case where there are multiple views available
-        // through a discovery process.
-        //*****************************************************************
-        const viewQuads = root.data.getQuads(null, TREE.terms.view, null, null);
+        const allViewQuads = root.data.getQuads(null, TREE.terms.view, null, null);
+        const fetchedUrl = df.namedNode(root.url);
+        const currentViewQuads = root.data.getQuads(
+            null,
+            TREE.terms.view,
+            fetchedUrl,
+            null,
+        );
+        const suppliedIriViewQuads = root.data.getQuads(
+            ldesId,
+            TREE.terms.view,
+            null,
+            null,
+        );
         let viewId: Term;
+        let ldesUri: Term | undefined;
 
         if (this.config.urlIsView) {
             viewId = ldesId;
+            if (currentViewQuads.length === 1) {
+                ldesUri = currentViewQuads[0].subject;
+            }
         } else {
-            if (viewQuads.length === 0) {
+            const candidates = currentViewQuads.length > 0
+                ? currentViewQuads
+                : suppliedIriViewQuads.length > 0
+                    ? suppliedIriViewQuads
+                    : isLocalDump
+                        ? allViewQuads
+                        : [];
+            if (candidates.length === 0) {
                 this.logger.error(
-                    "Did not find a tree:view predicate, which is required to interpret the LDES. " +
+                    "Did not find exactly one applicable tree:view predicate, which is required to interpret the LDES. " +
                     "If you are targeting a tree:view directly, use the '--url-is-view' option.",
                 );
-                throw "No view found";
-            } else {
-                viewId = viewQuads[0].object;
+                throw new Error("No applicable tree:view found");
             }
+            if (candidates.length > 1 && !this.config.allowUnsafeAmbiguousView) {
+                throw new Error(
+                    `Ambiguous tree:view discovery: found ${candidates.length} applicable statements`,
+                );
+            }
+            if (candidates.length > 1) {
+                this.logger.warn(
+                    `Found ${candidates.length} applicable tree:view statements; ` +
+                    "the command-line client is taking the first one. This fallback is not specification compliant.",
+                );
+            }
+            const selected = candidates[0];
+            viewId = selected.object;
+            ldesUri = selected.subject;
         }
 
         // This is the actual LDES IRI found in the RDF data.
         // Might be different from the configured ldesId due to HTTP redirects
-        const ldesUri = viewQuads[0]?.subject ||
+        ldesUri = ldesUri ||
             root.data.getQuads(null, RDF.terms.type, LDES.terms.EventStream)[0].subject;
         if (!ldesUri) {
             this.logger.error("Could not find the LDES IRI in the fetched RDF data.");
@@ -187,6 +271,7 @@ export class Client {
             ldesUri,
             viewId,
             root.data,
+            root.url,
             this.dereferencer,
             this.config,
         );
@@ -212,9 +297,10 @@ export class Client {
         );
 
         this.logger.debug(`timestampPath: ${!!info.timestampPath}`);
+        this.logger.debug(`sequencePath: ${!!info.sequencePath}`);
 
-        if (this.ordered !== "none" && !info.timestampPath) {
-            throw "Can only emit members in order, if LDES is configured with timestampPath";
+        if (this.ordered !== "none" && !info.timestampPath && !info.sequencePath) {
+            throw "Can only emit members in order, if LDES is configured with timestampPath or sequencePath";
         }
 
         // Component that manages the fetching of RDF data over HTTP
@@ -266,6 +352,9 @@ export class Client {
 
         // Fetching strategy definition, i.e., whether to use ordered or unordered fetching;
         // keep on polling the LDES (mutable pages) for new data or finish when fully fetched.
+        const pollInterval = info.pollingInterval === undefined
+            ? this.config.pollInterval
+            : info.pollingInterval * 1000;
         this.strategy =
             this.ordered !== "none"
                 ? new OrderedStrategy(
@@ -273,9 +362,10 @@ export class Client {
                     this.fetcher,
                     notifier,
                     this.modulatorFactory,
+                    info,
                     this.ordered,
                     this.config.polling,
-                    this.config.pollInterval,
+                    pollInterval,
                 )
                 : new UnorderedStrategy(
                     this.memberManager,
@@ -283,17 +373,18 @@ export class Client {
                     notifier,
                     this.modulatorFactory,
                     this.config.polling,
-                    this.config.pollInterval,
+                    pollInterval,
                 );
 
         if (!isLocalDump) this.logger.debug(
-            `Found ${viewQuads.length} views, choosing ${viewId.value}`,
+            `Found ${allViewQuads.length} views, choosing ${viewId.value}`,
         );
 
         await this.strategy.start(
             viewId.value,
             condition,
-            isLocalDump ? root : undefined,
+            isLocalDump || root.url === viewId.value ? root : undefined,
+            !isLocalDump,
         );
     }
 
@@ -382,6 +473,7 @@ async function getInfo(
     ldesId: Term,
     viewId: Term,
     store: RdfStore,
+    fetchedRootUrl: string,
     dereferencer: RdfDereferencer,
     config: Config,
 ): Promise<LDESInfo> {
@@ -410,25 +502,43 @@ async function getInfo(
     }
 
     let shapeIds;
+    let contextShapeIds;
     let timestampPaths;
+    let sequencePaths;
+    let transactionFinalizedPaths;
     let versionOfPaths;
+    let versionTimestampPaths;
+    let versionSequencePaths;
+    let pollingIntervals;
 
     const isLocalDump = ldesId.value.startsWith("file://");
 
     if (isLocalDump) {
         // We are dealing with a local dump LDES
-        shapeIds = config.noShape ? [] : getObjects(store, null, TREE.terms.shape);
+        contextShapeIds = getObjects(store, null, TREE.terms.shape);
+        shapeIds = config.noShape ? [] : contextShapeIds;
         timestampPaths = getObjects(store, null, LDES.terms.timestampPath);
+        sequencePaths = getObjects(store, null, LDES.terms.custom("sequencePath"));
+        transactionFinalizedPaths = getObjects(store, null, LDES.terms.custom("transactionFinalizedPath"));
         versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
+        versionTimestampPaths = getObjects(store, null, LDES.terms.custom("versionTimestampPath"));
+        versionSequencePaths = getObjects(store, null, LDES.terms.custom("versionSequencePath"));
+        pollingIntervals = getObjects(store, null, LDES.terms.custom("pollingInterval"));
     } else {
         // This is a normal LDES on the Web
-        shapeIds = config.noShape ? [] : getObjects(store, ldesId, TREE.terms.shape);
+        contextShapeIds = getObjects(store, ldesId, TREE.terms.shape);
+        shapeIds = config.noShape ? [] : contextShapeIds;
         timestampPaths = getObjects(store, ldesId, LDES.terms.timestampPath);
+        sequencePaths = getObjects(store, ldesId, LDES.terms.custom("sequencePath"));
+        transactionFinalizedPaths = getObjects(store, ldesId, LDES.terms.custom("transactionFinalizedPath"));
         versionOfPaths = getObjects(store, ldesId, LDES.terms.versionOfPath);
+        versionTimestampPaths = getObjects(store, ldesId, LDES.terms.custom("versionTimestampPath"));
+        versionSequencePaths = getObjects(store, ldesId, LDES.terms.custom("versionSequencePath"));
+        pollingIntervals = getObjects(store, ldesId, LDES.terms.custom("pollingInterval"));
     }
 
     logger.debug(
-        `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${versionOfPaths.length} versionOfPaths`,
+        `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${sequencePaths.length} sequencePaths, ${versionOfPaths.length} versionOfPaths`,
     );
 
     // Only try to dereference the view if we are not dealing with a local dump
@@ -438,6 +548,9 @@ async function getInfo(
         let tryAgainUrl = viewId.value;
         if (config.urlIsView) {
             tryAgainUrl = ldesId.value;
+        }
+        if (tryAgainUrl === fetchedRootUrl) {
+            return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
         }
         try {
             logger.debug(`Maybe find more info at ${tryAgainUrl}`);
@@ -451,17 +564,33 @@ async function getInfo(
 
             const shapeInView = getObjects(store, null, TREE.terms.shape);
             if (shapeInView) {
+                contextShapeIds = shapeInView;
                 shapeIds = config.noShape ? [] : shapeInView;
             }
 
             if (!timestampPaths.length) {
                 timestampPaths = getObjects(store, null, LDES.terms.timestampPath);
             }
+            if (!sequencePaths.length) {
+                sequencePaths = getObjects(store, null, LDES.terms.custom("sequencePath"));
+            }
+            if (!transactionFinalizedPaths.length) {
+                transactionFinalizedPaths = getObjects(store, null, LDES.terms.custom("transactionFinalizedPath"));
+            }
             if (!versionOfPaths.length) {
                 versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
             }
+            if (!versionTimestampPaths.length) {
+                versionTimestampPaths = getObjects(store, null, LDES.terms.custom("versionTimestampPath"));
+            }
+            if (!versionSequencePaths.length) {
+                versionSequencePaths = getObjects(store, null, LDES.terms.custom("versionSequencePath"));
+            }
+            if (!pollingIntervals.length) {
+                pollingIntervals = getObjects(store, null, LDES.terms.custom("pollingInterval"));
+            }
             logger.debug(
-                `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${versionOfPaths.length} isVersionOfPaths`,
+                `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${sequencePaths.length} sequencePaths, ${versionOfPaths.length} isVersionOfPaths`,
             );
         } catch (ex: unknown) {
             logger.error(`Failed to fetch ${tryAgainUrl}`);
@@ -477,10 +606,50 @@ async function getInfo(
         logger.error(`Expected at most one timestamp path, found ${timestampPaths.length}`);
     }
 
+    if (sequencePaths.length > 1) {
+        logger.error(`Expected at most one sequence path, found ${sequencePaths.length}`);
+    }
+
+    if (transactionFinalizedPaths.length > 1) {
+        logger.error(`Expected at most one transactionFinalized path, found ${transactionFinalizedPaths.length}`);
+    }
+
     if (versionOfPaths.length > 1) {
         logger.error(`Expected at most one versionOf path, found ${versionOfPaths.length}`);
     }
 
+    if (versionTimestampPaths.length > 1) {
+        logger.error(`Expected at most one versionTimestamp path, found ${versionTimestampPaths.length}`);
+    }
+
+    if (versionSequencePaths.length > 1) {
+        logger.error(`Expected at most one versionSequence path, found ${versionSequencePaths.length}`);
+    }
+
+    if (pollingIntervals.length > 1) {
+        logger.error(`Expected at most one polling interval, found ${pollingIntervals.length}`);
+    }
+
+    return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
+}
+
+async function buildInfo(
+    config: Config,
+    store: RdfStore,
+    dereferencer: RdfDereferencer,
+    shapeIds: Term[],
+    timestampPaths: Term[],
+    sequencePaths: Term[],
+    transactionFinalizedPaths: Term[],
+    versionOfPaths: Term[],
+    versionTimestampPaths: Term[],
+    versionSequencePaths: Term[],
+    pollingIntervals: Term[],
+    ldesId: Term,
+    viewId: Term,
+    contextShapeIds: Term[],
+): Promise<LDESInfo> {
+    const logger = getLoggerFor("getShape");
     const shapeConfigStore = RdfStore.createDefault();
     if (config.shape) {
         for (const quad of config.shape.quads) {
@@ -508,15 +677,48 @@ async function getInfo(
     }
 
     const shapeStore = shapeIds.length > 0 ? store : shapeConfigStore;
+    const viewDescriptions = getObjects(store, viewId, TREE.terms.custom("viewDescription"));
+    const retentionPolicies = [
+        ...getObjects(store, viewId, LDES.terms.retentionPolicy),
+        ...viewDescriptions.flatMap((description) =>
+            getObjects(store, description, LDES.terms.retentionPolicy)
+        ),
+    ].filter((policy, index, policies) =>
+        policies.findIndex((candidate) => candidate.equals(policy)) === index
+    );
+    const emptyRetentionPolicies = retentionPolicies.filter((policy) =>
+        store.getQuads(policy, null, null, null).length === 0
+    );
+    const pollingInterval = Number(pollingIntervals[0]?.value);
 
     return {
         extractor: new CBDShapeExtractor(shapeStore, dereferencer, {
-            cbdDefaultGraph: config.onlyDefaultGraph,
+            // Generic LDES member extraction is defined over the default graph
+            // (plus the member's own named graph), not unrelated named graphs.
+            cbdDefaultGraph: true,
             fetch: config.fetch,
         }),
         shape: config.shape ? config.shape.shapeId : shapeIds[0],
         timestampPath: timestampPaths[0],
+        timestampPathKey: shaclPathKey(store, timestampPaths[0]),
+        sequencePath: sequencePaths[0],
+        sequencePathTerms: shaclPathTerms(store, sequencePaths[0]),
+        sequencePathKey: shaclPathKey(store, sequencePaths[0]),
+        transactionFinalizedPath: transactionFinalizedPaths[0],
+        transactionFinalizedPathTerms: shaclPathTerms(store, transactionFinalizedPaths[0]),
+        transactionFinalizedObject:
+            getObjects(store, ldesId, LDES.terms.custom("transactionFinalizedObject"))[0] ??
+            getObjects(store, null, LDES.terms.custom("transactionFinalizedObject"))[0],
         versionOfPath: versionOfPaths[0],
+        versionTimestampPath: versionTimestampPaths[0],
+        versionSequencePath: versionSequencePaths[0],
+        pollingInterval: Number.isNaN(pollingInterval) ? undefined : pollingInterval,
+        rootNode: viewId,
+        shapes: contextShapeIds,
+        viewDescriptions,
+        retentionPolicies,
+        emptyRetentionPolicies,
+        contextQuads: store.getQuads(),
         shapeQuads: shapeStore.getQuads(),
     };
 }

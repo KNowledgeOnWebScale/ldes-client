@@ -9,7 +9,7 @@ import {
 import fs from "fs";
 import path from "path";
 import { createUriAndTermNamespace, RDF, SDS, DC } from "@treecg/types";
-import { channel, createRunner } from "@rdfc/js-runner/lib/testUtils";
+import { channel, createRunner } from "@rdfc/js-runner/lib/testUtils/index.js";
 import { fastify, FastifyInstance, RequestPayload } from "fastify";
 import { fastifyStatic } from "@fastify/static";
 import { Parser } from "n3";

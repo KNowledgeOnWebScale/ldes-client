@@ -76,6 +76,11 @@ export interface Modulator<F, M> {
     getAllMutable(): Promise<ReadonlyArray<F>>
 
     /**
+     * Returns one mutable fragment by URL if it is known.
+    */
+    getMutable(url: string): Promise<F | undefined>
+
+    /**
      * Returns all data entities that have been extracted but not emitted yet.
      * @returns {Promise<ReadonlyArray<M>>} The unemitted list.
     */
@@ -398,6 +403,18 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         });
     }
 
+    async getMutable(url: string): Promise<F | undefined> {
+        if (this.closed) return;
+        return this.withState<F | undefined>(undefined, async (st) => {
+            const { mutable, fragmentParser } = st;
+            const value = await mutable.get(url).catch(() => undefined);
+            if (!value) {
+                return;
+            }
+            return fragmentParser ? fragmentParser(value) : value;
+        });
+    }
+
     async getAllUnemitted(): Promise<ReadonlyArray<M>> {
         if (this.closed) return [];
         return this.withState<ReadonlyArray<M>>([], async (st) => {
@@ -441,10 +458,6 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         if (this.closed) return false;
         return this.withState<boolean>(true, async (st) => {
             const { mutable, fragmentEncoder } = st;
-            if (await mutable.has(url)) {
-                // Fragment is already in mutable, so notifications may proceed
-                return true;
-            }
             await mutable.put(
                 url,
                 fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment

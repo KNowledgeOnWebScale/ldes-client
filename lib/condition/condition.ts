@@ -1,9 +1,8 @@
-import { NamedNode, Parser } from "n3";
 import { DataFactory } from "rdf-data-factory";
 import { BasicLensM, extractShapes, pred } from "rdf-lens";
 import { RdfStore } from "rdf-stores";
 import { RDF, TREE, XSD } from "@treecg/types";
-import { getLoggerFor, getObjects } from "../utils";
+import { getLoggerFor, getObjects, parseQuads } from "../utils";
 import { SHAPES } from "./shapes";
 import { Range } from "./range";
 
@@ -42,7 +41,7 @@ export function empty_condition(): Condition {
 }
 
 export function parse_condition(source: string, baseIRI: string): Condition {
-    const shapeQuads = new Parser().parse(SHAPES);
+    const shapeQuads = parseQuads(SHAPES);
     const output = extractShapes(shapeQuads, {
         "http://vocab.deri.ie/csp#And": (obj) =>
             new AndCondition(
@@ -60,13 +59,13 @@ export function parse_condition(source: string, baseIRI: string): Condition {
             ),
     });
 
-    const dataQuads = new Parser({ baseIRI: baseIRI }).parse(source);
+    const dataQuads = parseQuads(source, { baseIRI: baseIRI });
 
     return <Condition>output.lenses[
         "https://w3id.org/rdf-lens/ontology#TypedExtract"
     ].execute({
         quads: dataQuads,
-        id: new NamedNode(baseIRI),
+        id: df.namedNode(baseIRI),
     });
 }
 

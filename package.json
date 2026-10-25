@@ -1,6 +1,6 @@
 {
   "name": "ldes-client",
-  "description": "This package provides common tooling to work with LDESes.",
+  "description": "This package provides common tooling to work with LDESs.",
   "version": "0.3.3",
   "main": "dist/lib/client.js",
   "exports": {
@@ -15,6 +15,7 @@
     "build": "tsc && tsc-alias && rollup -c",
     "test": "vitest run --coverage --coverage.include lib --coverage.exclude dist",
     "test:browser": "vitest run -c vitest.browser.config.ts",
+    "test:conformance": "sh scripts/test-conformance.sh",
     "prepublishOnly": "npm run build"
   },
   "files": [
@@ -37,14 +38,14 @@
   "dependencies": {
     "@treecg/types": "^0.4.6",
     "commander": "^15.0.0",
-    "extract-cbd-shape": "^0.3.0b",
+    "extract-cbd-shape": "^0.4.1",
     "heap-js": "^2.7.1",
     "level": "^10.0.0",
     "n3": "^2.13.12",
     "rdf-data-factory": "^2.1.0",
     "rdf-dereference": "^5.0.0",
-    "rdf-lens": "^1.3.7",
-    "rdf-stores": "^2.7.0",
+    "rdf-lens": "^2.1.0",
+    "rdf-stores": "^2.8.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {
@@ -54,26 +55,26 @@
     "@rdfc/js-runner": "^3.4.0",
     "@rdfc/proto": "^0.1.3",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.26.4",
+    "@types/n3": "^1.26.5",
     "@types/node": "^26.6.5",
     "@typescript-eslint/eslint-plugin": "^8.72.0",
     "@typescript-eslint/parser": "^8.72.0",
-    "@vitest/browser": "^4.1.12",
-    "@vitest/browser-playwright": "^4.1.12",
-    "@vitest/coverage-v8": "^4.1.12",
+    "@vitest/browser": "^5.0.5",
+    "@vitest/browser-playwright": "^5.0.5",
+    "@vitest/coverage-v8": "^5.0.5",
     "benchmark": "^2.1.4",
-    "eslint": "^10.8.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "fastify": "^5.12.7",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "playwright": "^1.64.1",
     "prettier": "^3.9.10",
-    "rollup": "^4.64.10",
+    "rollup": "^4.64.12",
     "tsc-alias": "^1.9.8",
     "typescript": "^6.0.3",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.12"
+    "vitest": "^5.0.5"
   },
   "browser": {
     "fs": false,

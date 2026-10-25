@@ -167,6 +167,7 @@ async function main() {
             noShape,
             polling,
             url: paramURL,
+            allowUnsafeAmbiguousView: true,
             statePath: save,
             pollInterval: paramPollInterval,
             urlIsView: urlIsView,

@@ -1,5 +1,5 @@
 import { describe, afterAll, expect, test } from "vitest";
-import { ProcHelper } from "@rdfc/js-runner/lib/testUtils";
+import { ProcHelper } from "@rdfc/js-runner/lib/testUtils/index.js";
 import { LDESClientProcessor } from "../../lib/rdfc-processor";
 import { rmSync } from "fs";
 

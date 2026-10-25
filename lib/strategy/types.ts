@@ -36,7 +36,10 @@ export type StrategyEvents = {
 export type SerializedMember = {
     id: string;
     quads: string;
+    order?: string;
     timestamp?: string;
+    sequence?: string;
+    transactionFinalized?: boolean;
     isVersionOf?: string;
     type?: string;
     created?: string;

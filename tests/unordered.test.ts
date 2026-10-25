@@ -1,11 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { afterEach, beforeEach, afterAll, describe, expect, test } from "vitest";
-import { Parser } from "n3";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { TREE } from "@treecg/types";
 import { read, Tree } from "./helper";
 import { MaxCountCondition } from "../lib/condition";
 import { retry_fetch } from "../lib/fetcher";
-import { replicateLDES } from "../lib/client";
+import { intoConfig, replicateLDES } from "../lib/client";
+import { parseQuads } from "../lib/utils";
 
 const oldFetch = global.fetch;
 beforeEach(() => {
@@ -31,8 +34,8 @@ describe("Simple Tree", () => {
         // root -> first -> second
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -153,8 +156,8 @@ describe("more complex tree", () => {
         //  |> second (2)
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -283,8 +286,8 @@ describe("more complex tree", () => {
         // root (2) -GTE> first (3) -GTE (delay)> second (5)
         const tree = new Tree<Date>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> "${numb.toISOString()}".`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb.toISOString()}" .`,
                 ),
             "http://example.com/value",
         );
@@ -341,8 +344,8 @@ describe("more complex tree", () => {
         //      -GTE 5> second (delay)> (6)
         const tree = new Tree<Date>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> "${numb.toISOString()}".`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb.toISOString()}" .`,
                 ),
             "http://example.com/value",
         );
@@ -397,8 +400,8 @@ describe("more complex tree", () => {
         // root -LTE> first (10) -LTE (delay)> second (7)
         const tree = new Tree<Date>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> "${numb.toISOString()}".`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb.toISOString()}" .`,
                 ),
             "http://example.com/value",
         );
@@ -466,8 +469,8 @@ describe("more complex tree", () => {
         //      -LTE 6> second (delay)> (5)
         const tree = new Tree<Date>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> "${numb.toISOString()}".`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb.toISOString()}" .`,
                 ),
             "http://example.com/value",
         );
@@ -534,8 +537,8 @@ describe("more complex tree", () => {
         // return;
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -583,8 +586,8 @@ describe("more complex tree", () => {
     test("Polling works, single page - ordered", async () => {
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -632,8 +635,8 @@ describe("more complex tree", () => {
     test("Polling works, single page - max values", async () => {
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -690,8 +693,8 @@ describe("more complex tree", () => {
     test("Exponential backoff works", async () => {
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -726,8 +729,8 @@ describe("more complex tree", () => {
     test("Exponential backoff works, handle max retries", async () => {
         const tree = new Tree<number>(
             (x, numb) =>
-                new Parser().parse(
-                    `<${x}> <http://example.com/value> ${numb}.`,
+                parseQuads(
+                    `<${x}> <http://example.com/value> "${numb}" .`,
                 ),
             "http://example.com/value",
         );
@@ -768,4 +771,245 @@ describe("more complex tree", () => {
         expect(thrown).toBeTruthy();
         expect(errorCb).toBeTruthy();
     });
+
+    test("Default fetch retries all LDES transient status codes", async () => {
+        const statuses = [408, 425, 429, 500, 502, 503, 504, 200];
+        const seen: number[] = [];
+        global.fetch = (async () => {
+            const status = statuses.shift() ?? 200;
+            seen.push(status);
+            return new Response("", { status });
+        }) as typeof fetch;
+
+        const config = intoConfig({ url: "http://example.com/ldes" });
+        const startedAt = Date.now();
+        const response = await config.fetch!("http://example.com/ldes");
+
+        expect(response.status).toBe(200);
+        expect(seen).toEqual([408, 425, 429, 500, 502, 503, 504, 200]);
+        expect(Date.now() - startedAt).toBeGreaterThanOrEqual(100);
+    });
+
+    test("Default fetch treats 410 Gone as an empty successful RDF response", async () => {
+        global.fetch = (async () => new Response("", { status: 410 })) as typeof fetch;
+
+        const config = intoConfig({ url: "http://example.com/ldes" });
+        const response = await config.fetch!("http://example.com/retired");
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toBe("text/turtle");
+        expect(await response.text()).toBe("");
+    });
+
+    test("Ordered traversal accepts direct sequence path metadata", async () => {
+        global.fetch = (async () => new Response(`
+@prefix ex: <http://example.com/> .
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix tree: <https://w3id.org/tree#> .
+
+<http://example.com/ldes> tree:view <http://example.com/ldes>;
+  ldes:sequencePath ex:sequence;
+  tree:member <http://example.com/member/three>, <http://example.com/member/one>, <http://example.com/member/two> .
+
+<http://example.com/member/three> ex:sequence 3; ex:value "three" .
+<http://example.com/member/one> ex:sequence 1; ex:value "one" .
+<http://example.com/member/two> ex:sequence 2; ex:value "two" .
+`, {
+            headers: { "content-type": "text/turtle" },
+        })) as typeof fetch;
+
+        const client = replicateLDES({
+            url: "http://example.com/ldes",
+            noShape: true,
+        }, "ascending");
+
+        const members = await read(client.stream());
+
+        expect(members.map((member) => member.id.value)).toEqual([
+            "http://example.com/member/one",
+            "http://example.com/member/two",
+            "http://example.com/member/three",
+        ]);
+    });
+
+    test("Ordered traversal evaluates RDF list sequence paths", async () => {
+        global.fetch = (async () => new Response(`
+@prefix ex: <http://example.com/> .
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix tree: <https://w3id.org/tree#> .
+
+<http://example.com/ldes> tree:view <http://example.com/ldes>;
+  ldes:sequencePath ( ex:metadata ex:sequence );
+  tree:member <http://example.com/member/two>, <http://example.com/member/one> .
+
+<http://example.com/member/two> ex:metadata [ ex:sequence 2 ]; ex:value "two" .
+<http://example.com/member/one> ex:metadata [ ex:sequence 1 ]; ex:value "one" .
+`, {
+            headers: { "content-type": "text/turtle" },
+        })) as typeof fetch;
+
+        const client = replicateLDES({
+            url: "http://example.com/ldes",
+            noShape: true,
+        }, "ascending");
+
+        const members = await read(client.stream());
+
+        expect(members.map((member) => member.id.value)).toEqual([
+            "http://example.com/member/one",
+            "http://example.com/member/two",
+        ]);
+    });
+
+    test("Description exposes root context even when shape extraction is disabled", async () => {
+        global.fetch = (async () => new Response(`
+@prefix ex: <http://example.com/> .
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix tree: <https://w3id.org/tree#> .
+
+<http://example.com/ldes> tree:view <http://example.com/ldes>;
+  tree:shape ex:ShapeA, ex:ShapeB;
+  ldes:timestampPath ex:created;
+  ldes:versionTimestampPath ex:modified;
+  ldes:versionSequencePath ex:version;
+  ldes:pollingInterval 30 .
+
+<http://example.com/ldes> tree:viewDescription ex:service;
+  ldes:retentionPolicy ex:direct-policy .
+ex:service ldes:retentionPolicy ex:service-policy .
+`, {
+            headers: { "content-type": "text/turtle" },
+        })) as typeof fetch;
+
+        const client = replicateLDES({
+            url: "http://example.com/ldes",
+            noShape: true,
+        });
+        let context: Parameters<Parameters<typeof client.on<"description">>[1]>[0] | undefined;
+        client.on("description", (description) => {
+            context = description;
+        });
+
+        await read(client.stream());
+
+        expect(context?.rootNode?.value).toBe("http://example.com/ldes");
+        expect(context?.shapes?.map((shape) => shape.value).sort()).toEqual([
+            "http://example.com/ShapeA",
+            "http://example.com/ShapeB",
+        ]);
+        expect(context?.viewDescriptions?.map((description) => description.value)).toEqual([
+            "http://example.com/service",
+        ]);
+        expect(context?.retentionPolicies?.map((policy) => policy.value).sort()).toEqual([
+            "http://example.com/direct-policy",
+            "http://example.com/service-policy",
+        ]);
+        expect(context?.timestampPath?.value).toBe("http://example.com/created");
+        expect(context?.versionTimestampPath?.value).toBe("http://example.com/modified");
+        expect(context?.versionSequencePath?.value).toBe("http://example.com/version");
+        expect(context?.pollingInterval).toBe(30);
+        expect(context?.contextQuads?.length).toBeGreaterThan(0);
+    });
+
+    test("Saved state skips immutable pages and revalidates mutable pages with ETags", async () => {
+        const statePath = fs.mkdtempSync(path.join(os.tmpdir(), "ldes-cache-state-"));
+        let phase: "initial" | "repeat" = "initial";
+        const requests: { path: string; ifNoneMatch?: string | null }[] = [];
+        global.fetch = (async (input, init) => {
+            const url = new URL(input.toString());
+            const ifNoneMatch = new Headers(init?.headers).get("If-None-Match");
+            requests.push({ path: url.pathname, ifNoneMatch });
+
+            if (url.pathname === "/root") {
+                return turtleResponse(`
+@prefix tree: <https://w3id.org/tree#> .
+<http://example.com/cache-stream> tree:view <http://example.com/root> .
+<http://example.com/root> tree:relation
+  [ tree:node <http://example.com/rdf-immutable> ],
+  [ tree:node <http://example.com/header-immutable> ],
+  [ tree:node <http://example.com/mutable> ] .
+`);
+            }
+            if (url.pathname === "/rdf-immutable") {
+                if (phase === "repeat") {
+                    return new Response("", { status: 500 });
+                }
+                return turtleResponse(`
+@prefix ex: <http://example.com/> .
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix tree: <https://w3id.org/tree#> .
+<http://example.com/rdf-immutable> ldes:immutable true .
+<http://example.com/cache-stream> tree:member <http://example.com/member/rdf> .
+<http://example.com/member/rdf> ex:value "rdf immutable" .
+`);
+            }
+            if (url.pathname === "/header-immutable") {
+                if (phase === "repeat") {
+                    return new Response("", { status: 500 });
+                }
+                return turtleResponse(`
+@prefix ex: <http://example.com/> .
+@prefix tree: <https://w3id.org/tree#> .
+<http://example.com/cache-stream> tree:member <http://example.com/member/header> .
+<http://example.com/member/header> ex:value "header immutable" .
+`, {
+                    "cache-control": "public, max-age=31536000, immutable",
+                });
+            }
+            if (url.pathname === "/mutable") {
+                if (phase === "repeat") {
+                    return new Response(null, {
+                        status: 304,
+                        headers: { etag: '"mutable-v1"' },
+                    });
+                }
+                return turtleResponse(`
+@prefix ex: <http://example.com/> .
+@prefix tree: <https://w3id.org/tree#> .
+<http://example.com/cache-stream> tree:member <http://example.com/member/mutable> .
+<http://example.com/member/mutable> ex:value "mutable" .
+`, {
+                    etag: '"mutable-v1"',
+                });
+            }
+            return new Response("", { status: 404 });
+        }) as typeof fetch;
+
+        try {
+            const initial = await read(replicateLDES({
+                url: "http://example.com/root",
+                noShape: true,
+                statePath,
+            }).stream());
+            phase = "repeat";
+            const repeat = await read(replicateLDES({
+                url: "http://example.com/root",
+                noShape: true,
+                statePath,
+            }).stream());
+
+            expect(initial.map((member) => member.id.value).sort()).toEqual([
+                "http://example.com/member/header",
+                "http://example.com/member/mutable",
+                "http://example.com/member/rdf",
+            ]);
+            expect(repeat).toHaveLength(0);
+            expect(requests.filter((request) => request.path === "/rdf-immutable")).toHaveLength(1);
+            expect(requests.filter((request) => request.path === "/header-immutable")).toHaveLength(1);
+            expect(
+                requests.findLast((request) => request.path === "/mutable")?.ifNoneMatch,
+            ).toBe('"mutable-v1"');
+        } finally {
+            fs.rmSync(statePath, { recursive: true, force: true });
+        }
+    });
 });
+
+function turtleResponse(body: string, headers: Record<string, string> = {}): Response {
+    return new Response(body, {
+        headers: {
+            "content-type": "text/turtle",
+            ...headers,
+        },
+    });
+}

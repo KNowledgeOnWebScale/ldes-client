@@ -25,19 +25,30 @@ export function createLineBufferedFetch(baseFetch?: typeof fetch): typeof fetch 
             // In Node.js, convert web stream to Node stream and apply buffer
             const { Readable, Transform } = await import("stream");
 
-            // Create the line buffer transform
+            // Create the line buffer transform. This works on raw bytes: decoding
+            // and re-joining every chunk as a string is a per-byte cost on the
+            // whole stream, while cutting at the last newline achieves the same.
+            const NEWLINE = 0x0a;
             class LineBufferTransform extends Transform {
-                private remainder = "";
+                private remainder: Buffer = Buffer.alloc(0);
 
                 _transform(chunk: Buffer, _encoding: string, callback: () => void) {
-                    const data = this.remainder + chunk.toString();
-                    const lines = data.split("\n");
-                    this.remainder = lines.pop() ?? "";
+                    const data = this.remainder.length > 0
+                        ? Buffer.concat([this.remainder, chunk])
+                        : chunk;
+                    const cut = data.lastIndexOf(NEWLINE);
 
-                    if (lines.length > 0) {
-                        this.push(lines.join("\n") + "\n");
+                    if (cut === -1) {
+                        // No complete line yet, keep buffering.
+                        this.remainder = Buffer.from(data);
+                        callback();
+                        return;
                     }
 
+                    // Copy the (short) trailing partial line so the full chunk
+                    // does not stay referenced.
+                    this.remainder = Buffer.from(data.subarray(cut + 1));
+                    this.push(data.subarray(0, cut + 1));
                     callback();
                 }
 

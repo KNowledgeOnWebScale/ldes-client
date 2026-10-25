@@ -15,6 +15,7 @@ import type {
     Member,
     FoundRelation,
     RelationValue,
+    LDESInfo,
     FetchedPage,
     FetchEvent,
     Notifier,
@@ -22,6 +23,7 @@ import type {
     MemberEvents,
     Modulator
 } from "../fetcher";
+import type { NumericOrderValue, OrderValue } from "../fetcher";
 import type { StrategyEvents, Ordered, SerializedMember } from ".";
 
 type NodeChain = {
@@ -47,6 +49,7 @@ export class OrderedStrategy {
     private readonly launchedRelations: Heap<RelationChain>;
 
     private modulator: Modulator<NodeChain, Member>;
+    private preloadedPages = new Map<string, FetchedPage>();
     private fetchNotifier: Notifier<
         FetchEvent,
         { chain: RelationChain; index: number }
@@ -65,6 +68,7 @@ export class OrderedStrategy {
     private polling: boolean;
     private toPoll: Heap<NodeChain>;
     private pollInterval?: number;
+    private orderingPathKeys: Set<string>;
 
     private canceled = false;
     private isEmitChecking = false;
@@ -81,6 +85,7 @@ export class OrderedStrategy {
         fetcher: Fetcher,
         notifier: Notifier<StrategyEvents, unknown>,
         factory: ModulatorFactory,
+        info: LDESInfo,
         ordered: Ordered,
         polling: boolean,
         pollInterval?: number,
@@ -91,6 +96,10 @@ export class OrderedStrategy {
         this.notifier = notifier;
         this.polling = polling;
         this.pollInterval = pollInterval;
+        this.orderingPathKeys = new Set([
+            info.timestampPathKey,
+            info.sequencePathKey,
+        ].filter((value): value is string => value !== undefined));
 
         this.toPoll = new Heap((a, b) => a.chain.ordering(b.chain));
         this.launchedRelations = new Heap((a, b) => a.ordering(b));
@@ -192,7 +201,16 @@ export class OrderedStrategy {
             new Heap((a, b) => a.item.chain.ordering(b.item.chain)),
             {
                 ready: async ({ item: { chain, expected }, index }) => {
-                    if (!(await this.modulator.seen(chain.target))) {
+                    const preloadedPage = this.preloadedPages.get(chain.target);
+                    if (preloadedPage) {
+                        this.preloadedPages.delete(chain.target);
+                        await this.fetcher.processFetchedPage(
+                            { target: chain.target, expected },
+                            preloadedPage,
+                            { chain, index },
+                            this.fetchNotifier,
+                        );
+                    } else if (!(await this.modulator.seen(chain.target))) {
                         this.logger.debug(`[modulator - ready] Ready to fetch page: ${chain.target}`);
                         await this.fetcher.fetch(
                             { target: chain.target, expected },
@@ -233,17 +251,10 @@ export class OrderedStrategy {
                         };
 
                 // Try to parse relations as dates
-                const relations = chain.relations.map((r) => {
-                    try {
-                        const d = new Date(r.value);
-                        return {
-                            ...r,
-                            value: d,
-                        };
-                    } catch (e) {
-                        return r;
-                    }
-                });
+                const relations = chain.relations.map((r) => ({
+                    ...r,
+                    value: parseRelationValue(r.value),
+                }));
                 return {
                     chain: new RelationChain(
                         chain.source,
@@ -262,28 +273,15 @@ export class OrderedStrategy {
         /**
          * Member heap that determines their emission order
          */
-        if (ordered == "ascending") {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                if (a.timestamp == b.timestamp) return 0;
-                if (!a && b) return 1;
-                if (a && !b) return -1;
-                if (a.timestamp! < b.timestamp!) return -1;
-                return 1;
-            });
-        } else {
-            this.members = new Heap((a, b) => {
-                if (a.id.equals(b.id)) return 0;
-                if (a.timestamp == b.timestamp) return 0;
-                if (!a && b) return -1;
-                if (a && !b) return 1;
-                if (a.timestamp! < b.timestamp!) return 1;
-                return -1;
-            });
-        }
+        this.members = new Heap((a, b) => compareMembers(a, b, ordered));
     }
 
-    async start(url: string, condition: Condition, root?: FetchedPage) {
+    async start(
+        url: string,
+        condition: Condition,
+        root?: FetchedPage,
+        traverseRoot = true,
+    ) {
         if (this.canceled) return;
         // Try to initialize the modulator
         if (!(await this.modulator.init(condition))) return;
@@ -298,12 +296,12 @@ export class OrderedStrategy {
         }
 
         // Schedule any mutable pages found in a previous run
-        (await this.modulator.getAllMutable()).forEach(fragment => {
+        const mutableFragments = await this.modulator.getAllMutable();
+        mutableFragments.forEach(fragment => {
             this.toPoll.push(fragment);
         });
 
-        if (root) {
-            // This is a local dump. Proceed to extract members
+        if (root && !traverseRoot) {
             this.manager.extractMembers(
                 root,
                 {
@@ -313,7 +311,12 @@ export class OrderedStrategy {
                 },
                 this.memberNotifier
             );
-        } else if (await this.modulator.pendingCount() < 1) {
+            return;
+        } else if (root) {
+            this.preloadedPages.set(root.url, root);
+        }
+
+        if (await this.modulator.pendingCount() < 1) {
             this.logger.debug(`[start] Starting at ${url}`);
 
             // Setting comparator functions for relations
@@ -433,11 +436,7 @@ export class OrderedStrategy {
      */
     private extractRelation(rel: FoundRelation): SimpleRelation {
         const val = (s: string) => {
-            const d = new Date(s);
-            if (!isNaN(d.getTime())) {
-                return d;
-            }
-            return s;
+            return parseRelationValue(s);
         };
         let value = undefined;
         const betweens = rel.relations
@@ -485,6 +484,7 @@ export class OrderedStrategy {
         if (this.ordered === "ascending") {
             value = rel.relations
                 .filter((x) => GTRs.some((gr) => x.type.value === gr.value))
+                .filter((x) => this.matchesOrderingPath(x))
                 .filter((a) => a.value)
                 .map((a) => <undefined | number | Date>val(a.value![0].value))
                 .reduce((a, b) => {
@@ -499,6 +499,7 @@ export class OrderedStrategy {
         } else if (this.ordered === "descending") {
             value = rel.relations
                 .filter((x) => LTR.some((gr) => x.type.value === gr.value))
+                .filter((x) => this.matchesOrderingPath(x))
                 .filter((a) => a.value)
                 .map((a) => <undefined | number | Date>val(a.value![0].value))
                 .reduce((a, b) => {
@@ -522,6 +523,10 @@ export class OrderedStrategy {
                 value: 0,
             };
         }
+    }
+
+    private matchesOrderingPath(relation: FoundRelation["relations"][number]): boolean {
+        return relation.pathKey !== undefined && this.orderingPathKeys.has(relation.pathKey);
     }
 
     private async handleFetched(page: FetchedPage, state: { chain: RelationChain, index: number }) {
@@ -618,8 +623,8 @@ export class OrderedStrategy {
             let member = this.members.pop();
             while (member) {
                 // Euhm yeah, what to do if there is no timestamp?
-                if (!member.timestamp) {
-                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no timestamp, emitting it anyway");
+                if (member.order === undefined) {
+                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no ordering value, emitting it anyway");
                     const streamed = this.notifier.member(member, {}) as boolean;
                     if (streamed) {
                         await this.modulator.addEmitted(member.id.value)
@@ -627,14 +632,14 @@ export class OrderedStrategy {
                 } else if (
                     !marker.important || (
                         this.ordered == "ascending"
-                            ? (member.timestamp) < (marker.value)
-                            : (member.timestamp) > (marker.value)
+                            ? (member.order) < (marker.value)
+                            : (member.order) > (marker.value)
                     )
                 ) {
                     await this.emitIfNotOld(member);
                 } else {
-                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with timestamp "
-                        + (member.timestamp as Date).toISOString() + " didn't fit in the marker range");
+                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with ordering value "
+                        + String(member.order) + " didn't fit in the marker range");
                     break;
                 }
                 member = this.members.pop();
@@ -681,4 +686,88 @@ export class OrderedStrategy {
             await this.modulator.deleteUnemitted(member.id.value);
         }
     }
+}
+
+function parseRelationValue(value: RelationValue): RelationValue {
+    if (typeof value !== "string") {
+        return value;
+    }
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+        return numeric;
+    }
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+        return date;
+    }
+    return value;
+}
+
+function compareMembers(a: Member, b: Member, ordered: Ordered): number {
+    if (a.id.equals(b.id)) return 0;
+    let order = compareOrderValues(a.order, b.order);
+    if (order === 0 && a.timestamp !== undefined && b.timestamp !== undefined) {
+        order = compareOrderValues(a.sequence, b.sequence);
+    }
+    if (order !== 0) {
+        return ordered === "ascending" ? order : -order;
+    }
+    if (a.transactionFinalized !== b.transactionFinalized) {
+        return a.transactionFinalized ? 1 : -1;
+    }
+    return a.id.value < b.id.value ? -1 : 1;
+}
+
+function compareOrderValues(
+    a: OrderValue | undefined,
+    b: OrderValue | undefined,
+): number {
+    if (a === undefined && b === undefined) return 0;
+    if (a === undefined) return 1;
+    if (b === undefined) return -1;
+    if (isNumericOrderValue(a) && isNumericOrderValue(b)) {
+        return compareNumericStrings(a.value, b.value);
+    }
+    const left = a instanceof Date ? a.getTime() : a;
+    const right = b instanceof Date ? b.getTime() : b;
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+}
+
+function isNumericOrderValue(value: OrderValue): value is NumericOrderValue {
+    return typeof value === "object" && !(value instanceof Date) && value.type === "numeric";
+}
+
+function compareNumericStrings(a: string, b: string): number {
+    const left = parseDecimal(a);
+    const right = parseDecimal(b);
+    if (!left || !right) {
+        const leftNumber = Number(a);
+        const rightNumber = Number(b);
+        if (leftNumber < rightNumber) return -1;
+        if (leftNumber > rightNumber) return 1;
+        return 0;
+    }
+    if (left.sign !== right.sign) return left.sign < right.sign ? -1 : 1;
+    const scale = Math.max(left.scale, right.scale);
+    const leftInt = left.integer * 10n ** BigInt(scale - left.scale);
+    const rightInt = right.integer * 10n ** BigInt(scale - right.scale);
+    if (leftInt === rightInt) return 0;
+    return (leftInt < rightInt ? -1 : 1) * left.sign;
+}
+
+function parseDecimal(value: string): { sign: 1 | -1; integer: bigint; scale: number } | undefined {
+    const match = value.trim().match(/^([+-])?(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/);
+    if (!match) return;
+    const sign = match[1] === "-" ? -1 : 1;
+    const before = match[2] ?? "";
+    const after = match[3] ?? match[4] ?? "";
+    const exponent = Number(match[5] ?? 0);
+    const digits = `${before}${after}`.replace(/^0+/, "") || "0";
+    return {
+        sign,
+        integer: BigInt(digits),
+        scale: Math.max(0, after.length - exponent),
+    };
 }

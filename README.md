@@ -212,17 +212,6 @@ The ordering of these chains is thus, first unimportant relations, then importan
 
 Given that multiple relations can be encountered from every new page, it is possible to fetch multiple pages at the same time. However, when following an ordered strategy and considering that fetching is asynchronous, we can only interpret a page that came from a smaller relation, if no pages are _in flight_. These aspects are managed by a [`Modulator`](./lib/fetcher/modulator.ts).
 
-### Member Extraction and Emission
-
-**TODO: Update this section**
-
-The member manager _just_ extracts members and emits them when they are ready.
-Extracting members is asynchonous, because it is possible that some members require out of band requests.
-
-### State Management
-
-**TODO: Update this section**
-
 ### Fault Tolerance
 
 The fetcher tries to be fault tolerant. HTTP codes that indicate that the server is overloaded or something else is going wrong are caught and retried, following an exponential back-off strategy.
@@ -243,12 +232,24 @@ Caught HTTP codes:
 config.fetch = enhanced_fetch({ retry: { codes: [408, 425, 429, 500, 502, 503, 504] } });
 ```
 
+## Compliance tests
 
-## Expected Features
+LDES 1.0 compliance is checked with the external [ldes-client-conformance-test-suite](https://github.com/pietercolpaert/ldes-client-conformance-test-suite). The suite runs this client through its `rdf-connect` adapter and writes JSON, EARL, and evidence files for every scenario.
 
- * Use view that is indicated as EventSource
- * conformance tests and test cases
+Run the suite from this repository:
 
+```bash
+npm ci
+npm run test:conformance
+```
+
+The command uses `../ldes-client-conformance-test-suite` when that checkout already exists. If it is missing, it clones the suite from GitHub first. Local changes in that sibling checkout are respected.
+
+The command exits with a non-zero status when required conformance tests fail. To generate the report artifacts while adopting or debugging failures, pass `--no-fail` through npm:
+
+```bash
+npm run test:conformance -- --no-fail
+```
 
 ## Authors and license
 
