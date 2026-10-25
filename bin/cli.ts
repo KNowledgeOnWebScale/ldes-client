@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as process from "process";
 import { Command, Option } from "commander";
-import { Writer } from "rdf-writer-ts";
+import { Writer } from "n3";
 import { getLoggerFor } from "../lib/utils";
 import { replicateLDES, enhanced_fetch, intoConfig, processConditionFile } from "../lib/client";
 

@@ -1,7 +1,7 @@
 import { extendLogger, Processor, Writer } from "@rdfc/js-runner";
 import { DataFactory } from "rdf-data-factory";
 import { SDS } from "@treecg/types";
-import { Writer as NWriter } from "rdf-writer-ts";
+import { Writer as NWriter } from "n3";
 import { Client, replicateLDES, intoConfig, processConditionFile } from "./client";
 import { enhanced_fetch } from "./fetcher"
 import { Logger } from "winston";

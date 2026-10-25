@@ -1,4 +1,4 @@
-import { Writer } from "rdf-writer-ts";
+import { Writer } from "n3";
 import { TREE } from "@treecg/types";
 import { parseQuads } from "../lib/utils";
 

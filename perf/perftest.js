@@ -1,5 +1,5 @@
 import Benchmark from "benchmark";
-import { Parser } from "rdf-parser-ts";
+import { Parser } from "n3";
 import { Tree } from "../dist/tests/helper.js";
 import { TREE } from "@treecg/types";
 import { replicateLDES } from "../dist/lib/client.js";

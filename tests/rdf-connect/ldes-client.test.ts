@@ -12,7 +12,7 @@ import { createUriAndTermNamespace, RDF, SDS, DC } from "@treecg/types";
 import { channel, createRunner } from "@rdfc/js-runner/lib/testUtils/index.js";
 import { fastify, FastifyInstance, RequestPayload } from "fastify";
 import { fastifyStatic } from "@fastify/static";
-import { Parser } from "rdf-parser-ts";
+import { Parser } from "n3";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { LDESClientProcessor } from "../../lib/rdfc-processor";

@@ -1,5 +1,4 @@
-import { Parser } from "rdf-parser-ts/browser";
-import { Writer } from "rdf-writer-ts/browser";
+import { Parser, Writer } from "n3";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { RDF, SHACL } from "@treecg/types";
@@ -8,11 +7,8 @@ import { getLoggerFor } from "./logUtil";
 import type { LDESInfo, Member, Modulator } from "../fetcher";
 import type { NumericOrderValue, OrderValue } from "../fetcher";
 import type { SerializedMember } from "../strategy";
+import type { ParserOptions } from "n3";
 import type {
-    ParserOptions,
-} from "rdf-parser-ts/browser";
-import type {
-    DataFactory as RDFDataFactory,
     NamedNode,
     Quad,
     BaseQuad,
@@ -26,46 +22,14 @@ import type {
 const logger = getLoggerFor("Utils");
 
 const df = new DataFactory();
-let parserBlankNodeScope = 0;
 
-export function parseQuads(
-    source: string,
-    options?: ParserOptions,
-): Quad[] {
-    const factory = scopedBlankNodeFactory(options?.factory);
-    const parser = new Parser({
-        ...options,
-        factory,
-        messages: false,
-        rdfMessages: false,
-    });
-    return (parser.parse(source) ?? []) as Quad[];
+// N3.js already scopes blank node labels per parser instance
+export function parseQuads(source: string, options?: ParserOptions): Quad[] {
+    return new Parser(options).parse(source);
 }
 
 export function serializeQuads(quads: Quad[]): string {
     return new Writer().quadsToString(quads);
-}
-
-function scopedBlankNodeFactory(
-    factory: RDFDataFactory<BaseQuad> = new DataFactory<BaseQuad>(),
-): RDFDataFactory<BaseQuad> {
-    const scope = `p${parserBlankNodeScope++}`;
-    let anonymous = 0;
-    return {
-        namedNode: (value) => factory.namedNode(value),
-        blankNode: (value) =>
-            factory.blankNode(`${scope}_${value ?? `b${anonymous++}`}`),
-        literal: (value, languageOrDatatype) =>
-            factory.literal(value, languageOrDatatype),
-        variable: factory.variable
-            ? (value) => factory.variable!(value)
-            : undefined,
-        defaultGraph: () => factory.defaultGraph(),
-        quad: (subject, predicate, object, graph) =>
-            factory.quad(subject, predicate, object, graph),
-        fromTerm: factory.fromTerm.bind(factory),
-        fromQuad: (quad) => factory.fromQuad(quad),
-    };
 }
 
 export function getSubjects(
