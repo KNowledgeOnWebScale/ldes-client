@@ -1,8 +1,9 @@
 import { describe, afterAll, expect, test } from "vitest";
 import { ProcHelper } from "@rdfc/js-runner/lib/testUtils";
-import { LDESClientProcessor, toPath } from "../../lib/rdfc-processor";
+import { LDESClientProcessor } from "../../lib/rdfc-processor";
 import { rmSync } from "fs";
 import { resolve } from "path";
+import { toPath } from "@rdfc/utils-js";
 
 import type { FullProc } from "@rdfc/js-runner";
 
@@ -147,11 +148,5 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(config.shapeFile).toBe(resolve("./tests/data/mock-ldes/full-shape.ttl"));
         expect(config.statePath).toBe(resolve("./state-path"));
         expect(config.condition.constructor.name).toBe("AndCondition");
-    });
-
-    test("toPath keeps paths and turns file: URLs into paths", () => {
-        expect(toPath("./shape.ttl")).toBe("./shape.ttl");
-        expect(toPath("/tmp/state")).toBe("/tmp/state");
-        expect(toPath("file:///tmp/my%20data/shape.ttl")).toBe("/tmp/my data/shape.ttl");
     });
 });

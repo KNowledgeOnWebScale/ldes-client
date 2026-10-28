@@ -35,6 +35,7 @@
   "author": "Arthur Vercruysse",
   "license": "MIT",
   "dependencies": {
+    "@rdfc/utils-js": "^1.0.1",
     "@treecg/types": "^0.4.6",
     "commander": "^15.0.0",
     "extract-cbd-shape": "^0.3.0b",
