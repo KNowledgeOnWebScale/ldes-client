@@ -35,6 +35,7 @@
   "author": "Arthur Vercruysse",
   "license": "MIT",
   "dependencies": {
+    "@rdfc/utils-js": "^1.0.1",
     "@treecg/types": "^0.4.6",
     "commander": "^15.0.0",
     "extract-cbd-shape": "^0.3.0b",
@@ -43,7 +44,7 @@
     "n3": "^2.13.12",
     "rdf-data-factory": "^2.1.0",
     "rdf-dereference": "^5.0.0",
-    "rdf-lens": "^1.3.7",
+    "rdf-lens": "^2.1.0",
     "rdf-stores": "^2.7.0",
     "winston": "^3.19.0"
   },
