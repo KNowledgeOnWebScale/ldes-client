@@ -1,0 +1,60 @@
+# The root page of a sample LDES 2.0: the first 10 000 graphs of the RiverBench dataset "assist-iot-weather-graphs"
+# (https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev).
+#
+# RiverBench (https://w3id.org/riverbench) publishes benchmark datasets of RDF streams, in Jelly-RDF among others.
+# In this dataset, every stream element is one timestamped named graph with the weather measurements of one
+# moment: a weather station of the Systems Research Institute of the Polish Academy of Sciences measured every 10 s.
+# The Jelly file is the one page of this LDES. It has no description message, so every message in the file is a
+# member message: one Jelly frame is one member. A message looks like this (here in TriG):
+#
+#   <https://assist-iot.eu/pilot2_rdf/graph/ws/ibs_1/2023-01-02T15%3A36%3A37.065535>
+#       prov:atTime "2023-01-02T15:36:37.065535"^^xsd:dateTime .                       # default graph
+#   <https://assist-iot.eu/pilot2_rdf/graph/ws/ibs_1/2023-01-02T15%3A36%3A37.065535> {
+#       pilot:obs/humidity a sosa:Observation ; sosa:resultTime "2023-01-02T15:36:37.065535"^^xsd:dateTime ; ...
+#   }
+#
+# How this maps to LDES (everything RiverBench says about the dataset itself is in catalog.ttl):
+#  * ldes:memberGraph: the member is the only named graph of the message. The default graph triple with the
+#    timestamp belongs to the same member.
+#  * ldes:timestampPath: RiverBench states that the elements are split in time on prov:atTime
+#    (rb:hasTemporalProperty), and the data is in ascending order.
+#    These xsd:dateTime values have no timezone. A client then compares them as if they were in the same, unknown,
+#    timezone, which is exact within this LDES. The timezone is not stated by RiverBench, so no ldes:defaultTimezone
+#    is claimed here. If it is known, e.g. "+01:00", add it to the LDES for clients that mix these timestamps with
+#    timestamps that have a timezone.
+#  * ldes:shape: the shape that every member conforms to.
+#  * ldes:immutable: the Jelly file never changes, so a client that has read it does not fetch it again.
+#
+# Try it:  npx ldes-client examples/riverbench/root.trig
+#
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# The LDES: the IRI of this event stream is the root page, with a different fragment identifier
+<#EventStream> a ldes:EventStream ;
+    ldes:memberGraph true ;
+    ldes:timestampPath prov:atTime ;
+    ldes:shape <#MemberShape> .
+
+# The focus node of this shape is the member identifier: the graph, which is annotated with its timestamp
+<#MemberShape> a sh:NodeShape ;
+    sh:property [
+        sh:path prov:atTime ;
+        sh:datatype xsd:dateTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1
+    ] .
+
+# The root page itself. It has a relation to the page with all the members of this LDES.
+# The interval is that of the first and last timestamp in the file (the upper bound is exclusive).
+<> ldes:relation [
+    ldes:page <https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev/files/jelly_10K.jelly.gz> ;
+    ldes:timeFrom "2023-01-02T15:36:37.065535"^^xsd:dateTime ;
+    ldes:timeUntil "2023-01-03T19:36:28.505900"^^xsd:dateTime
+] .
+
+# A page can be marked immutable by the page that links to it, before it is fetched.
+# This is stated about the linked page, not about the relation.
+<https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev/files/jelly_10K.jelly.gz> ldes:immutable true .

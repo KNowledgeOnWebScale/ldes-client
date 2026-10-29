@@ -57,6 +57,8 @@ export type LDESInfo = {
     versionTimestampPath?: Term;
     versionSequencePath?: Term;
     pollingInterval?: number;
+    /** The version of the LDES specification of the LDES that is replicated */
+    ldesVersion?: 1 | 2;
 };
 
 export type ExtractError = {

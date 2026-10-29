@@ -1,0 +1,35 @@
+# How the LDES of root.trig is listed in a (DCAT-AP) data catalog, with what RiverBench knows about the dataset
+# (https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev.ttl).
+# An ldes:EventStream is a dcat:Distribution of a dcat:Dataset. This description is only used in the catalog:
+# the pages of the LDES only use LDES terms, as the IRI of the LDES dereferences to the root page.
+@prefix ldes: <https://w3id.org/ldes#> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rb: <https://w3id.org/riverbench/schema/metadata#> .
+@prefix eurovoc: <http://eurovoc.europa.eu/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev> a dcat:Dataset ;
+    dct:title "ASSIST-IoT weather (graphs variant)"@en ;
+    dct:description "A timestamped stream of weather data collected with a Davis Vantage Pro 2 weather station installed on the building of the Systems Research Institute, Polish Academy of Sciences, during the ASSIST-IoT Horizon 2020 project. Every stream element is a named graph with the measurements of one moment."@en ;
+    dct:creator [ foaf:name "ASSIST-IoT Horizon 2020 project" ; foaf:homepage <https://assist-iot.eu/> ] ,
+                [ foaf:name "Piotr Sowiński" ; foaf:homepage <https://orcid.org/0000-0002-2543-9461> ] ;
+    dct:license <https://spdx.org/licenses/CC-BY-4.0> ;
+    dct:issued "2023-05-04"^^xsd:date ;
+    dct:language "en" ;
+    dcat:landingPage <https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev> ;
+    dcat:theme eurovoc:c_b12a760a , eurovoc:6030 , eurovoc:1892 , eurovoc:c_7a168de0 ;
+    # One stream element every 10 seconds
+    dcat:temporalResolution "PT10S"^^xsd:duration ;
+    dcat:distribution <https://example.org/riverbench/assist-iot-weather-graphs/root#EventStream> .
+
+# The IRI of the LDES is the entry point that a client is given
+<https://example.org/riverbench/assist-iot-weather-graphs/root#EventStream> a ldes:EventStream ;
+    dct:title "ASSIST-IoT weather as an LDES: the first 10 000 graphs, in Jelly-RDF"@en ;
+    dct:license <https://spdx.org/licenses/CC-BY-4.0> ;
+    dcat:accessURL <https://example.org/riverbench/assist-iot-weather-graphs/root> ;
+    # This LDES is a view on the RiverBench Jelly distribution with 10K elements
+    prov:wasDerivedFrom <https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev#jelly-10k> ;
+    rb:hasStreamElementCount 10000 .
