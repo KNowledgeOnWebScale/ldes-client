@@ -2,11 +2,12 @@
 import * as process from "process";
 import { Command, Option } from "commander";
 import { Writer } from "n3";
-import { getLoggerFor } from "../lib/utils";
+import { MessageWriter } from "n3.js-messages";
+import { getLoggerFor, memberComment } from "../lib/utils";
 import { replicateLDES, enhanced_fetch, intoConfig, processConditionFile } from "../lib/client";
 
 import type { Ordered } from "../lib/strategy";
-import type { FetchConfig } from "../lib/fetcher";
+import type { FetchConfig, LDESInfo } from "../lib/fetcher";
 
 const program = new Command();
 let paramURL: string = "";
@@ -28,6 +29,8 @@ let loose: boolean = false;
 let defaultTimezone: string | undefined;
 let includeMetadata: boolean = false;
 let startFresh: boolean = false;
+let comment: boolean = false;
+let format: "trig-messages" | "n-quads" = "trig-messages";
 
 const fetch_config: FetchConfig = {
     retry: {},
@@ -45,6 +48,10 @@ program
         "follow only relations including members before a certain point in time",
     )
     .option(
+        "-c, --comment",
+        "print a comment before every member with what the LDES says about it: its number, IRI, timestamp, sequence, version, type and transaction",
+    )
+    .option(
         "--concurrent <requests>",
         "Allowed amount of concurrent HTTP request to the same domain",
         "10",
@@ -54,6 +61,14 @@ program
         "turtle file including the conditions for extracting a member",
     )
     .option("-f, --follow", "follow the LDES, the client stays in sync")
+    .addOption(
+        new Option(
+            "--format <format>",
+            "output format: an RDF Message log in TriG with one message per member, or the quads of all members as N-Quads",
+        )
+            .choices(["trig-messages", "n-quads"])
+            .default("trig-messages"),
+    )
     .option("--http-codes [codes...]", "What HTTP error codes to retry")
     .option(
         "--last-version-only",
@@ -121,6 +136,8 @@ program
         defaultTimezone = program.defaultTimezone;
         includeMetadata = program.metadata;
         startFresh = program.startFresh;
+        format = program.format;
+        comment = program.comment;
 
         fetch_config.concurrent = parseInt(program.concurrent);
         if (program.basicAuth) {
@@ -160,6 +177,11 @@ async function main() {
     const t0 = Date.now();
     const writer = new Writer();
     const logger = getLoggerFor("cli");
+    // One message per member. The log is not ended with stdout: that stays open for the process itself.
+    const messageLog =
+        !quiet && format === "trig-messages"
+            ? new MessageWriter(process.stdout, { format: "TriG", end: false })
+            : undefined;
 
     const client = replicateLDES(
         intoConfig({
@@ -187,7 +209,9 @@ async function main() {
         ordered,
     );
 
+    let ldesInfo: LDESInfo | undefined;
     client.on("description", (info) => {
+        ldesInfo = info;
         logger.verbose(`LDES description found: ${JSON.stringify({
             url: paramURL,
             shape: info.shape,
@@ -221,8 +245,21 @@ async function main() {
                 );
             }
 
-            if (!quiet) {
-                console.log(writer.quadsToString(streamResult.value.quads));
+            const text = comment && !quiet ? memberComment(streamResult.value, memCount, ldesInfo) : "";
+            if (messageLog) {
+                // The comment follows the delimiter of the previous message (or the version) and precedes the member
+                await messageLog.beginMessage();
+                if (text) {
+                    await new Promise<void>((resolve, reject) =>
+                        process.stdout.write(text, (error) => (error ? reject(error) : resolve())),
+                    );
+                }
+                for (const quad of streamResult.value.quads) {
+                    await messageLog.addQuad(quad);
+                }
+                await messageLog.endMessage();
+            } else if (!quiet) {
+                console.log(text + writer.quadsToString(streamResult.value.quads));
             }
         }
 
@@ -232,6 +269,8 @@ async function main() {
 
         streamResult = await reader.read();
     }
+
+    await messageLog?.end();
 
     logger.verbose(`Found ${client.memberCount} members in ${client.fragmentCount} fragments (took ${Date.now() - t0} ms)`);
 }

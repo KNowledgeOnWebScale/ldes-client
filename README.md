@@ -16,7 +16,7 @@ npm install -g ldes-client
 The LDES client has two main modes: `replicate` and `sync`. Both are accessible through the command line interface (CLI) with various alternative options.
 
 ```bash
-ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before <datetime>] [--save <path>] [--poll-interval <number>] [--basic-auth <username>:<password>] [--shape-file <shapeFile>] [--only-default-graph] [--no-shape] [--materialize] [--last-version-only] [--default-timezone <timezone>] [--condition <conditionFile>] [--concurrent <number>] [--retry-count <number>] [--http-codes codes...] [--safe][--url-is-view] [--loose] [--quiet] [--start-fresh] [--metadata]
+ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before <datetime>] [--save <path>] [--poll-interval <number>] [--basic-auth <username>:<password>] [--shape-file <shapeFile>] [--only-default-graph] [--no-shape] [--materialize] [--last-version-only] [--default-timezone <timezone>] [--condition <conditionFile>] [--concurrent <number>] [--retry-count <number>] [--http-codes codes...] [--safe][--url-is-view] [--loose] [--quiet] [--start-fresh] [--metadata] [--format <format>] [--comment]
 ```
 
 ### CLI options
@@ -38,6 +38,8 @@ ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before 
 - `--condition`: filter the LDES stream to only emit members that adhere to this condition.
 - `--url-is-view`: informs the client that the given URL corresponds already to a `tree:view` avoiding the client to fail when no declared view is found. 
 - `-l` `--loose`: the client is less strict when following `tree:relation` properties and ignores if the page URL does not correspond to the `tree:Node` IRI.
+- `--format <format>`: the output format of the members on the standard output. `trig-messages` (default) is an RDF Message log in TriG: one message per member, delimited by `@message .`, so that the boundaries between members are kept and any RDF Messages parser can read it back. `n-quads` prints the quads of all members as N-Quads, without member boundaries.
+- `-c` `--comment`: print a comment (`# ...`) before every member with what the LDES says about it: the number of the member in the output, its IRI, its timestamp and sequence (as written in the member), the entity it is a version of (`ldes:versionOfPath`), its type and whether its transaction is finalized. Whatever is unknown is left out. In the message log, the comment follows the `@message .` of the previous member, so parsers ignore it.
 - `-q` `--quiet`: the client does not print the extracted members in the console when run via the CLI.
 - `--concurrent`: maximum number of concurrent HTTP request that the client can make.
 - `--retry-count`: maximum number of HTTP request retries that the client would perform before failing.

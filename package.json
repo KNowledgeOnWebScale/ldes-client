@@ -45,6 +45,7 @@
     "ldfetch": "^1.3.7",
     "level": "^10.0.0",
     "n3": "^2.13.12",
+    "n3.js-messages": "^0.2.0",
     "rdf-data-factory": "^2.1.0",
     "rdf-lens": "^2.1.0",
     "rdf-stores": "^2.8.0",

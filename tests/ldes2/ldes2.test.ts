@@ -5,6 +5,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import fs from "fs";
 import { Writer, DataFactory as JellyFactory } from "rdfjs-jelly";
+import { MessageWriter, parseMessages } from "n3.js-messages";
 import { replicateLDES } from "../../lib/client";
 import { MockServer, PREFIXES } from "./server";
 
@@ -674,3 +675,29 @@ describe("Immutable pages", () => {
     });
 });
 
+
+describe("Output as an RDF Message log", () => {
+    // The default output of the command line client: one TriG message per member
+    test("the members, written as a TriG message log, are read back as the same messages", async () => {
+        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
+<> ldes:relation [ ldes:page <${server.base}/p1> ] .`);
+        server.trig("/p1",
+            record("a1", "2026-01-01T00:00:00Z", "; ex:label \"first\" "),
+            record("b1", "2026-01-02T00:00:00Z"),
+        );
+
+        const members = await collect();
+        const writer = new MessageWriter({ format: "TriG" });
+        for (const member of members) {
+            await writer.addMessage(member.quads);
+        }
+        const log = (await writer.end()) as string;
+
+        expect(log.startsWith('@version "1.2-messages"')).toBe(true);
+        const messages = parseMessages(log);
+        expect(messages).toHaveLength(members.length);
+        messages.forEach((message, i) => {
+            expect(message.map((q) => q.toString()).sort()).toEqual(members[i].quads.map((q) => q.toString()).sort());
+        });
+    });
+});
