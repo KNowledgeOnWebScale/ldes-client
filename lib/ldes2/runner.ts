@@ -184,8 +184,10 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
                 context,
                 bookmark,
                 root,
-                open: (url) =>
-                    dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true }),
+                // As many pages as the client may request at the same time
+                prefetch: config.concurrentFetches,
+                open: (url, options) =>
+                    dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true, ...options }),
                 emit: async (member) => {
                     await hooks.gate.wait();
                     if (hooks.isClosed()) return false;

@@ -31,6 +31,8 @@ export type DereferenceOptions = {
     fetch?: typeof fetch;
     headers?: Record<string, string>;
     localFiles?: boolean;
+    /** How many messages of the log are buffered before the source is paused (default {@link MAX_BUFFERED_MESSAGES}) */
+    bufferedMessages?: number;
 };
 
 /**
@@ -61,7 +63,7 @@ const MAX_CACHED_CONTEXTS = 100;
 
 const JSON_TYPES = ["application/ld+json", "application/json"];
 
-const MAX_BUFFERED_MESSAGES = 512;
+export const MAX_BUFFERED_MESSAGES = 512;
 
 /**
  * An RDF Message log, read as a stream of messages (each an array of quads).
@@ -78,6 +80,8 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     public readonly contentType: string;
     /** Whether the serialization of the response has its own message delimiters */
     public framed = false;
+    /** The number of messages that are buffered before the source is paused. It can be changed while reading. */
+    public maxBuffered = MAX_BUFFERED_MESSAGES;
 
     private queue: Quad[][] = [];
     private ended = false;
@@ -133,7 +137,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
 
     private push(message: Quad[]) {
         this.queue.push(message);
-        if (this.queue.length >= MAX_BUFFERED_MESSAGES && !this.paused) {
+        if (this.queue.length >= this.maxBuffered && !this.paused) {
             this.paused = true;
             this.source?.pause();
         }
@@ -156,7 +160,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
         while (true) {
             if (this.queue.length > 0) {
                 const message = this.queue.shift()!;
-                if (this.paused && this.queue.length < MAX_BUFFERED_MESSAGES / 2) {
+                if (this.paused && this.queue.length < this.maxBuffered / 2) {
                     this.paused = false;
                     this.source?.resume();
                 }
@@ -284,7 +288,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
 
         const finalUrl = response.url || url;
         const source = Readable.fromWeb(response.body as never);
-        return this.parse(
+        const log = await this.parse(
             source,
             finalUrl,
             url,
@@ -294,6 +298,8 @@ export class LdfetchDereferencer implements MessageDereferencer {
             response.headers.get("content-disposition"),
             options.fetch ?? fetch,
         );
+        if (options.bufferedMessages !== undefined) log.maxBuffered = options.bufferedMessages;
+        return log;
     }
 
     private async dereferenceFile(
@@ -313,7 +319,9 @@ export class LdfetchDereferencer implements MessageDereferencer {
             : resolve(location);
         const source = createReadStream(path);
         const url = pathToFileURL(path).href;
-        return this.parse(source, url, url, 200, new Headers(), "", null, options.fetch ?? fetch);
+        const log = await this.parse(source, url, url, 200, new Headers(), "", null, options.fetch ?? fetch);
+        if (options.bufferedMessages !== undefined) log.maxBuffered = options.bufferedMessages;
+        return log;
     }
 
     private async parse(

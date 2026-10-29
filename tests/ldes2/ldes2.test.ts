@@ -7,6 +7,7 @@ import fs from "fs";
 import { Writer, DataFactory as JellyFactory } from "rdfjs-jelly";
 import { MessageWriter, parseMessages } from "n3.js-messages";
 import { replicateLDES } from "../../lib/client";
+import { ldfetchDereferencer } from "../../lib/fetcher/ldfetchDereferencer";
 import { MockServer, PREFIXES } from "./server";
 
 import type { Member } from "../../lib/fetcher";
@@ -19,6 +20,8 @@ afterAll(() => server.stop());
 beforeEach(() => {
     server.pages.clear();
     server.requests = [];
+    server.inFlight = 0;
+    server.maxInFlight = 0;
 });
 afterEach(() => {
     fs.rmSync("client-state-ldes2", { recursive: true, force: true });
@@ -699,5 +702,102 @@ describe("Output as an RDF Message log", () => {
         messages.forEach((message, i) => {
             expect(message.map((q) => q.toString()).sort()).toEqual(members[i].quads.map((q) => q.toString()).sort());
         });
+    });
+});
+
+describe("Requesting pages ahead", () => {
+    const DELAY = 40;
+    const stream = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .`;
+    const day = (n: number) => `2026-01-${String(n).padStart(2, "0")}T00:00:00Z`;
+    const relation = (page: string, from: number, until: number) =>
+        `[ ldes:page <${server.base}/${page}> ; ldes:timeFrom "${day(from)}"^^xsd:dateTime ; ldes:timeUntil "${day(until)}"^^xsd:dateTime ]`;
+
+    /** A root with `count` leaf pages, one member each */
+    function flat(count: number) {
+        server.trig("/root", `${stream}\n<> ldes:relation ${Array.from({ length: count }, (_, i) => relation(`p${i}`, i + 1, i + 2)).join(" , ")} .`);
+        for (let i = 0; i < count; i++) {
+            server.trig(`/p${i}`, record(`m${i}`, day(i + 1)));
+            server.pages.get(`/p${i}`)!.delay = DELAY;
+        }
+        return Array.from({ length: count }, (_, i) => `m${i}`);
+    }
+
+    test("pages that are followed next are requested at the same time, and the order does not change", async () => {
+        const expected = flat(6);
+        expect(ids(await collect(ROOT, { concurrentFetches: 4 }))).toEqual(expected);
+        expect(server.maxInFlight).toBeGreaterThan(1);
+    });
+
+    test("never more pages than the concurrent requests are requested ahead", async () => {
+        const expected = flat(8);
+        expect(ids(await collect(ROOT, { concurrentFetches: 2 }))).toEqual(expected);
+        expect(server.maxInFlight).toBe(2);
+    });
+
+    test("with one concurrent request, pages are requested one by one", async () => {
+        const expected = flat(4);
+        expect(ids(await collect(ROOT, { concurrentFetches: 1 }))).toEqual(expected);
+        expect(server.maxInFlight).toBe(1);
+        expect(server.requests).toEqual(["/root", "/p0", "/p1", "/p2", "/p3"]);
+    });
+
+    test("the relations in a page that was requested ahead are known before it is opened", async () => {
+        // Three pages, each with two children: with only the relations of the opened pages, no more than three pages are requested at once
+        const lines = [`${stream}\n<> ldes:relation ${[0, 1, 2].map((i) => relation(`p${i}`, 10 * i + 1, 10 * i + 10)).join(" , ")} .`];
+        server.trig("/root", lines[0]);
+        const expected: string[] = [];
+        for (let i = 0; i < 3; i++) {
+            const children = [0, 1].map((j) => relation(`c${i}${j}`, 10 * i + 5 + 2 * j, 10 * i + 7 + 2 * j));
+            server.trig(`/p${i}`, `<> ldes:relation ${children.join(" , ")} .`, record(`p${i}`, day(10 * i + 1)));
+            server.pages.get(`/p${i}`)!.delay = DELAY;
+            expected.push(`p${i}`);
+            for (let j = 0; j < 2; j++) {
+                server.trig(`/c${i}${j}`, record(`c${i}${j}`, day(10 * i + 5 + 2 * j)));
+                server.pages.get(`/c${i}${j}`)!.delay = DELAY;
+                expected.push(`c${i}${j}`);
+            }
+        }
+        expect(ids(await collect(ROOT, { concurrentFetches: 8 }))).toEqual(expected);
+        expect(server.maxInFlight).toBeGreaterThan(3);
+    });
+
+    test("a page that fails to load is only an error when the merge needs it", async () => {
+        flat(3);
+        server.set("/p2", { body: "unavailable", status: 404 });
+        // The consumer does not read that far
+        const client = replicateLDES({ url: ROOT, concurrentFetches: 4 });
+        const first: string[] = [];
+        for await (const member of client.stream({ highWaterMark: 1 })) {
+            first.push(...ids([member]));
+            break;
+        }
+        expect(first).toEqual(["m0"]);
+        // When it does, the error is reported
+        await expect(collect(ROOT, { concurrentFetches: 4 })).rejects.toThrow();
+    });
+
+    test("pages before the bookmark of a saved state are not requested ahead", async () => {
+        const expected = flat(5);
+        const state = { statePath: "client-state-ldes2", concurrentFetches: 3 };
+        expect(ids(await collect(ROOT, state))).toEqual(expected);
+        server.requests = [];
+        expect(ids(await collect(ROOT, state))).toEqual([]);
+        // Only the last page, the upper bound of which is not before the bookmark
+        expect(server.requests).toEqual(["/root", "/p4"]);
+    });
+
+    test("a page that is requested ahead buffers a limited number of messages, however long it is", async () => {
+        const messages = Array.from({ length: 5000 }, (_, i) => record(`m${i}`, "2026-01-01T00:00:00Z"));
+        server.trig("/long", ...messages);
+        const log = await ldfetchDereferencer.dereferenceMessages(`${server.base}/long`, { bufferedMessages: 20 });
+        // Give the parser the time to read everything it is allowed to
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const buffered = (log as unknown as { queue: unknown[] }).queue.length;
+        expect(buffered).toBeGreaterThanOrEqual(20);
+        expect(buffered).toBeLessThan(5000);
+        // Reading on continues where it stopped
+        let count = 0;
+        for await (const _ of log) count++;
+        expect(count).toBe(5000);
     });
 });

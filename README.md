@@ -41,7 +41,7 @@ ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before 
 - `--format <format>`: the output format of the members on the standard output. `trig-messages` (default) is an RDF Message log in TriG: one message per member, delimited by `@message .`, so that the boundaries between members are kept and any RDF Messages parser can read it back. `n-quads` prints the quads of all members as N-Quads, without member boundaries.
 - `-c` `--comment`: print a comment (`# ...`) before every member with what the LDES says about it: the number of the member in the output, its IRI, its timestamp and sequence (as written in the member), the entity it is a version of (`ldes:versionOfPath`), its type and whether its transaction is finalized. Whatever is unknown is left out. In the message log, the comment follows the `@message .` of the previous member, so parsers ignore it.
 - `-q` `--quiet`: the client does not print the extracted members in the console when run via the CLI.
-- `--concurrent`: maximum number of concurrent HTTP request that the client can make.
+- `--concurrent`: maximum number of concurrent HTTP request that the client can make (default `10`). An LDES 2.0 client also requests this many pages before it needs them: see [Prefetching pages](#prefetching-pages).
 - `--retry-count`: maximum number of HTTP request retries that the client would perform before failing.
 - `--safe`: enables safe mode of fetching, which will retry when a fetch fails.
 - `--http-codes`: list of HTTP response codes over which the client would retry a request.
@@ -126,7 +126,19 @@ For an LDES 2.0, the client:
  * does not fetch a page again once it has been read completely, when the page that links to it states `<page> ldes:immutable true` and it has no relations itself;
  * only keeps a *bookmark* as state (the key of the last member and the identifiers of the members that share it) instead of all members or pages it has seen. With `--save`, the next run skips all pages before the bookmark without requesting them.
 
-The `description` event gives the context information (`info.ldesVersion` is `2`). Not yet implemented: ETag revalidation (`If-None-Match`), prefetching pages, the ordering rule for members that finalize a transaction, and the `--condition` options that are not `--after` or `--before`.
+The `description` event gives the context information (`info.ldesVersion` is `2`). Not yet implemented: ETag revalidation (`If-None-Match`), the ordering rule for members that finalize a transaction, and the `--condition` options that are not `--after` or `--before`.
+
+#### Prefetching pages
+
+The pages of an LDES 2.0 are merged in the order of their keys, which makes a naive client read them one after the other: it waits for the latency of every page.
+The client therefore requests the pages that it is going to follow next, before it needs them (as many as `concurrentFetches` allows, `--concurrent` on the command line, default `10`; with `1` the pages are read one by one):
+
+ * The pages are those of the relations with the smallest lower bound, which are the first to be followed. A relation that the client skips (before the bookmark, or an immutable page that was read completely) is never requested.
+ * Memory stays bounded. At most that many pages are requested ahead, the one that is awaited included, and such a page buffers no more than 64 messages: after that, the connection is paused until the merge starts reading the page. The client does not need to read more than one message of a page to know where to continue: when that is the description message, the relations in it are known early, so the pages below it can be requested ahead too.
+ * Backpressure applies as before: when the consumer is slow, nothing more than the window is fetched.
+ * A page that cannot be loaded is only an error when the merge needs it. Pages that were requested ahead and are not needed (the consumer left) are closed.
+
+On a test LDES of 14 pages with a latency of 50 ms per page (see [perf](perf/README.md)), a run takes about 770 ms with `--concurrent 1` and about 260 ms with the default, the same as the LDES 1.0 client on the same tree (about 230 ms).
 
 HTTP and parsing are done with [ldfetch](https://github.com/pietercolpaert/ldfetch) (its RDF parsers for all serializations including Jelly-RDF) on top of the retrying `fetch` of this client, instead of rdf-dereference.
 

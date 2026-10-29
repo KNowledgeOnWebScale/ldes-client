@@ -21,8 +21,15 @@ import type { Description, OrderMode, Relation } from "./description";
 import type { MembershipRule } from "./membership";
 import type { Member } from "../fetcher";
 import type { MessageLog } from "../fetcher/ldfetchDereferencer";
+import { MAX_BUFFERED_MESSAGES } from "../fetcher/ldfetchDereferencer";
 
 const logger = getLoggerFor("Ldes2Traversal");
+
+/**
+ * The messages that are buffered of a page that is requested ahead: only the description message and the first members
+ * are needed to continue, the source is paused after that. A page that the merge starts reading gets the usual buffer.
+ */
+const PREFETCH_BUFFERED_MESSAGES = 64;
 
 /** The state that is needed to continue a synchronization: it stays small, no matter how long the stream becomes */
 export type Bookmark = {
@@ -55,7 +62,13 @@ export type Traversal = {
     context: StreamContext;
     bookmark: Bookmark;
     /** Opens a page: dereferences the IRI */
-    open(url: string): Promise<MessageLog>;
+    open(url: string, options?: { bufferedMessages?: number }): Promise<MessageLog>;
+    /**
+     * The number of relations of which the page is requested before it is needed, the one that is awaited included (0 or 1: one by one).
+     * They are the relations that are followed next, so a page is never fetched without being followed,
+     * unless the consumer stops. Each of them buffers only a few messages, so the memory use is bounded.
+     */
+    prefetch?: number;
     /** Called for every member that is not before the bookmark. Returns false when the consumer is gone. */
     emit(member: Member): Promise<boolean>;
     /** Called for every page that has been opened */
@@ -230,6 +243,47 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     const referenced = new Set<string>();
     let emitted = 0;
 
+    // Pages that are requested ahead, by relation: the ones that are followed next.
+    // Of such a page, the first message is read when it arrives: if that is the description message, the relations in it
+    // are known before the page is opened, so the pages below it can be requested ahead too.
+    type Prefetched = { log: MessageLog; first: Quad[] | undefined };
+    const prefetched = new Map<Relation, Promise<Prefetched>>();
+    const prefetchWindow = Math.max(0, traversal.prefetch ?? 0);
+    let finishedRun = false;
+    const prefetchPage = (relation: Relation) => {
+        const pending = (async (): Promise<Prefetched> => {
+            const log = await traversal.open(relation.page, { bufferedMessages: PREFETCH_BUFFERED_MESSAGES });
+            const first = await log.next();
+            if (finishedRun) {
+                log.close();
+                return { log, first };
+            }
+            try {
+                if (first && first.length > 0 && isDescriptionMessage(first, log.url)) {
+                    addRelations(readDescription(first, log.url, context.mode, context.defaultOffset).relations);
+                    prefetchAhead();
+                }
+            } catch {
+                // An invalid description is reported when the page is opened
+            }
+            return { log, first };
+        })();
+        // A failure is reported when the page is needed, not before
+        pending.catch(() => undefined);
+        prefetched.set(relation, pending);
+        return pending;
+    };
+    /** Requests the pages of the relations that are followed next, until the window is full */
+    const prefetchAhead = () => {
+        if (finishedRun || prefetched.size >= prefetchWindow) return;
+        const upcoming = relations.filter((relation) => !prefetched.has(relation));
+        upcoming.sort((a, b) => compareLower(a.lower, b.lower));
+        for (const relation of upcoming.slice(0, prefetchWindow - prefetched.size)) {
+            logger.debug(`Requesting ${relation.page} ahead`);
+            prefetchPage(relation);
+        }
+    };
+
     const addRelations = (found: Relation[]) => {
         for (const relation of found) {
             referenced.add(relation.page);
@@ -271,6 +325,7 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         } else {
             finished(page);
         }
+        prefetchAhead();
     };
 
     // A page that is read completely, is immutable, and has no relations, does not have to be read again
@@ -341,7 +396,24 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 const relation = best!.relation;
                 relations.splice(relations.indexOf(relation), 1);
                 logger.debug(`Opening ${relation.page}`);
-                await open(await traversal.open(relation.page), relation.pageNumber, false, undefined, relation.page);
+                let log: MessageLog;
+                let first: { quads: Quad[] | undefined } | undefined;
+                if (prefetchWindow > 0) {
+                    // The page may be on its way already. Requests for the pages after it start while this one loads.
+                    const pending = prefetched.get(relation) ?? prefetchPage(relation);
+                    prefetchAhead();
+                    try {
+                        const result = await pending;
+                        log = result.log;
+                        first = { quads: result.first };
+                    } finally {
+                        prefetched.delete(relation);
+                    }
+                    log.maxBuffered = MAX_BUFFERED_MESSAGES;
+                } else {
+                    log = await traversal.open(relation.page);
+                }
+                await open(log, relation.pageNumber, false, first, relation.page);
             }
         }
         // 5. no sources left: the run is finished. Remember the immutable pages that are still linked to.
@@ -352,5 +424,9 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     } finally {
         traversal.root.log.close();
         pages.forEach((page) => page.log.close());
+        // Pages that were requested ahead, and are not needed any more
+        finishedRun = true;
+        prefetched.forEach((pending) => pending.then(({ log }) => log.close(), () => undefined));
+        prefetched.clear();
     }
 }

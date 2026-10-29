@@ -6,6 +6,8 @@ export type Page = {
     type?: string;
     status?: number;
     headers?: Record<string, string>;
+    /** Milliseconds before the page is sent */
+    delay?: number;
 };
 
 export const PREFIXES = `PREFIX ldes: <https://w3id.org/ldes#>
@@ -23,6 +25,9 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 export class MockServer {
     public pages = new Map<string, Page>();
     public requests: string[] = [];
+    /** The requests that are being answered, and the largest number there have been at the same time */
+    public inFlight = 0;
+    public maxInFlight = 0;
     private server?: FastifyInstance;
 
     constructor(private port: number) {}
@@ -52,6 +57,13 @@ export class MockServer {
             const page = this.pages.get(path);
             if (!page) {
                 return reply.status(404).send("not found");
+            }
+            this.inFlight++;
+            this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+            try {
+                if (page.delay) await new Promise((resolve) => setTimeout(resolve, page.delay));
+            } finally {
+                this.inFlight--;
             }
             reply.status(page.status ?? 200);
             reply.header("content-type", page.type ?? "text/plain");
