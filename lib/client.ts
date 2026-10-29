@@ -1,9 +1,10 @@
-import { RdfDereferencer, rdfDereferencer } from "rdf-dereference";
 import { LDES, RDF, TREE } from "@treecg/types";
 import { CBDShapeExtractor } from "extract-cbd-shape";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
+import { ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
+import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
 import { OrderedStrategy, UnorderedStrategy } from "./strategy";
 import {
@@ -12,7 +13,6 @@ import {
     longPromise,
     resetPromise,
     Manager,
-    statelessPageFetch
 } from "./fetcher";
 import {
     extractMainNodeShape,
@@ -28,10 +28,12 @@ import {
     cleanUpHandlers,
 } from "./utils";
 
-import type { Term } from "@rdfjs/types";
+import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
 import type { Ordered, StrategyEvents } from "./strategy";
+import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
+import type { Bookmark } from "./ldes2";
 import type { LDESInfo, Notifier, FetchedPage, Member } from "./fetcher";
 
 type CachedRoot = {
@@ -67,7 +69,7 @@ export type ClientEvents = {
 export function replicateLDES(
     config: Partial<Config> & { url: string },
     ordered: Ordered = "none",
-    dereferencer?: RdfDereferencer,
+    dereferencer?: MessageDereferencer,
     streamId?: Term,
 ): Client {
     return new Client(intoConfig(config), ordered, dereferencer, streamId);
@@ -79,7 +81,7 @@ export class Client {
     public streamId?: Term;
 
     private config: Config;
-    private dereferencer: RdfDereferencer;
+    private dereferencer: MessageDereferencer;
     private fetcher!: Fetcher;
     private memberManager!: Manager;
     private strategy!: OrderedStrategy | UnorderedStrategy;
@@ -87,6 +89,7 @@ export class Client {
     private closed = false;
     private modulatorFactory: ModulatorFactory;
     private clientStateManager: ClientStateManager;
+    private gate = new Gate();
 
     private listeners: {
         [K in keyof ClientEvents]?: Array<(p: ClientEvents[K]) => void>;
@@ -97,13 +100,13 @@ export class Client {
     constructor(
         config: Config,
         ordered: Ordered = "none",
-        dereferencer?: RdfDereferencer,
+        dereferencer?: MessageDereferencer,
         stream?: Term,
     ) {
         this.memberCount = 0;
         this.fragmentCount = 0;
         this.config = config;
-        this.dereferencer = dereferencer ?? rdfDereferencer;
+        this.dereferencer = dereferencer ?? ldfetchDereferencer;
         this.streamId = stream;
         this.ordered = ordered;
         this.clientStateManager = new ClientStateManager(
@@ -163,12 +166,32 @@ export class Client {
             const headers = cached?.etag
                 ? { "If-None-Match": cached.etag }
                 : undefined;
-            root = await statelessPageFetch(
+            const log = await this.dereferencer.dereferenceMessages(
                 this.config.url,
-                this.dereferencer,
-                this.config.fetch,
-                headers,
+                { fetch: this.config.fetch, headers, localFiles: true },
             );
+            const first = await log.next();
+
+            // Is this an LDES 1.0 or an LDES 2.0? The first message tells.
+            const version = detectVersion(log, first) ??
+                (first && isEventStreamDescription(first) ? 2 : 1);
+            if (version === 2) {
+                this.logger.debug(`Found an LDES 2.0 at ${log.url}`);
+                await this.initLdes2(log, first, streamOut, close);
+                return;
+            }
+
+            // An LDES 1.0 page is a document without messages: the first message is the entire page
+            log.close();
+            const data = toStore(first ?? []);
+            root = {
+                url: log.url,
+                data,
+                immutable: false,
+                memberCount: 0,
+                etag: log.headers.get("etag") ?? undefined,
+                status: log.status,
+            };
             if (root.status === 304 && cached) {
                 parseQuads(cached.quads).forEach((quad) => root!.data.addQuad(quad));
             }
@@ -309,42 +332,10 @@ export class Client {
             this.config.loose,
             condition,
             this.config.defaultTimezone,
-            this.config.includeMetadata || false,
             this.config.fetch,
         );
 
-        // Event handler object that listens for various runtime events (e.g., page fetching, member extraction, etc.)
-        const notifier: Notifier<StrategyEvents, unknown> = {
-            error: (ex: unknown) => this.emit("error", ex),
-            fragment: (fragment: FetchedPage) => {
-                this.emit("fragment", fragment);
-                this.fragmentCount++;
-            },
-            member: (m) => {
-                const streamed = streamOut(
-                    // Check if member is to be materialized
-                    maybeVersionMaterialize(
-                        m,
-                        this.config.materialize === true,
-                        info,
-                    ),
-                );
-                if (streamed) {
-                    this.memberCount++;
-                }
-                return streamed;
-            },
-            pollCycle: () => {
-                condition.poll();
-                this.emit("poll", undefined);
-            },
-            mutable: () => {
-                this.emit("mutable", undefined);
-            },
-            close: () => {
-                close();
-            },
-        };
+        const notifier = this.buildNotifier(info, streamOut, close, condition);
 
         // Opt for descending order strategy if last version only is true, to start reading at the newest end.
         if (this.config.lastVersionOnly) this.ordered = "descending";
@@ -388,6 +379,89 @@ export class Client {
         );
     }
 
+    /**
+     * Event handler object that listens for various runtime events (e.g., page fetching, member extraction, etc.)
+     */
+    private buildNotifier(
+        info: LDESInfo,
+        streamOut: (member: Member) => boolean,
+        close: () => void,
+        condition?: ReturnType<typeof handleConditions>,
+    ): Notifier<StrategyEvents, unknown> {
+        return {
+            error: (ex: unknown) => this.emit("error", ex),
+            fragment: (fragment: FetchedPage) => {
+                this.emit("fragment", fragment);
+                this.fragmentCount++;
+            },
+            member: (m) => {
+                const streamed = streamOut(
+                    // Check if member is to be materialized
+                    maybeVersionMaterialize(
+                        m,
+                        this.config.materialize === true,
+                        info,
+                    ),
+                );
+                if (streamed) {
+                    this.memberCount++;
+                }
+                return streamed;
+            },
+            pollCycle: () => {
+                condition?.poll();
+                this.emit("poll", undefined);
+            },
+            mutable: () => {
+                this.emit("mutable", undefined);
+            },
+            close: () => {
+                close();
+            },
+        };
+    }
+
+    /**
+     * Replicates an LDES 2.0, of which the root page has been opened already.
+     */
+    private async initLdes2(
+        log: Awaited<ReturnType<MessageDereferencer["dereferenceMessages"]>>,
+        first: Quad[] | undefined,
+        streamOut: (member: Member) => boolean,
+        close: () => void,
+    ): Promise<void> {
+        const bookmarks = this.config.statePath
+            ? this.clientStateManager.build<string, Bookmark>("ldes2")
+            : undefined;
+        // The notifier needs the description of the LDES, which is only known when the root page was read.
+        // The members are only emitted after that, so it is safe to complete this reference afterwards.
+        let notifier!: Notifier<StrategyEvents, unknown>;
+        await startLdes2({
+            config: this.config,
+            dereferencer: this.dereferencer,
+            bookmarks,
+            root: { log, first },
+            hooks: {
+                member: (m) => notifier.member(m, undefined) as boolean,
+                fragment: (page) => {
+                    this.fragmentCount++;
+                    this.emit("fragment", page);
+                },
+                pollCycle: () => notifier.pollCycle({}, undefined),
+                mutable: () => notifier.mutable({}, undefined),
+                error: (ex) => notifier.error(ex, undefined),
+                close: () => notifier.close({}, undefined),
+                gate: this.gate,
+                isClosed: () => this.closed,
+            },
+            onDescription: (info) => {
+                this.streamId = this.streamId ?? info.rootNode;
+                notifier = this.buildNotifier(info, streamOut, close);
+                this.emit("description", info);
+            },
+        });
+    }
+
     stream(strategy?: {
         highWaterMark?: number;
         size?: (chunk: Member) => number;
@@ -403,6 +477,7 @@ export class Client {
                     controller.error(error);
                 });
                 this.modulatorFactory.pause();
+                this.gate.pause();
                 await this.init(
                     (member) => {
                         try {
@@ -427,8 +502,10 @@ export class Client {
             pull: async () => {
                 resetPromise(emitted);
                 this.modulatorFactory.unpause();
+                this.gate.unpause();
                 await emitted.waiting;
                 this.modulatorFactory.pause();
+                this.gate.pause();
                 return;
             },
 
@@ -456,6 +533,7 @@ export class Client {
     public async close() {
         if (this.closed) return;
         this.closed = true;
+        this.gate.unpause();
         this.memberManager?.close();
         this.fetcher?.close();
         this.modulatorFactory.close();
@@ -474,7 +552,7 @@ async function getInfo(
     viewId: Term,
     store: RdfStore,
     fetchedRootUrl: string,
-    dereferencer: RdfDereferencer,
+    dereferencer: MessageDereferencer,
     config: Config,
 ): Promise<LDESInfo> {
     const logger = getLoggerFor("getShape");
@@ -485,7 +563,7 @@ async function getInfo(
             ? config.shapeFile
             : "file://" + config.shapeFile;
         try {
-            const resp = await rdfDereferencer.dereference(config.shapeFile, {
+            const resp = await dereferencer.dereference(config.shapeFile, {
                 localFiles: true,
                 fetch: config.fetch,
             });
@@ -636,7 +714,7 @@ async function getInfo(
 async function buildInfo(
     config: Config,
     store: RdfStore,
-    dereferencer: RdfDereferencer,
+    dereferencer: MessageDereferencer,
     shapeIds: Term[],
     timestampPaths: Term[],
     sequencePaths: Term[],
@@ -667,7 +745,7 @@ async function buildInfo(
             store.getQuads(shapeId, null, null).length === 0
         ) {
             // Dereference out-of-band shape
-            const respShape = await rdfDereferencer.dereference(shapeId.value);
+            const respShape = await dereferencer.dereference(shapeId.value, { fetch: config.fetch });
             await new Promise((resolve, reject) => {
                 shapeConfigStore.import(respShape.data)
                     .on("end", resolve)
@@ -692,7 +770,7 @@ async function buildInfo(
     const pollingInterval = Number(pollingIntervals[0]?.value);
 
     return {
-        extractor: new CBDShapeExtractor(shapeStore, dereferencer, {
+        extractor: new CBDShapeExtractor(shapeStore, dereferencer as unknown as ConstructorParameters<typeof CBDShapeExtractor>[1], {
             // Generic LDES member extraction is defined over the default graph
             // (plus the member's own named graph), not unrelated named graphs.
             cbdDefaultGraph: true,

@@ -107,6 +107,35 @@ The `ldes-client` is also exposed as an [RDF-Connect](https://rdf-connect.github
     ...
 ```
 
+## LDES 2.0
+
+The client supports both [LDES 1.0](https://w3id.org/ldes/specification) and the draft of LDES 2.0 ([SEMICeu/LinkedDataEventStreams#116](https://github.com/SEMICeu/LinkedDataEventStreams/pull/116)). It detects which version it is reading from the root page, following the [compatibility section](https://github.com/SEMICeu/LinkedDataEventStreams/pull/116) of the draft, so the same command and library call work for both:
+
+```bash
+ldes-client https://example.org/observations/ --follow --save ./state
+```
+
+For an LDES 2.0, the client:
+
+ * reads every page as an [RDF Message](https://w3c-cg.github.io/rsp/spec/messages.html) log, in a streaming way: TriG, N-Quads, N-Triples and Turtle (with `VERSION "1.2-messages"`, a document without messages is one message) and [Jelly-RDF](https://jelly-rdf.github.io), also when gzipped. NDJSON-LD is not supported yet.
+ * identifies the member of every message using `ldes:member`, `ldes:memberGraph`, `ldes:memberType` or `ldes:memberPath`, and emits the member with all quads of the message;
+ * orders members on their `ldes:timestampPath` and `ldes:sequencePath`, or implicitly on their page number and index in the page, and traverses the pages as a merge of sorted logs using the intervals of the `ldes:relation`s;
+ * handles timestamps without a timezone: it uses the configured `defaultTimezone` when that is an offset such as `+01:00` (the CLI default `AoE` is not), otherwise the `ldes:defaultTimezone` of the LDES, and otherwise it assumes all of them share one unknown timezone. It only skips members and relations, and only reports a page that is not ordered, when the order is certain for every timezone;
+ * does not fetch a page again once it has been read completely, when the page that links to it states `<page> ldes:immutable true` and it has no relations itself;
+ * only keeps a *bookmark* as state (the key of the last member and the identifiers of the members that share it) instead of all members or pages it has seen. With `--save`, the next run skips all pages before the bookmark without requesting them.
+
+The `description` event gives the context information (`info.ldesVersion` is `2`). Not yet implemented: ETag revalidation (`If-None-Match`), prefetching pages, the ordering rule for members that finalize a transaction, and the `--condition` options that are not `--after` or `--before`.
+
+HTTP and parsing are done with [ldfetch](https://github.com/pietercolpaert/ldfetch) (its RDF parsers for all serializations including Jelly-RDF) on top of the retrying `fetch` of this client, instead of rdf-dereference.
+
+### Sample: a RiverBench dataset as an LDES
+
+[examples/riverbench/root.trig](examples/riverbench/root.trig) is the root page of an LDES 2.0 that points at the Jelly-RDF distribution of the first 10 000 graphs of the [RiverBench](https://w3id.org/riverbench) dataset `assist-iot-weather-graphs`. It declares that the member is the named graph of each message (`ldes:memberGraph`), orders the members on `prov:atTime` (`ldes:timestampPath`, of which the values have no timezone), links a SHACL shape (`ldes:shape`), and marks the data page immutable. [catalog.ttl](examples/riverbench/catalog.ttl) lists it as a `dcat:Distribution` of the RiverBench dataset, with its title, description, creators, license and temporal resolution.
+
+```bash
+ldes-client examples/riverbench/root.trig
+```
+
 ## Conditions
 
 When passing a condition file to the `ldes-client` CLI, the expected content is a condition where the subject is the file itself.
@@ -250,6 +279,8 @@ The command exits with a non-zero status when required conformance tests fail. T
 ```bash
 npm run test:conformance -- --no-fail
 ```
+
+LDES 2.0 tests, which can be the start of a conformance test suite for LDES 2.0, are in [tests/ldes2](tests/ldes2): they run the client against a mock server that serves RDF Message logs in TriG, N-Quads and Jelly-RDF. Run them with `npx vitest run tests/ldes2`, and add `RIVERBENCH=1` to also replicate the real RiverBench dataset over the network.
 
 ## Authors and license
 

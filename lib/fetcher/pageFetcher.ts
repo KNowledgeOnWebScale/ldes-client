@@ -1,12 +1,11 @@
 
-import { RdfDereferencer } from "rdf-dereference";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { LDES } from "@treecg/types";
 import { getLoggerFor } from "../utils";
 import { extractRelations } from "./relation";
 
-import type { IDereferenceOptions } from "rdf-dereference";
+import type { Dereferencer, DereferenceOptions } from "./ldfetchDereferencer";
 import type { Condition } from "../condition";
 import type { Notifier } from "./modulator";
 import type { FoundRelation } from "./relation";
@@ -55,7 +54,7 @@ export function resetPromise(promise: LongPromise) {
 
 export async function statelessPageFetch(
     location: string,
-    dereferencer: RdfDereferencer,
+    dereferencer: Dereferencer,
     fetch_f?: typeof fetch,
     headers?: Record<string, string>,
 ): Promise<FetchedPage> {
@@ -83,7 +82,7 @@ export async function statelessPageFetch(
         immutable: false,
         memberCount: 0,
         etag: etag ?? resp.headers?.get("etag") ?? undefined,
-        status,
+        status: resp.status,
     };
 }
 
@@ -101,23 +100,21 @@ export type Cache = {
 };
 
 export class Fetcher {
-    private dereferencer: RdfDereferencer;
+    private dereferencer: Dereferencer;
     private loose: boolean;
     private fetch_f?: typeof fetch;
     private condition: Condition;
     private defaultTimezone: string;
-    private includeMetadata: boolean;
 
     private closed = false;
 
     private logger = getLoggerFor(this);
 
     constructor(
-        dereferencer: RdfDereferencer,
+        dereferencer: Dereferencer,
         loose: boolean,
         condition: Condition,
         defaultTimezone: string,
-        includeMetadata: boolean,
         fetch_f?: typeof fetch,
     ) {
         this.dereferencer = dereferencer;
@@ -125,7 +122,6 @@ export class Fetcher {
         this.fetch_f = fetch_f;
         this.condition = condition;
         this.defaultTimezone = defaultTimezone;
-        this.includeMetadata = includeMetadata;
     }
 
     close() {
@@ -134,7 +130,7 @@ export class Fetcher {
 
     async fetch<S>(node: Node, state: S, notifier: Notifier<FetchEvent, S>) {
         try {
-            const options: IDereferenceOptions = {
+            const options: DereferenceOptions = {
                 localFiles: true,
                 fetch: this.fetch_f,
             };
@@ -142,12 +138,6 @@ export class Fetcher {
                 options.headers = {
                     ...options.headers,
                     "If-None-Match": node.etag,
-                };
-            }
-            if (this.includeMetadata) {
-                options.headers = {
-                    ...options.headers,
-                    Accept: "application/metadata+trig",
                 };
             }
             const resp = await this.dereferencer.dereference(node.target, options);
@@ -199,7 +189,7 @@ export class Fetcher {
                     immutable: !!cache.immutable,
                     memberCount: 0,
                     etag: cache.etag,
-                    status: Number(resp.headers?.get("x-ldes-client-original-status") ?? 200),
+                    status: resp.status,
                 },
                 state,
                 notifier,
