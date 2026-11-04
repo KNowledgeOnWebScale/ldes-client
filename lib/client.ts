@@ -171,6 +171,10 @@ export class Client {
                 (first && isEventStreamDescription(first) ? 2 : 1);
             if (version === 2) {
                 this.logger.debug(`Found an LDES 2.0 at ${log.url}`);
+                this.logger.warn(
+                    "LDES 2.0 support is experimental: it follows the evolving proposals for the LDES 2.0 " +
+                    "specification, and can change in any release of this client",
+                );
                 await this.initLdes2(log, first, streamOut, close);
                 return;
             }

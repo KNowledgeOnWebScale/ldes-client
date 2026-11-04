@@ -4,6 +4,8 @@
 
 This package provides a reference implementation of a [Linked Data Event Stream (LDES)](https://w3id.org/ldes/specification) client.
 
+> **LDES 1.0 is stable, [LDES 2.0](#ldes-20) is experimental.** The support for LDES 2.0 follows the latest proposals of the LDES 2.0 trajectory and evolves with the specification: it can change in any release, also in ways that are not backwards compatible. New releases follow the specification regularly. See the [changelog](CHANGELOG.md), and pin the version of this package if you depend on LDES 2.0.
+
 The main functionality is to extract/replicate members within an LDES, and keeping in-sync with it. This library can be used also as a [RDF-Connect](https://rdf-connect.github.io/) processor to build more complex data processing pipelines.
 
 Install the package using: 
@@ -110,6 +112,8 @@ The `ldes-client` is also exposed as an [RDF-Connect](https://rdf-connect.github
 ```
 
 ## LDES 2.0
+
+> **Experimental.** The LDES 2.0 specification is still a draft, and this client follows the latest proposals as they evolve. Expect changes in the behavior, the options and the events for an LDES 2.0 in any release (new releases are published regularly to follow the specification), and pin the version of this package when you use it. The client logs a warning when it replicates an LDES 2.0. The support for LDES 1.0 is not affected by this.
 
 The client supports both [LDES 1.0](https://w3id.org/ldes/specification) and the draft of LDES 2.0 ([SEMICeu/LinkedDataEventStreams#116](https://github.com/SEMICeu/LinkedDataEventStreams/pull/116)). It detects which version it is reading from the root page, following the [compatibility section](https://github.com/SEMICeu/LinkedDataEventStreams/pull/116) of the draft, so the same command and library call work for both:
 
@@ -298,9 +302,6 @@ npm run test:conformance -- --no-fail
 
 LDES 2.0 tests, which can be the start of a conformance test suite for LDES 2.0, are in [tests/ldes2](tests/ldes2): they run the client against a mock server that serves RDF Message logs in TriG, N-Quads and Jelly-RDF. Run them with `npx vitest run tests/ldes2`, and add `RIVERBENCH=1` to also replicate the real RiverBench dataset over the network.
 
-## Authors and license
-
- - Tests and design: Pieter Colpaert
- - Actual implementation: Arthur Vercruysse, Ieben Smessaert, Julián Rojas
+## License
 
 © 2026 -- Ghent University - IMEC. MIT license

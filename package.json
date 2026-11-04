@@ -1,7 +1,7 @@
 {
   "name": "ldes-client",
   "description": "This package provides common tooling to work with LDESs.",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "main": "dist/lib/client.js",
   "exports": {
     "import": "./dist/lib/client.js",
@@ -12,7 +12,7 @@
     "ldes-client": "dist/bin/cli.js"
   },
   "scripts": {
-    "build": "tsc && tsc-alias && rollup -c",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc && tsc-alias && rollup -c",
     "test": "vitest run --coverage --coverage.include lib --coverage.exclude dist",
     "test:browser": "vitest run -c vitest.browser.config.ts",
     "test:conformance": "sh scripts/test-conformance.sh",
@@ -22,7 +22,8 @@
     "dist/**/*",
     "shapes/**/*",
     "dist/bin/**/*",
-    "processor.ttl"
+    "processor.ttl",
+    "CHANGELOG.md"
   ],
   "directories": {
     "lib": "lib",
