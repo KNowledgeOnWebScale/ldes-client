@@ -70,6 +70,10 @@ export function parse_condition(source: string, baseIRI: string): Condition {
 }
 
 export function cbdEquals(a: Path, b: Path): boolean {
+    // A relation does not have to name a path: that is only equal to another one that does not
+    if (!a.id || !b.id) {
+        return !a.id && !b.id;
+    }
     // A path that is an IRI (a single predicate) is only equal to that same IRI: it has no quads that could be compared
     if (
         (a.id.termType === "NamedNode" || b.id.termType === "NamedNode") &&
