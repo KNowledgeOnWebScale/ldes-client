@@ -81,7 +81,7 @@ program
             .choices(["ascending", "descending", "none"])
             .default("none"),
     )
-    .option("--poll-interval <number>", "specify poll interval")
+    .option("--poll-interval <number>", "specify poll interval in milliseconds (default: 1000)")
     .option("-q --quiet", "be quiet and don't print the members in the console (mainly for debugging purposes)")
     .option(
         "--retry-count <retry>",
