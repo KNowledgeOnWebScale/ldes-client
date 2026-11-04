@@ -11,10 +11,9 @@ rdfcp:LdesClient rdfc:jsImplementationOf rdfc:Processor;
   rdfc:class "LDESClientProcessor";
   rdfc:entrypoint <./>.
 
-[ ] a sh:NodeShape;
-  sh:targetClass rdfcp:FetchConfig;
+rdfcp:LdesClientFetchConfigShape a sh:NodeShape;
   sh:property [
-    sh:class rdfcp:AuthConfig;
+    sh:node rdfcp:LdesClientAuthConfigShape;
     sh:path rdfcp:auth;
     sh:codeIdentifier "auth";
     sh:name "Authentication";
@@ -28,7 +27,7 @@ rdfcp:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:description "Maximum number of concurrent fetch requests to run in parallel.";
     sh:maxCount 1;
   ], [
-    sh:class rdfcp:FetchRetry;
+    sh:node rdfcp:LdesClientFetchRetryShape;
     sh:path rdfcp:retry;
     sh:codeIdentifier "retry";
     sh:name "Retry Settings";
@@ -43,8 +42,7 @@ rdfcp:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:maxCount 1;
   ].
 
-[ ] a sh:NodeShape;
-  sh:targetClass rdfcp:FetchRetry;
+rdfcp:LdesClientFetchRetryShape a sh:NodeShape;
   sh:property [
     sh:datatype xsd:integer;
     sh:path rdfcp:code;
@@ -60,8 +58,7 @@ rdfcp:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:maxCount 1;
   ].
 
-[ ] a sh:NodeShape;
-  sh:targetClass rdfcp:AuthConfig;
+rdfcp:LdesClientAuthConfigShape a sh:NodeShape;
   sh:property [
     sh:datatype xsd:string;
     sh:path rdfcp:type;
@@ -175,7 +172,7 @@ rdfcp:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:description "Indicate that the provided URL already points to a concrete LDES view.";
     sh:maxCount 1;
   ], [
-    sh:class rdfcp:FetchConfig;
+    sh:node rdfcp:LdesClientFetchConfigShape;
     sh:path rdfcp:fetch;
     sh:codeIdentifier "fetchConfig";
     sh:name "Fetch Configuration";
