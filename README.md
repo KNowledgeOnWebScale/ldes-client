@@ -83,6 +83,7 @@ The `ldes-client` is also exposed as an [RDF-Connect](https://rdf-connect.github
 
 ```turtle
 @prefix rdfc: <https://w3id.org/rdf-connect#>.
+@prefix rdfcp: <https://w3id.org/rdf-connect/processors#>.
 @prefix owl: <http://www.w3.org/2002/07/owl#>.
 
 ### Import the processor definitions
@@ -100,10 +101,10 @@ The `ldes-client` is also exposed as an [RDF-Connect](https://rdf-connect.github
     ].
 
 ### Define and configure the processor
-<ldes-client> a rdfc:LdesClient;
-    rdfc:url <http://my.ldes.org>;
-    rdfc:output <members>;
-    rdfc:follow true;
+<ldes-client> a rdfcp:LdesClient;
+    rdfcp:url <http://my.ldes.org>;
+    rdfcp:output <members>;
+    rdfcp:follow true;
     ...
 ```
 

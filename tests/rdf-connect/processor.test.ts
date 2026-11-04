@@ -8,46 +8,47 @@ import { toPath } from "@rdfc/utils-js";
 import type { FullProc } from "@rdfc/js-runner";
 
 
-describe("Tests for rdfc:LdesClient processor", () => {
+describe("Tests for rdfcp:LdesClient processor", () => {
     afterAll(() => {
         rmSync("state-path", { recursive: true, force: true });
     });
 
-    test("rdfc:LdesClient is properly defined", async () => {
+    test("rdfcp:LdesClient is properly defined", async () => {
         const processor = `
         @prefix rdfc: <https://w3id.org/rdf-connect#>.
+        @prefix rdfcp: <https://w3id.org/rdf-connect/processors#>.
         @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
-        <http://example.com/ns#processor> a rdfc:LdesClient;
-            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
-            rdfc:output <jw>;
-            rdfc:before "2025-01-01T00:00:00.000Z"^^xsd:dateTime;
-            rdfc:after "2023-12-31T23:59:59.000Z"^^xsd:dateTime;
-            rdfc:ordered "ascending";
-            rdfc:follow true;
-            rdfc:interval 5;
-            rdfc:shapeFile "/path/to/shape.ttl";
-            rdfc:noShape false;
-            rdfc:savePath "state-path";
-            rdfc:loose false;
-            rdfc:urlIsView false;
-            rdfc:fetch [
-                rdfc:concurrent 5;
-                rdfc:retry [
-                    rdfc:code 404, 403;
-                    rdfc:maxRetry 5;
+        <http://example.com/ns#processor> a rdfcp:LdesClient;
+            rdfcp:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfcp:output <jw>;
+            rdfcp:before "2025-01-01T00:00:00.000Z"^^xsd:dateTime;
+            rdfcp:after "2023-12-31T23:59:59.000Z"^^xsd:dateTime;
+            rdfcp:ordered "ascending";
+            rdfcp:follow true;
+            rdfcp:interval 5;
+            rdfcp:shapeFile "/path/to/shape.ttl";
+            rdfcp:noShape false;
+            rdfcp:savePath "state-path";
+            rdfcp:loose false;
+            rdfcp:urlIsView false;
+            rdfcp:fetch [
+                rdfcp:concurrent 5;
+                rdfcp:retry [
+                    rdfcp:code 404, 403;
+                    rdfcp:maxRetry 5;
                 ];
-                rdfc:safe true;
-                rdfc:auth [
-                    rdfc:auth "test";
-                    rdfc:type "basic"
+                rdfcp:safe true;
+                rdfcp:auth [
+                    rdfcp:auth "test";
+                    rdfcp:type "basic"
                 ]
             ];
-            rdfc:materialize true;
-            rdfc:lastVersionOnly true;
-            rdfc:startFresh true;
-            rdfc:streamId "MyStream";
-            rdfc:sdsify true.
+            rdfcp:materialize true;
+            rdfcp:lastVersionOnly true;
+            rdfcp:startFresh true;
+            rdfcp:streamId "MyStream";
+            rdfcp:sdsify true.
         `;
 
         const configLocation = process.cwd() + "/processor.ttl";
@@ -96,13 +97,14 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(proc.sdsify).toBeTruthy();
     });
 
-    test("rdfc:LdesClient falls back to its default values", async () => {
+    test("rdfcp:LdesClient falls back to its default values", async () => {
         const processor = `
         @prefix rdfc: <https://w3id.org/rdf-connect#>.
+        @prefix rdfcp: <https://w3id.org/rdf-connect/processors#>.
 
-        <http://example.com/ns#processor> a rdfc:LdesClient;
-            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
-            rdfc:output <jw>.
+        <http://example.com/ns#processor> a rdfcp:LdesClient;
+            rdfcp:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfcp:output <jw>.
         `;
 
         const configLocation = process.cwd() + "/processor.ttl";
@@ -118,16 +120,17 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(proc.ordered).toBe("none");
         expect(proc.pollInterval).toBe(1000);
     });
-    test("rdfc:LdesClient accepts locations and the URL written as IRIs", async () => {
+    test("rdfcp:LdesClient accepts locations and the URL written as IRIs", async () => {
         const processor = `
         @prefix rdfc: <https://w3id.org/rdf-connect#>.
+        @prefix rdfcp: <https://w3id.org/rdf-connect/processors#>.
 
-        <http://example.com/ns#processor> a rdfc:LdesClient;
-            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
-            rdfc:output <jw>;
-            rdfc:shapeFile <./tests/data/mock-ldes/full-shape.ttl>;
-            rdfc:savePath <./state-path>;
-            rdfc:conditionFile <./test-condition.ttl>.
+        <http://example.com/ns#processor> a rdfcp:LdesClient;
+            rdfcp:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfcp:output <jw>;
+            rdfcp:shapeFile <./tests/data/mock-ldes/full-shape.ttl>;
+            rdfcp:savePath <./state-path>;
+            rdfcp:conditionFile <./test-condition.ttl>.
         `;
 
         const procHelper = new ProcHelper<FullProc<LDESClientProcessor>>();

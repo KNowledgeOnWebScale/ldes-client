@@ -31,7 +31,7 @@ async function testStreamOutput(reader: Reader, test: (msg: string) => void) {
     }
 }
 
-describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () => {
+describe("Functional tests for the rdfcp:LdesClient RDF-Connect processor", () => {
     const LDES = "http://localhost:3000/mock-ldes.ttl";
     const ATYPICAL_LDES = "http://localhost:3000/mock-ldes-atypical.ttl";
     const INBETWEEN_LDES = "http://localhost:3000/mock-ldes-inbetween.ttl";
