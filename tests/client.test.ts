@@ -9,7 +9,7 @@ import { streamToString } from "../lib/utils";
 import { replicateLDES } from "../lib/client";
 
 import type { FastifyInstance } from "fastify";
-import type { FetchedPage, LDESInfo } from "../lib/fetcher";
+import type { FetchedPage, LDESInfo } from "../lib/types";
 
 describe("Client tests", () => {
     const LDES = "http://localhost:3001/mock-ldes.ttl";

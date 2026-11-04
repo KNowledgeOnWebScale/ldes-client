@@ -4,11 +4,11 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { TREE } from "@treecg/types";
-import { read, Tree } from "./helper";
-import { MaxCountCondition } from "../lib/condition";
-import { retry_fetch } from "../lib/fetcher";
-import { intoConfig, replicateLDES } from "../lib/client";
-import { parseQuads } from "../lib/utils";
+import { read, Tree } from "../helper";
+import { MaxCountCondition } from "../../lib/condition";
+import { retry_fetch } from "../../lib/fetcher";
+import { intoConfig, replicateLDES } from "../../lib/client";
+import { parseQuads } from "../../lib/utils";
 
 const oldFetch = global.fetch;
 beforeEach(() => {

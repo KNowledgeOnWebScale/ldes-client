@@ -1,18 +1,21 @@
 import { Fetcher, ModulatorFactory, Manager } from "../fetcher";
-import { deserializeMember, getLoggerFor, serializeMember } from "../utils";
-import { Condition } from "../condition";
+import { deserializeMember, getLoggerFor, serializeMember } from "../../utils";
+import { Condition } from "../../condition";
 
 import type {
-    FetchedPage,
     FetchEvent,
     Node,
     Modulator,
-    Notifier,
     MemberEvents,
-    Member,
     Ranker
 } from "../fetcher";
-import type { StrategyEvents, SerializedMember } from ".";
+import type {
+    FetchedPage,
+    Notifier,
+    Member,
+    StrategyEvents,
+    SerializedMember,
+} from "../../types";
 
 export class UnorderedStrategy {
     private manager: Manager;

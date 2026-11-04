@@ -6,60 +6,16 @@ import {
     getObjects,
     memberFromQuads,
     getLoggerFor,
-    memberIsOld
-} from "../utils";
-import { Condition } from "../condition";
+    isNumericOrderValue,
+} from "../../utils";
+import { Condition } from "../../condition";
 
 import type { Quad, Term } from "@rdfjs/types";
-import type { Modulator, Notifier } from "./modulator";
-import type { FetchedPage } from "./pageFetcher";
-
-export type NumericOrderValue = {
-    type: "numeric";
-    value: string;
-};
-
-export type OrderValue = string | Date | number | NumericOrderValue;
+import type { Modulator } from "./modulator";
+import type { Notifier } from "../../types";
+import type { FetchedPage, LDESInfo, Member } from "../../types";
 
 const { namedNode } = new DataFactory();
-
-export interface Member {
-    id: Term;
-    quads: Quad[];
-    order?: OrderValue;
-    timestamp?: OrderValue;
-    sequence?: OrderValue;
-    transactionFinalized?: boolean;
-    isVersionOf?: string;
-    type?: Term;
-    created?: Date;
-}
-
-export type LDESInfo = {
-    shape: Term;
-    shapeQuads: Quad[];
-    contextQuads?: Quad[];
-    extractor: CBDShapeExtractor;
-    rootNode?: Term;
-    shapes?: Term[];
-    viewDescriptions?: Term[];
-    retentionPolicies?: Term[];
-    emptyRetentionPolicies?: Term[];
-    timestampPath?: Term;
-    timestampPathKey?: string;
-    sequencePath?: Term;
-    sequencePathTerms?: Term[];
-    sequencePathKey?: string;
-    transactionFinalizedPath?: Term;
-    transactionFinalizedPathTerms?: Term[];
-    transactionFinalizedObject?: Term;
-    versionOfPath?: Term;
-    versionTimestampPath?: Term;
-    versionSequencePath?: Term;
-    pollingInterval?: number;
-    /** The version of the LDES specification of the LDES that is replicated */
-    ldesVersion?: 1 | 2;
-};
 
 export type ExtractError = {
     type: "extract";
@@ -262,5 +218,28 @@ export class Manager {
             this.logger.error((<Error>ex).message);
             return;
         }
+    }
+}
+
+const memberIsOldLogger = getLoggerFor("memberIsOld");
+
+export async function memberIsOld(member: Member, modulator: Modulator<unknown, unknown>) {
+    if (!modulator.hasLatestVersions() || !member.isVersionOf || !member.timestamp) {
+        return false;
+    }
+    memberIsOldLogger.silly(`[memberIsOld] Checking if member <${member.id.value}> (version of: ${member.isVersionOf}) is old`);
+    // We are emitting latest versions only
+    const version = member.timestamp instanceof Date
+        ? member.timestamp.getTime()
+        : isNumericOrderValue(member.timestamp)
+            ? Number.NaN
+            : new Date(member.timestamp).getTime();
+    if (Number.isNaN(version)) {
+        return false;
+    }
+    try {
+        return await modulator.filterLatest(member.isVersionOf, version);
+    } catch (ex) {
+        throw ex;
     }
 }

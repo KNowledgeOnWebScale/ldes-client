@@ -2,6 +2,10 @@
  * The LDES 2.0 client: reads the context information of the root page, and then repeats synchronization runs.
  * See https://w3id.org/ldes/specification#synchronization-algorithm
  */
+import { DataFactory } from "rdf-data-factory";
+import { RdfStore } from "rdf-stores";
+import { TREE } from "@treecg/types";
+import { EmptyCondition, Range } from "../condition";
 import { getObjects, shaclPathKey } from "../utils/general";
 import { getLoggerFor } from "../utils/logUtil";
 import { V } from "./vocab";
@@ -13,13 +17,16 @@ import { synchronize } from "./traversal";
 import type { Level } from "level";
 import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "../config";
-import type { FetchedPage, LDESInfo, Member } from "../fetcher";
+import type { Condition } from "../condition";
+import type { Key } from "./key";
+import type { FetchedPage, LDESInfo, Member } from "../types";
 import type { MessageDereferencer, MessageLog } from "../fetcher/ldfetchDereferencer";
 import type { Gate } from "./gate";
 import type { Bookmark, StreamContext, Traversal } from "./traversal";
 import type { Description, OrderMode } from "./description";
 
 const logger = getLoggerFor("Ldes2Client");
+const df = new DataFactory();
 
 export type Ldes2Hooks = {
     /** Hands a member to the consumer. Returns false when the consumer is gone. */
@@ -162,6 +169,10 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
         });
     };
 
+    // The conditions of the client: the condition file, as the options `before` and `after` are applied to members below
+    const condition = config.condition;
+    const relevant = relevance(condition, context, config.defaultTimezone);
+
     const pollInterval = info.pollingInterval === undefined
         ? config.pollInterval
         : info.pollingInterval * 1000;
@@ -188,10 +199,23 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
                 prefetch: config.concurrentFetches,
                 open: (url, options) =>
                     dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true, ...options }),
+                relevant,
                 emit: async (member) => {
                     await hooks.gate.wait();
                     if (hooks.isClosed()) return false;
                     if (!inWindow(member, config)) return true;
+                    try {
+                        if (!condition.matchMember(member)) {
+                            logger.silly(`Member <${member.id.value}> does not match the condition`);
+                            return true;
+                        }
+                    } catch (ex) {
+                        // The same as in an LDES 1.0: a member that the condition cannot be evaluated on is reported as an extraction error
+                        logger.error(String(ex));
+                        hooks.error({ error: ex, type: "extract", memberId: member.id });
+                        return true;
+                    }
+                    condition.memberEmitted(member);
                     return hooks.member(member);
                 },
                 onPage: (url, description: Description | undefined) => {
@@ -220,6 +244,33 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
         hooks.error(ex);
     });
     return { info };
+}
+
+/**
+ * Lets the condition of the client decide which parts of the order can still contain wanted members.
+ * The interval of a relation, or the unbounded rest of a page, is a range of the ldes:timestampPath,
+ * which is compared with the conditions on that path in the same way as the range of a tree:relation is in an LDES 1.0.
+ * Returns undefined when there is nothing to prune on.
+ */
+export function relevance(
+    condition: Condition,
+    context: StreamContext,
+    defaultTimezone: string,
+): Traversal["relevant"] {
+    if (condition instanceof EmptyCondition) return undefined;
+    const path = context.timestampPath
+        ? { id: context.timestampPath, store: context.pathStore }
+        // Without a timestamp, no range can be given: only conditions that do not depend on a path can prune
+        : { id: df.blankNode(), store: RdfStore.createDefault() };
+    return (lower?: Key, upper?: Key) => {
+        const range = Range.empty(defaultTimezone);
+        if (context.timestampPath) {
+            if (lower?.time !== undefined) range.add(new Date(lower.time), TREE.GreaterThanOrEqualToRelation);
+            // The bound is exclusive in the LDES, but being inclusive never prunes what is wanted
+            if (upper?.time !== undefined) range.add(new Date(upper.time), TREE.LessThanOrEqualToRelation);
+        }
+        return condition.matchRelation(range, path);
+    };
 }
 
 /** The `before` and `after` options of the client apply to the timestamp of the member */

@@ -9,7 +9,7 @@ import { Range } from "./range";
 import type { Quad, Term } from "@rdfjs/types";
 import type { Cont } from "rdf-lens";
 import type { PathRange } from "./range";
-import type { Member, RelationValue } from "../fetcher";
+import type { Member, RelationValue } from "../types";
 
 const df = new DataFactory();
 
@@ -70,6 +70,13 @@ export function parse_condition(source: string, baseIRI: string): Condition {
 }
 
 export function cbdEquals(a: Path, b: Path): boolean {
+    // A path that is an IRI (a single predicate) is only equal to that same IRI: it has no quads that could be compared
+    if (
+        (a.id.termType === "NamedNode" || b.id.termType === "NamedNode") &&
+        !a.id.equals(b.id)
+    ) {
+        return false;
+    }
     const sort = (a: Quad, b: Quad) => {
         const ap = a.predicate.value;
         const bp = b.predicate.value;

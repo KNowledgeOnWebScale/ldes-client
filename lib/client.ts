@@ -6,14 +6,7 @@ import { intoConfig } from "./config";
 import { ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
 import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
-import { OrderedStrategy, UnorderedStrategy } from "./strategy";
-import {
-    ModulatorFactory,
-    Fetcher,
-    longPromise,
-    resetPromise,
-    Manager,
-} from "./fetcher";
+import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
 import {
     extractMainNodeShape,
     getObjects,
@@ -26,15 +19,16 @@ import {
     getLoggerFor,
     handleExit,
     cleanUpHandlers,
+    longPromise,
+    resetPromise,
 } from "./utils";
 
 import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
-import type { Ordered, StrategyEvents } from "./strategy";
 import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
 import type { Bookmark } from "./ldes2";
-import type { LDESInfo, Notifier, FetchedPage, Member } from "./fetcher";
+import type { LDESInfo, Notifier, FetchedPage, Member, Ordered, StrategyEvents } from "./types";
 
 type CachedRoot = {
     url: string;
@@ -56,7 +50,7 @@ type EventReceiver<T> = (params: T) => void;
 export { enhanced_fetch } from "./fetcher";
 export { intoConfig } from "./config";
 export * from "./condition";
-export type { Ordered } from "./strategy";
+export type { Ordered } from "./types";
 
 export type ClientEvents = {
     fragment: FetchedPage;
@@ -456,7 +450,8 @@ export class Client {
             },
             onDescription: (info) => {
                 this.streamId = this.streamId ?? info.rootNode;
-                notifier = this.buildNotifier(info, streamOut, close);
+                // The notifier tells the conditions that the client polls
+                notifier = this.buildNotifier(info, streamOut, close, this.config.condition);
                 this.emit("description", info);
             },
         });

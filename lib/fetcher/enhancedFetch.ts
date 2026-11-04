@@ -1,5 +1,4 @@
 import { urlToUrl, getLoggerFor } from "../utils";
-import { createLineBufferedFetch } from "./lineBuffer";
 
 const logger = getLoggerFor("EnhancedFetch");
 
@@ -47,14 +46,10 @@ export function enhanced_fetch(
         ? handle_basic_auth(safe_f, config.auth)
         : safe_f;
 
-    const limitedFetch = limit_fetch_per_domain(
+    return limit_fetch_per_domain(
         empty_special_status_fetch(retry_fetch(fetch_f, config.retry || {})),
         config.concurrent,
     );
-
-    // Apply line buffering to work around N3.js chunk-splitting bug
-    // https://github.com/rdfjs/N3.js/issues/578
-    return createLineBufferedFetch(limitedFetch);
 }
 
 export function limit_fetch_per_domain(

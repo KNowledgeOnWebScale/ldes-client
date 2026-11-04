@@ -1,12 +1,9 @@
-import { getLoggerFor } from "../utils/";
-import { Condition } from "../condition";
+import { getLoggerFor } from "../../utils/";
+import { Condition } from "../../condition";
 import { Level } from "level";
 
-import type { ClientStateManager } from "../state";
-
-export type Notifier<Events, S> = {
-    [K in keyof Events]: (event: Events[K], state: S) => unknown;
-};
+import type { ClientStateManager } from "../../state";
+import type { Notifier } from "../../types";
 
 type Indexed<T> = {
     item: T;

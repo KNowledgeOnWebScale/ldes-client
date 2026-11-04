@@ -1,10 +1,11 @@
 import { RDF, TREE } from "@treecg/types";
 import { RdfStore } from "rdf-stores";
-import { RelationCondition } from "../condition";
-import { getObjects, getLoggerFor, shaclPathKey } from "../utils";
+import { RelationCondition } from "../../condition";
+import { getObjects, getLoggerFor, shaclPathKey } from "../../utils";
 
 import type { Term } from "@rdfjs/types";
-import type { Condition } from "../condition";
+import type { Condition } from "../../condition";
+import type { RelationValue } from "../../types";
 
 export interface FoundRelation {
     source: string;
@@ -20,8 +21,6 @@ export interface RelationKind {
     path?: Term;
     pathKey?: string;
 }
-
-export type RelationValue = string | Date | number;
 
 export type SimpleRelation = {
     important: boolean;

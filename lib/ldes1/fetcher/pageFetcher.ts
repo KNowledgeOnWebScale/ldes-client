@@ -2,12 +2,12 @@
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { LDES } from "@treecg/types";
-import { getLoggerFor } from "../utils";
+import { getLoggerFor } from "../../utils";
 import { extractRelations } from "./relation";
 
-import type { Dereferencer, DereferenceOptions } from "./ldfetchDereferencer";
-import type { Condition } from "../condition";
-import type { Notifier } from "./modulator";
+import type { Dereferencer, DereferenceOptions } from "../../fetcher/ldfetchDereferencer";
+import type { Condition } from "../../condition";
+import type { FetchedPage, Notifier } from "../../types";
 import type { FoundRelation } from "./relation";
 
 const { namedNode } = new DataFactory();
@@ -23,34 +23,6 @@ export type Node = {
     etag?: string;
     relations?: string[];
 };
-
-export type FetchedPage = {
-    url: string;
-    data: RdfStore;
-    immutable: boolean;
-    memberCount: number;
-    etag?: string;
-    status?: number;
-    created?: Date;
-    updated?: Date;
-};
-
-export type LongPromise = {
-    waiting: Promise<void>;
-    callback: () => void;
-};
-
-export function longPromise(): LongPromise {
-    const out = {} as LongPromise;
-    out.waiting = new Promise((res) => (out.callback = res));
-    return out;
-}
-
-export function resetPromise(promise: LongPromise) {
-    const cb = promise.callback;
-    promise.waiting = new Promise((res) => (promise.callback = res));
-    cb();
-}
 
 export async function statelessPageFetch(
     location: string,

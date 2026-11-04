@@ -8,7 +8,7 @@ import { Logger } from "winston";
 import { toPath } from "@rdfc/utils-js";
 
 import type { Quad_Object } from "@rdfjs/types";
-import type { Ordered } from "./strategy";
+import type { Ordered } from "./types";
 
 const df = new DataFactory();
 

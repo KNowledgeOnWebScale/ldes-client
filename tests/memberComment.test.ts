@@ -3,7 +3,7 @@ import { DataFactory } from "n3";
 import { MessageWriter, parseMessages } from "n3.js-messages";
 import { memberComment } from "../lib/utils";
 
-import type { Member } from "../lib/fetcher";
+import type { Member } from "../lib/types";
 
 const { namedNode, literal, quad } = DataFactory;
 const ex = (name: string) => namedNode(`http://example.org/${name}`);

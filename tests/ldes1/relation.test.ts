@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import Heap from "heap-js";
-import { RelationChain } from "../lib/fetcher";
+import { RelationChain } from "../../lib/ldes1";
 
-import type { SimpleRelation } from "../lib/fetcher";
+import type { SimpleRelation } from "../../lib/ldes1";
 
 // This probably should not be here
 type Comparable = number | string | Date;

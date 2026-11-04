@@ -10,7 +10,7 @@ import { replicateLDES } from "../../lib/client";
 import { ldfetchDereferencer } from "../../lib/fetcher/ldfetchDereferencer";
 import { MockServer, PREFIXES } from "./server";
 
-import type { Member } from "../../lib/fetcher";
+import type { Member } from "../../lib/types";
 
 const server = new MockServer(3002);
 const ROOT = `${server.base}/root`;

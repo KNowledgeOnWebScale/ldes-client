@@ -1,5 +1,5 @@
 import type { Term } from "@rdfjs/types";
-import type { LDESInfo, Member, OrderValue } from "../fetcher";
+import type { LDESInfo, Member, OrderValue } from "../types";
 
 const term = (t: Term) => (t.termType === "NamedNode" ? `<${t.value}>` : t.termType === "BlankNode" ? `_:${t.value}` : t.value);
 

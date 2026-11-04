@@ -19,7 +19,7 @@ import type { NamedNode, Quad, Term } from "@rdfjs/types";
 import type { Key, SequenceValue } from "./key";
 import type { Description, OrderMode, Relation } from "./description";
 import type { MembershipRule } from "./membership";
-import type { Member } from "../fetcher";
+import type { Member } from "../types";
 import type { MessageLog } from "../fetcher/ldfetchDereferencer";
 import { MAX_BUFFERED_MESSAGES } from "../fetcher/ldfetchDereferencer";
 
@@ -71,6 +71,12 @@ export type Traversal = {
     prefetch?: number;
     /** Called for every member that is not before the bookmark. Returns false when the consumer is gone. */
     emit(member: Member): Promise<boolean>;
+    /**
+     * Tells whether members with a key in the interval [lower, upper] may still be wanted, which is decided by the
+     * conditions of the client. Relations and pages of which this is false are not followed (any more).
+     * An absent bound is unbounded. Without this function, everything is wanted.
+     */
+    relevant?(lower: Key | undefined, upper: Key | undefined): boolean;
     /** Called for every page that has been opened */
     onPage?(url: string, description: Description | undefined): void;
     /** The root page, of which the first message has already been read */
@@ -249,6 +255,7 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     type Prefetched = { log: MessageLog; first: Quad[] | undefined };
     const prefetched = new Map<Relation, Promise<Prefetched>>();
     const prefetchWindow = Math.max(0, traversal.prefetch ?? 0);
+    const relevant = (lower: Key | undefined, upper: Key | undefined) => traversal.relevant?.(lower, upper) ?? true;
     let finishedRun = false;
     const prefetchPage = (relation: Relation) => {
         const pending = (async (): Promise<Prefetched> => {
@@ -276,7 +283,9 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     /** Requests the pages of the relations that are followed next, until the window is full */
     const prefetchAhead = () => {
         if (finishedRun || prefetched.size >= prefetchWindow) return;
-        const upcoming = relations.filter((relation) => !prefetched.has(relation));
+        const upcoming = relations.filter(
+            (relation) => !prefetched.has(relation) && relevant(relation.lower, relation.upper),
+        );
         upcoming.sort((a, b) => compareLower(a.lower, b.lower));
         for (const relation of upcoming.slice(0, prefetchWindow - prefetched.size)) {
             logger.debug(`Requesting ${relation.page} ahead`);
@@ -290,6 +299,10 @@ export async function synchronize(traversal: Traversal): Promise<number> {
             // Relations that can only lead to members that have been emitted already, are not followed
             if (relation.upper && bookmark.key && isBeforeBookmark(relation.upper, bookmark.key)) {
                 logger.debug(`Skipping ${relation.page}: before the bookmark`);
+                continue;
+            }
+            if (!relevant(relation.lower, relation.upper)) {
+                logger.debug(`Skipping ${relation.page}: not wanted by the conditions`);
                 continue;
             }
             // An immutable page that was read completely in an earlier run does not need to be fetched again
@@ -360,6 +373,14 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 // 3. an open page
                 const page = best!.page;
                 const next = page.next!;
+                // The rest of the page is not wanted by the conditions (any more): the order guarantees that
+                // the keys of its remaining members are not smaller than that of the next member
+                if (!relevant(next.key, undefined)) {
+                    logger.debug(`Closing ${page.url}: the rest is not wanted by the conditions`);
+                    pages.splice(pages.indexOf(page), 1);
+                    page.log.close();
+                    continue;
+                }
                 // Only a member that is certainly before the bookmark, or that is a member of the bookmark, is skipped
                 const comparison = bookmark.key
                     ? compareKeysCertain(next.key, bookmark.key)
@@ -395,6 +416,13 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 // 4. an unopened relation
                 const relation = best!.relation;
                 relations.splice(relations.indexOf(relation), 1);
+                // The conditions may have changed since the relation was found, for example by reaching a maximum
+                if (!relevant(relation.lower, relation.upper)) {
+                    logger.debug(`Skipping ${relation.page}: not wanted by the conditions`);
+                    prefetched.get(relation)?.then(({ log }) => log.close(), () => undefined);
+                    prefetched.delete(relation);
+                    continue;
+                }
                 logger.debug(`Opening ${relation.page}`);
                 let log: MessageLog;
                 let first: { quads: Quad[] | undefined } | undefined;

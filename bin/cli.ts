@@ -6,8 +6,8 @@ import { MessageWriter } from "n3.js-messages";
 import { getLoggerFor, memberComment } from "../lib/utils";
 import { replicateLDES, enhanced_fetch, intoConfig, processConditionFile } from "../lib/client";
 
-import type { Ordered } from "../lib/strategy";
-import type { FetchConfig, LDESInfo } from "../lib/fetcher";
+import type { FetchConfig } from "../lib/fetcher";
+import type { Ordered, LDESInfo } from "../lib/types";
 
 const program = new Command();
 let paramURL: string = "";

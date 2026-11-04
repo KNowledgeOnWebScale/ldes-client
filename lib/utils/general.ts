@@ -4,9 +4,7 @@ import { DataFactory } from "rdf-data-factory";
 import { RDF, SHACL } from "@treecg/types";
 import { getLoggerFor } from "./logUtil";
 
-import type { LDESInfo, Member, Modulator } from "../fetcher";
-import type { NumericOrderValue, OrderValue } from "../fetcher";
-import type { SerializedMember } from "../strategy";
+import type { LDESInfo, Member, NumericOrderValue, OrderValue, SerializedMember } from "../types";
 import type { ParserOptions } from "n3";
 import type {
     NamedNode,
@@ -638,7 +636,7 @@ function serializeOrderValue(value: OrderValue | undefined): string | undefined 
     return value?.toString();
 }
 
-function isNumericOrderValue(value: OrderValue | undefined): value is NumericOrderValue {
+export function isNumericOrderValue(value: OrderValue | undefined): value is NumericOrderValue {
     return typeof value === "object" && value !== undefined && !(value instanceof Date) && value.type === "numeric";
 }
 
@@ -691,25 +689,4 @@ export function maybeVersionMaterialize(
     }
 
     return member;
-}
-
-export async function memberIsOld(member: Member, modulator: Modulator<unknown, unknown>) {
-    if (!modulator.hasLatestVersions() || !member.isVersionOf || !member.timestamp) {
-        return false;
-    }
-    logger.silly(`[memberIsOld] Checking if member <${member.id.value}> (version of: ${member.isVersionOf}) is old`);
-    // We are emitting latest versions only
-    const version = member.timestamp instanceof Date
-        ? member.timestamp.getTime()
-        : isNumericOrderValue(member.timestamp)
-            ? Number.NaN
-            : new Date(member.timestamp).getTime();
-    if (Number.isNaN(version)) {
-        return false;
-    }
-    try {
-        return await modulator.filterLatest(member.isVersionOf, version);
-    } catch (ex) {
-        throw ex;
-    }
 }

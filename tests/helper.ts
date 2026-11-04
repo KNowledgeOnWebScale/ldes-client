@@ -3,7 +3,7 @@ import { TREE } from "@treecg/types";
 import { parseQuads } from "../lib/utils";
 
 import type { Quad } from "@rdfjs/types";
-import type { Member } from "../lib/fetcher";
+import type { Member } from "../lib/types";
 
 export type FragmentId = number;
 

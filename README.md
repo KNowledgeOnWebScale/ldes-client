@@ -124,9 +124,10 @@ For an LDES 2.0, the client:
  * orders members on their `ldes:timestampPath` and `ldes:sequencePath`, or implicitly on their page number and index in the page, and traverses the pages as a merge of sorted logs using the intervals of the `ldes:relation`s;
  * handles timestamps without a timezone: it uses the configured `defaultTimezone` when that is an offset such as `+01:00` (the CLI default `AoE` is not), otherwise the `ldes:defaultTimezone` of the LDES, and otherwise it assumes all of them share one unknown timezone. It only skips members and relations, and only reports a page that is not ordered, when the order is certain for every timezone;
  * does not fetch a page again once it has been read completely, when the page that links to it states `<page> ldes:immutable true` and it has no relations itself;
- * only keeps a *bookmark* as state (the key of the last member and the identifiers of the members that share it) instead of all members or pages it has seen. With `--save`, the next run skips all pages before the bookmark without requesting them.
+ * only keeps a *bookmark* as state (the key of the last member and the identifiers of the members that share it) instead of all members or pages it has seen. With `--save`, the next run skips all pages before the bookmark without requesting them;
+ * applies the [conditions](#conditions) (`--condition`) to the members, and uses them to prune what cannot lead to wanted members: a relation of which the interval of the order does not overlap with a condition on the `ldes:timestampPath` is not followed, and neither is the rest of a page of which the members are past that range. A `MaxCountCondition` therefore stops the traversal once the maximum is reached. `--after` and `--before` apply to the timestamp of the member.
 
-The `description` event gives the context information (`info.ldesVersion` is `2`). Not yet implemented: ETag revalidation (`If-None-Match`), the ordering rule for members that finalize a transaction, and the `--condition` options that are not `--after` or `--before`.
+The `description` event gives the context information (`info.ldesVersion` is `2`). Not yet implemented: ETag revalidation (`If-None-Match`) and the ordering rule for members that finalize a transaction.
 
 #### Prefetching pages
 
@@ -153,6 +154,7 @@ ldes-client examples/riverbench/root.trig
 ## Conditions
 
 When passing a condition file to the `ldes-client` CLI, the expected content is a condition where the subject is the file itself.
+Conditions work for LDES 1.0 and LDES 2.0 alike. A condition on a path other than the `tree:path` of a relation (LDES 1.0) or the `ldes:timestampPath` (LDES 2.0) only filters members: it never prevents a relation from being followed.
 
 
 ### Simple condition
@@ -236,8 +238,8 @@ The main challenges are related to the coordination between the two parts:
 These are also influenced by the configuration.
 
 The implementation coordinates the behavior of the two parts through a `Strategy`. So far, two strategies exist:
-- [`unordered`](./lib/strategy/unordered.ts): this strategy fetches pages as soon as they are found and emits members without any regard for their temporal order.
-- [`ordered`](./lib/strategy/ordered.ts): this strategy tries to fetch first (if the LDES structure allows it) the pages that would logically contain the oldest/newest members depending on the configuration (`ascending` or `descending`); and emits members in order based on their timestamp.
+- [`unordered`](./lib/ldes1/strategy/unordered.ts): this strategy fetches pages as soon as they are found and emits members without any regard for their temporal order.
+- [`ordered`](./lib/ldes1/strategy/ordered.ts): this strategy tries to fetch first (if the LDES structure allows it) the pages that would logically contain the oldest/newest members depending on the configuration (`ascending` or `descending`); and emits members in order based on their timestamp.
 
 ### Fragment Fetcher
 
@@ -245,7 +247,7 @@ The fragment fetcher fetches the fragments. Depending on the chosen strategy, th
 
 In the case of the `unordered` strategy, the fragments are handled individually in a simple FIFO manner. 
 
-In the case of the `ordered` strategy, the fragments are assembled and targeted via [`RelationChains`](./lib/fetcher/relation.ts#L98), of which two types exist: `important` and `unimportant`. The important relations are, for example, the `tree:GreaterThanRelation` and `tree:GreaterThanOrEqualToRelation` relations, because all other relation types are equivalent.  That is to say, we can only emit members when all unimportant relations are fetched and processed.
+In the case of the `ordered` strategy, the fragments are assembled and targeted via [`RelationChains`](./lib/ldes1/fetcher/relation.ts#L98), of which two types exist: `important` and `unimportant`. The important relations are, for example, the `tree:GreaterThanRelation` and `tree:GreaterThanOrEqualToRelation` relations, because all other relation types are equivalent.  That is to say, we can only emit members when all unimportant relations are fetched and processed.
 
 Relation chains are chains, because when the client fetches a page, it can find new relations pointing from that page. But we need to distinguish between a relation after an important relation or a relation after an unimportant relation:
 - Important relations squash unimportant relations, these chains should only be fetched if all unimportant relations are done.
@@ -253,7 +255,7 @@ Relation chains are chains, because when the client fetches a page, it can find 
 - Important relations squash other important relations, the new _value_ is the bigger value of the two.
 The ordering of these chains is thus, first unimportant relations, then important relations ordered on value. These chains dictate the order in which pages are fetched.
 
-Given that multiple relations can be encountered from every new page, it is possible to fetch multiple pages at the same time. However, when following an ordered strategy and considering that fetching is asynchronous, we can only interpret a page that came from a smaller relation, if no pages are _in flight_. These aspects are managed by a [`Modulator`](./lib/fetcher/modulator.ts).
+Given that multiple relations can be encountered from every new page, it is possible to fetch multiple pages at the same time. However, when following an ordered strategy and considering that fetching is asynchronous, we can only interpret a page that came from a smaller relation, if no pages are _in flight_. These aspects are managed by a [`Modulator`](./lib/ldes1/fetcher/modulator.ts).
 
 ### Fault Tolerance
 

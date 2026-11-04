@@ -1,30 +1,34 @@
 import { Heap } from "heap-js";
 import { TREE } from "@treecg/types";
-import { Fetcher, ModulatorFactory, RelationChain, Manager } from "../fetcher";
+import { Fetcher, ModulatorFactory, RelationChain, Manager, memberIsOld } from "../fetcher";
 import {
     parseInBetweenRelation,
     getLoggerFor,
     deserializeMember,
     serializeMember,
-    memberIsOld
-} from "../utils";
+} from "../../utils";
 import { GTRs, LTR } from "./types";
-import { Condition } from "../condition";
+import { Condition } from "../../condition";
 
 import type {
-    Member,
     FoundRelation,
-    RelationValue,
-    LDESInfo,
-    FetchedPage,
     FetchEvent,
-    Notifier,
     SimpleRelation,
     MemberEvents,
     Modulator
 } from "../fetcher";
-import type { NumericOrderValue, OrderValue } from "../fetcher";
-import type { StrategyEvents, Ordered, SerializedMember } from ".";
+import type {
+    Member,
+    RelationValue,
+    LDESInfo,
+    FetchedPage,
+    Notifier,
+    NumericOrderValue,
+    OrderValue,
+    StrategyEvents,
+    Ordered,
+    SerializedMember,
+} from "../../types";
 
 type NodeChain = {
     chain: RelationChain;
