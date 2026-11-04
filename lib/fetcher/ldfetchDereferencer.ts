@@ -9,6 +9,30 @@ import type { EventEmitter } from "events";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
+const isNode = typeof process !== "undefined" && !!process.versions?.node;
+
+/**
+ * A readable of a web stream. Node.js has Readable.fromWeb. The polyfills of `stream` for browsers do not have a working
+ * one (readable-stream defines it, but it throws), so there the stream is read through its reader.
+ */
+function toReadable(body: ReadableStream<Uint8Array>): Readable {
+    if (isNode) {
+        return Readable.fromWeb(body as never);
+    }
+    const reader = body.getReader();
+    return new Readable({
+        read() {
+            reader.read().then(
+                ({ done, value }) => this.push(done ? null : value),
+                (error) => this.destroy(error),
+            );
+        },
+        destroy(error, callback) {
+            reader.cancel(error ?? undefined).then(() => callback(error), () => callback(error));
+        },
+    });
+}
+
 /**
  * Preference order: serializations that carry named graphs and RDF Messages come first.
  * Jelly-RDF is a compact binary RDF Message serialization.
@@ -17,7 +41,6 @@ const logger = getLoggerFor("LdfetchDereferencer");
 export const DEFAULT_ACCEPT = [
     "application/trig",
     "application/n-quads;q=0.95",
-    "application/x-jelly-rdf;q=0.95",
     "application/ld+json;q=0.9",
     "text/turtle;q=0.9",
     "application/n-triples;q=0.8",
@@ -287,7 +310,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         }
 
         const finalUrl = response.url || url;
-        const source = Readable.fromWeb(response.body as never);
+        const source = toReadable(response.body);
         const log = await this.parse(
             source,
             finalUrl,

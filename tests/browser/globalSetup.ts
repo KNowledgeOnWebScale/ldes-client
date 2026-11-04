@@ -23,6 +23,10 @@ export async function setup() {
         server.addHook(
             "onSend",
             async (request: FastifyRequest, reply: FastifyReply, payload: RequestPayload) => {
+                // Responses without a body, such as the answer to a CORS preflight request: nothing to look at.
+                // The client asks for many media types, so browsers send a preflight request (the Accept header
+                // is longer than the 128 bytes that CORS allows without one).
+                if (payload === null || payload === undefined) return payload;
                 const st = await streamToString(payload);
 
                 if (st.startsWith("# delay ")) {

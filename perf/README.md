@@ -36,3 +36,15 @@ The LDES 2.0 client requests the pages that it follows next ahead of time (as ma
 
 ### 3. Performance result
 Locates at: [https://treecg.github.io/ldes-client/](https://treecg.github.io/ldes-client/)
+
+### Comparing versions: `compare-versions.mjs`
+
+A quick check that replicates the same members with a baseline build of the client (for example `main`) over an LDES 1.0, with this build over the same LDES 1.0, and with this build over the same members as an LDES 2.0. Every case runs in its own process against a local server, in two layouts: paged, and everything in one very large page. It reports the time, members per second, peak memory and the longest time that the event loop was blocked.
+
+```bash
+npm run build
+git worktree add ../ldes-client-main origin/main && (cd ../ldes-client-main && npm ci && npm run build)
+node perf/compare-versions.mjs --baseline ../ldes-client-main --members 10000 --page-size 1000
+```
+
+Options: `--members`, `--page-size`, `--ordered none|ascending|descending` and `--timeout` (seconds, per case). Without `--baseline`, only this build is measured. A baseline cannot read an LDES 2.0, so that case is only run for this build. Run it a few times before drawing conclusions: it is a single measurement per case.
