@@ -52,6 +52,11 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
 
 ### Fixed
 
+- Extracting the members of a page of an LDES 1.0 is linear in the size of the page, instead of quadratic: the members of a
+  page are extracted with one bulk extraction (`bulkExtract` of `extract-cbd-shape`), instead of one extraction per member that
+  ignores the graphs of all other members. A page of 20 000 members is extracted in about 1 second, where it took close to a minute,
+  and one of 40 000 members in 3 seconds, where it took 4 minutes. This solves the replication of very large pages that
+  [#116](https://github.com/KNowledgeOnWebScale/ldes-client/pull/116) wanted to solve with a pool of worker threads.
 - A condition on one property was compared with the range of a relation on another property when both were plain IRIs,
   so that relations were wrongly not followed (`cbdEquals`). This affected LDES 1.0 as well.
 - Fixes for the LDES1.0 conformance test suite: more complex SHACL paths, `ldes:pollingInterval`, transactions, retry base, and
