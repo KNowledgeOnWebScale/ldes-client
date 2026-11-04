@@ -79,7 +79,7 @@ export class Manager {
 
         if (!this.ldesUri) {
             this.logger.debug(
-                `new local dump member extractor`
+                "new local dump member extractor"
             );
         } else {
             this.logger.debug(
@@ -237,9 +237,5 @@ export async function memberIsOld(member: Member, modulator: Modulator<unknown, 
     if (Number.isNaN(version)) {
         return false;
     }
-    try {
-        return await modulator.filterLatest(member.isVersionOf, version);
-    } catch (ex) {
-        throw ex;
-    }
+    return await modulator.filterLatest(member.isVersionOf, version);
 }

@@ -736,7 +736,7 @@ async function buildInfo(
     } else {
         const shapeId = shapeIds[0];
         if (shapeId &&
-            shapeId.termType === 'NamedNode' &&
+            shapeId.termType === "NamedNode" &&
             store.getQuads(shapeId, null, null).length === 0
         ) {
             // Dereference out-of-band shape

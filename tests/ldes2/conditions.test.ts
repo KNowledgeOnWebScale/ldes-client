@@ -34,7 +34,7 @@ async function collect(condition: Condition, config: Record<string, unknown> = {
     return { members, errors };
 }
 
-const description = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .`;
+const description = "ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .";
 
 /** A condition file, in which the members are restricted on a path */
 const conditionOn = (path: string, relationType: string, value: string, compareType: string) =>
@@ -67,7 +67,7 @@ describe("Conditions in an LDES 2.0", () => {
         const condition = conditionOn(
             "dcterms:created",
             "LessThanRelation",
-            `"2026-01-15T00:00:00Z"^^xsd:dateTime`,
+            "\"2026-01-15T00:00:00Z\"^^xsd:dateTime",
             "date",
         );
         const { members, errors } = await collect(condition);
@@ -82,7 +82,7 @@ describe("Conditions in an LDES 2.0", () => {
         const condition = conditionOn(
             "dcterms:created",
             "GreaterThanOrEqualToRelation",
-            `"2026-01-05T00:00:00Z"^^xsd:dateTime`,
+            "\"2026-01-05T00:00:00Z\"^^xsd:dateTime",
             "date",
         );
         const { members } = await collect(condition);

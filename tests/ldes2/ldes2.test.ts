@@ -153,17 +153,17 @@ describe("LDES ordered by only a sequence", () => {
 <> ldes:relation [ ldes:page <${server.base}/a> ;
     ldes:sequenceFrom "2023-01-01T00:00:00.000001"^^xsd:dateTime ; ldes:sequenceUntil "2023-01-02T00:00:00"^^xsd:dateTime ] .`);
         server.trig("/a",
-            `ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }`,
-            `ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }`,
+            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
+            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
         );
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["g1", "g2"]);
 
         // The relation is skipped when its upper bound is before the bookmark: a growing page is fetched again
         server.requests = [];
         server.trig("/a",
-            `ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }`,
-            `ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }`,
-            `ex:g3 ex:at "2023-01-01T00:00:00.000003"^^xsd:dateTime . ex:g3 { ex:x ex:p 3 . }`,
+            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
+            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
+            "ex:g3 ex:at \"2023-01-01T00:00:00.000003\"^^xsd:dateTime . ex:g3 { ex:x ex:p 3 . }",
         );
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["g3"]);
     });
@@ -172,8 +172,8 @@ describe("LDES ordered by only a sequence", () => {
         server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true ; ldes:sequencePath ex:at .
 <> ldes:relation [ ldes:page <${server.base}/a> ] .`);
         server.trig("/a",
-            `ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }`,
-            `ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }`,
+            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
+            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
         );
         await expect(collect()).rejects.toThrow(/ordering/);
     });
@@ -254,19 +254,19 @@ ex:graph { _:c ex:value 6 . }`);
 
     test("indirect membership by ldes:memberPath, with a SHACL property path", async () => {
         server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberPath ( ex:a ex:b ) . ${relation}`);
-        server.trig("/a", `ex:m0 ex:a [ ex:b 1 ] . ex:other ex:c 2 .`);
+        server.trig("/a", "ex:m0 ex:a [ ex:b 1 ] . ex:other ex:c 2 .");
         expect(ids(await collect())).toEqual(["m0"]);
     });
 
     test("a message in which the member cannot be identified is an error", async () => {
         server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberType ex:Record . ${relation}`);
-        server.trig("/a", `ex:m0 a ex:Record . ex:m1 a ex:Record .`);
+        server.trig("/a", "ex:m0 a ex:Record . ex:m1 a ex:Record .");
         await expect(collect()).rejects.toThrow(/exactly one/);
     });
 
     test("setting more than one indirect membership property is an error", async () => {
         server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberType ex:Record ; ldes:memberGraph true . ${relation}`);
-        server.trig("/a", `ex:m0 a ex:Record .`);
+        server.trig("/a", "ex:m0 a ex:Record .");
         await expect(collect()).rejects.toThrow(/more than one/);
     });
 });
@@ -313,7 +313,7 @@ describe("Errors", () => {
     });
 
     test("more than one ldes:EventStream in the root page is an error", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream . ex:ES2 a ldes:EventStream .`);
+        server.trig("/root", "ex:ES a ldes:EventStream . ex:ES2 a ldes:EventStream .");
         await expect(collect()).rejects.toThrow(/exactly one ldes:EventStream/);
     });
 
@@ -549,7 +549,7 @@ describe("Sample LDES: RiverBench", () => {
 });
 
 describe("Timestamps without a timezone", () => {
-    const description = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record`;
+    const description = "ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record";
     const pages = `<> ldes:relation [ ldes:page <${server.base}/a> ] , [ ldes:page <${server.base}/b> ] .`;
     const first = (members: Member[]) => ids(members);
 
@@ -696,7 +696,7 @@ describe("Output as an RDF Message log", () => {
         }
         const log = (await writer.end()) as string;
 
-        expect(log.startsWith('@version "1.2-messages"')).toBe(true);
+        expect(log.startsWith("@version \"1.2-messages\"")).toBe(true);
         const messages = parseMessages(log);
         expect(messages).toHaveLength(members.length);
         messages.forEach((message, i) => {
@@ -707,7 +707,7 @@ describe("Output as an RDF Message log", () => {
 
 describe("Requesting pages ahead", () => {
     const DELAY = 40;
-    const stream = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .`;
+    const stream = "ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .";
     const day = (n: number) => `2026-01-${String(n).padStart(2, "0")}T00:00:00Z`;
     const relation = (page: string, from: number, until: number) =>
         `[ ldes:page <${server.base}/${page}> ; ldes:timeFrom "${day(from)}"^^xsd:dateTime ; ldes:timeUntil "${day(until)}"^^xsd:dateTime ]`;

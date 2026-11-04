@@ -330,11 +330,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -387,11 +386,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -455,11 +453,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -524,11 +521,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -960,7 +956,7 @@ ex:service ldes:retentionPolicy ex:service-policy .
                 if (phase === "repeat") {
                     return new Response(null, {
                         status: 304,
-                        headers: { etag: '"mutable-v1"' },
+                        headers: { etag: "\"mutable-v1\"" },
                     });
                 }
                 return turtleResponse(`
@@ -969,7 +965,7 @@ ex:service ldes:retentionPolicy ex:service-policy .
 <http://example.com/cache-stream> tree:member <http://example.com/member/mutable> .
 <http://example.com/member/mutable> ex:value "mutable" .
 `, {
-                    etag: '"mutable-v1"',
+                    etag: "\"mutable-v1\"",
                 });
             }
             return new Response("", { status: 404 });
@@ -998,7 +994,7 @@ ex:service ldes:retentionPolicy ex:service-policy .
             expect(requests.filter((request) => request.path === "/header-immutable")).toHaveLength(1);
             expect(
                 requests.findLast((request) => request.path === "/mutable")?.ifNoneMatch,
-            ).toBe('"mutable-v1"');
+            ).toBe("\"mutable-v1\"");
         } finally {
             fs.rmSync(statePath, { recursive: true, force: true });
         }

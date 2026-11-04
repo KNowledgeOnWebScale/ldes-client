@@ -3,7 +3,7 @@ import { DataFactory } from "rdf-data-factory";
 import { SDS } from "@treecg/types";
 import { Writer as NWriter } from "n3";
 import { Client, replicateLDES, intoConfig, processConditionFile } from "./client";
-import { enhanced_fetch } from "./fetcher"
+import { enhanced_fetch } from "./fetcher";
 import { Logger } from "winston";
 import { toPath } from "@rdfc/utils-js";
 
