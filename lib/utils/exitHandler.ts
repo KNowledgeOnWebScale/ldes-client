@@ -6,7 +6,7 @@ function noOp() { }
 
 const listeners: {
     event: string;
-    listener: (...args: any[]) => void
+    listener: (error: Error) => void
 }[] = [];
 
 /**

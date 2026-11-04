@@ -81,7 +81,7 @@ export class Manager {
 
         if (!this.ldesUri) {
             this.logger.debug(
-                `new local dump member extractor`
+                "new local dump member extractor"
             );
         } else {
             this.logger.debug(

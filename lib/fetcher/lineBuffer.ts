@@ -1,3 +1,5 @@
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+
 /**
  * A Transform stream that buffers incomplete lines before emitting them.
  * This prevents language tags and other tokens from being split across chunk boundaries,
@@ -49,11 +51,11 @@ export function createLineBufferedFetch(baseFetch?: typeof fetch): typeof fetch 
                 }
             }
 
-            const nodeStream = Readable.fromWeb(response.body as any);
+            const nodeStream = Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>);
             const lineBuffer = new LineBufferTransform();
             const bufferedStream = nodeStream.pipe(lineBuffer);
 
-            return new Response(bufferedStream as any, {
+            return new Response(bufferedStream as unknown as BodyInit, {
                 status: response.status,
                 statusText: response.statusText,
                 headers: response.headers,

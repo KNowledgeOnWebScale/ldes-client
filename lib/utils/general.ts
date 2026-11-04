@@ -284,9 +284,5 @@ export async function memberIsOld(member: Member, modulator: Modulator<unknown, 
     // We are emitting latest versions only
     const version = member.timestamp instanceof Date ?
         member.timestamp.getTime() : new Date(member.timestamp).getTime();
-    try {
-        return await modulator.filterLatest(member.isVersionOf, version);
-    } catch (ex) {
-        throw ex;
-    }
+    return await modulator.filterLatest(member.isVersionOf, version);
 }

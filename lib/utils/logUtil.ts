@@ -1,12 +1,15 @@
+import type { Logform } from "winston";
+import type { ConsoleTransportInstance } from "winston/lib/winston/transports";
+
 const PROCESSOR_NAME = "ldes-client";
 
 export interface ILogger {
-    debug(message: string, ...meta: any[]): void;
-    info(message: string, ...meta: any[]): void;
-    warn(message: string, ...meta: any[]): void;
-    error(message: string, ...meta: any[]): void;
-    verbose(message: string, ...meta: any[]): void;
-    silly(message: string, ...meta: any[]): void;
+    debug(message: string, ...meta: unknown[]): void;
+    info(message: string, ...meta: unknown[]): void;
+    warn(message: string, ...meta: unknown[]): void;
+    error(message: string, ...meta: unknown[]): void;
+    verbose(message: string, ...meta: unknown[]): void;
+    silly(message: string, ...meta: unknown[]): void;
 }
 
 class ConsoleLogger implements ILogger {
@@ -16,7 +19,7 @@ class ConsoleLogger implements ILogger {
         this.label = label;
     }
 
-    private log(level: string, message: string, ...meta: any[]) {
+    private log(level: string, message: string, ...meta: unknown[]) {
         const timestamp = new Date().toISOString();
         const msg = `${timestamp} {${PROCESSOR_NAME}} [${this.label}] ${level}: ${message}`;
         switch (level) {
@@ -39,16 +42,16 @@ class ConsoleLogger implements ILogger {
         }
     }
 
-    debug(message: string, ...meta: any[]): void { this.log("debug", message, ...meta); }
-    info(message: string, ...meta: any[]): void { this.log("info", message, ...meta); }
-    warn(message: string, ...meta: any[]): void { this.log("warn", message, ...meta); }
-    error(message: string, ...meta: any[]): void { this.log("error", message, ...meta); }
-    verbose(message: string, ...meta: any[]): void { this.log("verbose", message, ...meta); }
-    silly(message: string, ...meta: any[]): void { this.log("silly", message, ...meta); }
+    debug(message: string, ...meta: unknown[]): void { this.log("debug", message, ...meta); }
+    info(message: string, ...meta: unknown[]): void { this.log("info", message, ...meta); }
+    warn(message: string, ...meta: unknown[]): void { this.log("warn", message, ...meta); }
+    error(message: string, ...meta: unknown[]): void { this.log("error", message, ...meta); }
+    verbose(message: string, ...meta: unknown[]): void { this.log("verbose", message, ...meta); }
+    silly(message: string, ...meta: unknown[]): void { this.log("silly", message, ...meta); }
 }
 
-let winston: any;
-if (typeof process !== "undefined" && process.release?.name === 'node') {
+let winston: typeof import("winston") | undefined;
+if (typeof process !== "undefined" && process.release?.name === "node") {
     try {
         const m = await import("winston");
         winston = m.default || m;
@@ -59,7 +62,7 @@ if (typeof process !== "undefined" && process.release?.name === 'node') {
     }
 }
 
-let consoleTransport: any;
+let consoleTransport: ConsoleTransportInstance | undefined;
 
 const classLoggers = new WeakMap<Constructor, ILogger>();
 const stringLoggers = new Map<string, ILogger>();
@@ -129,7 +132,7 @@ function createLogger(label: string): ILogger {
                         message,
                         label: labelInner,
                         timestamp,
-                    }: any): string =>
+                    }: Logform.TransformableInfo): string =>
                         `${timestamp} {${PROCESSOR_NAME}} [${labelInner}] ${levelInner}: ${message}`,
                 ),
             ),

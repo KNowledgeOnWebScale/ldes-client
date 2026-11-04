@@ -327,11 +327,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -384,11 +383,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -452,11 +450,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
@@ -521,11 +518,10 @@ describe("more complex tree", () => {
         const stream = client.stream().getReader();
         const m1 = await stream.read();
         expect(m1.done).toBeFalsy();
-        let end = new Date();
 
         const m2 = await stream.read();
         expect(m2.done).toBeFalsy();
-        end = new Date();
+        const end = new Date();
         expect(end.getTime() - start.getTime()).toBeGreaterThan(150);
         await stream.cancel();
     });
