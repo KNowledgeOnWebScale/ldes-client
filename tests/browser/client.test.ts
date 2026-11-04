@@ -1,11 +1,11 @@
-import { describe, expect, test, beforeEach, afterEach } from 'vitest';
-import { createUriAndTermNamespace } from '@treecg/types';
-import { RdfStore } from 'rdf-stores';
-import { replicateLDES } from '../../lib/client';
-import type { LDESInfo, FetchedPage } from '../../lib/fetcher';
+import { describe, expect, test, beforeEach, afterEach } from "vitest";
+import { createUriAndTermNamespace } from "@treecg/types";
+import { RdfStore } from "rdf-stores";
+import { replicateLDES } from "../../lib/client";
+import type { LDESInfo, FetchedPage } from "../../lib/fetcher";
 
 
-describe('Client tests (Browser)', () => {
+describe("Client tests (Browser)", () => {
     // Note: The globalSetup runs the server on port 3042
     const LDES = "http://localhost:3042/mock-ldes.ttl";
     const INBETWEEN_LDES = "http://localhost:3042/mock-ldes-inbetween.ttl";

@@ -1,9 +1,9 @@
-import { fastify, RequestPayload } from "fastify";
+import { fastify, type FastifyInstance, type FastifyReply, type FastifyRequest, RequestPayload } from "fastify";
 import { fastifyStatic } from "@fastify/static";
 import path from "path";
 import { streamToString } from "../../lib/utils";
 
-let server: any;
+let server: FastifyInstance | undefined;
 
 export async function setup() {
     console.log(`[GlobalSetup] Running setup in pid ${process.pid}`);
@@ -14,7 +14,7 @@ export async function setup() {
     // Setup mock http server
     try {
         server = fastify();
-        await server.register(import('@fastify/cors'));
+        await server.register(import("@fastify/cors"));
         // Serve from the same data directory as the Node tests
         server.register(fastifyStatic, {
             root: path.join(__dirname, "../data/mock-ldes"),
@@ -22,7 +22,7 @@ export async function setup() {
 
         server.addHook(
             "onSend",
-            async (request: any, reply: any, payload: RequestPayload) => {
+            async (request: FastifyRequest, reply: FastifyReply, payload: RequestPayload) => {
                 const st = await streamToString(payload);
 
                 if (st.startsWith("# delay ")) {
