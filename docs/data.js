@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793802181095,
+  "lastUpdate": 1793831097374,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -8804,6 +8804,37 @@ window.BENCHMARK_DATA = {
             "range": "±14.39%",
             "unit": "ops/sec",
             "extra": "26 samples"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e3b3c44a729ca89d345fe7abccfee0a66726d933",
+          "message": "Merge pull request #157 from KNowledgeOnWebScale/fix/eslint\n\nchore: fix the eslint configuration and the errors it reports",
+          "timestamp": "2026-11-04T23:23:52+01:00",
+          "tree_id": "bf31db477b0d65529103f8a96538f9503f1d412c",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/e3b3c44a729ca89d345fe7abccfee0a66726d933"
+        },
+        "date": 1793831096241,
+        "tool": "benchmarkjs",
+        "benches": [
+          {
+            "name": "tree-3-3",
+            "value": 5.62,
+            "range": "±2.67%",
+            "unit": "ops/sec",
+            "extra": "32 samples"
           }
         ]
       }
