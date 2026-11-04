@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792558696990,
-  "repoUrl": "https://github.com/rdf-connect/ldes-client",
+  "lastUpdate": 1793802181095,
+  "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
       {
@@ -8773,6 +8773,37 @@ window.BENCHMARK_DATA = {
             "range": "±2.71%",
             "unit": "ops/sec",
             "extra": "32 samples"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arthur.vercruysse@outlook.com",
+            "name": "ajuvercr",
+            "username": "ajuvercr"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b264a277b1dbf241b895f86d290f37b2184bc16a",
+          "message": "feat!: move processor default for ordered into processor.ttl (#154)\n\n* feat!: move processor default for ordered into processor.ttl\n\nUpdate @rdfc/js-runner to ^3.4.0 and rdf-lens to ^2.1.0, which support\nsh:defaultValue. The RDF-Connect processor's default for ordered (\"none\")\nis now declared in the processor shape, so it is documented alongside the\nargument, instead of being hardcoded in the processor wrapper.\n\nThe library (replicateLDES/intoConfig) and CLI keep their own defaults, so\nnon-processor usage is unaffected.\n\nBREAKING CHANGE: the processor defaults are only applied by\n@rdfc/js-runner >= 3.4.0; pipelines must update their runner together with\nthis processor.\n\n* feat!: default the poll interval to 1000 ms\n\nThe library default of 200 ms never applied: both the processor and the\nCLI pass pollInterval: undefined when it is not set, which overwrote\nit, so the strategies fell back to 1000 ms. Make 1000 ms the documented\ndefault: in the library config, as sh:defaultValue in processor.ttl, in\nthe README and in the CLI help.\n\nBREAKING CHANGE: library users relying on the defaultConfig poll\ninterval of 200 ms now poll every 1000 ms.\n\n* feat: accept locations and the LDES URL written as IRIs\n\nrdfc:url, rdfc:shapeFile, rdfc:savePath and rdfc:conditionFile are now\nsh:nodeKind sh:IRIOrLiteral with sh:codeType xsd:string, instead of\nsh:datatype xsd:string, which rdf-lens 2 deprecates for IRIs. A location\nwritten as an IRI, like <./shape.ttl>, is resolved against the pipeline\nand reaches the processor as a file: URL; the processor turns it into a\npath with toPath before handing it to the client, so the CLI and library\nkeep taking plain paths. Before, a condition file written as an IRI\nfailed to be read.\n\n* refactor: take toPath from @rdfc/utils-js\n\ntoPath, which turns a location written as an IRI into a path, is shared\nby the RDF-Connect processors in @rdfc/utils-js, instead of each keeping\nits own copy. Its unit test moved there as well.",
+          "timestamp": "2026-11-04T15:22:07+01:00",
+          "tree_id": "678547c5546074446affa1d792e2a5695054454d",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/b264a277b1dbf241b895f86d290f37b2184bc16a"
+        },
+        "date": 1793802180535,
+        "tool": "benchmarkjs",
+        "benches": [
+          {
+            "name": "tree-3-3",
+            "value": 4.25,
+            "range": "±14.39%",
+            "unit": "ops/sec",
+            "extra": "26 samples"
           }
         ]
       }
