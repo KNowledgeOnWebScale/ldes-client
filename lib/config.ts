@@ -42,7 +42,7 @@ const defaultConfig: Config = {
     loose: false,
     polling: false,
     url: "",
-    pollInterval: 200,
+    pollInterval: 1000,
     defaultTimezone: "AoE",
     materialize: false,
     lastVersionOnly: false,

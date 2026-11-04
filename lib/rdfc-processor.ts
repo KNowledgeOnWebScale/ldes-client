@@ -5,6 +5,7 @@ import { Writer as NWriter } from "n3";
 import { Client, replicateLDES, intoConfig, processConditionFile } from "./client";
 import { enhanced_fetch } from "./fetcher"
 import { Logger } from "winston";
+import { toPath } from "@rdfc/utils-js";
 
 import type { Quad_Object } from "@rdfjs/types";
 import type { Ordered } from "./strategy";
@@ -16,9 +17,9 @@ type LDESClientArgs = {
     output: Writer;
     before?: Date;
     after?: Date;
-    ordered?: string;
+    ordered: Ordered;
     follow?: boolean;
-    pollInterval?: number;
+    pollInterval: number;
     shapeFile?: string;
     noShape?: boolean;
     savePath?: string;
@@ -58,19 +59,21 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
                 before: this.before,
                 polling: this.follow,
                 pollInterval: this.pollInterval,
-                shapeFile: this.shapeFile,
+                shapeFile: this.shapeFile && toPath(this.shapeFile),
                 noShape: this.noShape,
-                statePath: this.savePath,
+                statePath: this.savePath && toPath(this.savePath),
                 loose: this.loose,
                 urlIsView: this.urlIsView,
                 fetch: this.fetchConfig ? enhanced_fetch(this.fetchConfig) : fetch,
-                condition: await processConditionFile(this.conditionFile),
+                condition: await processConditionFile(
+                    this.conditionFile && toPath(this.conditionFile),
+                ),
                 materialize: this.materialize,
                 lastVersionOnly: this.lastVersionOnly,
                 startFresh: this.startFresh,
                 concurrentFetches: this.fetchConfig?.concurrent,
             }),
-            <Ordered>this.ordered || "none",
+            this.ordered,
             undefined,
             this.streamId ? df.namedNode(this.streamId) : undefined,
         );

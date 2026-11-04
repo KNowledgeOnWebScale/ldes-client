@@ -81,7 +81,8 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
 [ ] a sh:NodeShape;
   sh:targetClass rdfc:LdesClient;
   sh:property [
-    sh:datatype xsd:string;
+    sh:nodeKind sh:IRIOrLiteral;
+    sh:codeType xsd:string;
     sh:path rdfc:url;
     sh:codeIdentifier "url";
     sh:name "LDES URL";
@@ -117,6 +118,7 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:name "Ordering";
     sh:description "Ordering strategy to use while reading the LDES.";
     sh:in ( "none" "ascending" "descending" );
+    sh:defaultValue "none";
     sh:maxCount 1;
   ], [
     sh:datatype xsd:boolean;
@@ -131,9 +133,11 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:codeIdentifier "pollInterval";
     sh:name "Poll Interval";
     sh:description "Polling interval in milliseconds used when follow mode is enabled.";
+    sh:defaultValue 1000;
     sh:maxCount 1;
   ], [
-    sh:datatype xsd:string;
+    sh:nodeKind sh:IRIOrLiteral;
+    sh:codeType xsd:string;
     sh:path rdfc:shapeFile;
     sh:codeIdentifier "shapeFile";
     sh:name "Shape File";
@@ -148,7 +152,8 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:description "Skip shape discovery and processing when set to true, leading the client to perform a CBD-based member extraction.";
     sh:maxCount 1;
   ], [
-    sh:datatype xsd:string;
+    sh:nodeKind sh:IRIOrLiteral;
+    sh:codeType xsd:string;
     sh:path rdfc:savePath;
     sh:codeIdentifier "savePath";
     sh:name "Save Path";
@@ -176,7 +181,8 @@ rdfc:LdesClient rdfc:jsImplementationOf rdfc:Processor;
     sh:description "Advanced fetch behavior settings, including auth and retry options.";
     sh:maxCount 1;
   ], [
-    sh:datatype xsd:string;
+    sh:nodeKind sh:IRIOrLiteral;
+    sh:codeType xsd:string;
     sh:path rdfc:conditionFile;
     sh:codeIdentifier "conditionFile";
     sh:name "Condition File";

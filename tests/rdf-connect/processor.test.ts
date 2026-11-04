@@ -2,6 +2,8 @@ import { describe, afterAll, expect, test } from "vitest";
 import { ProcHelper } from "@rdfc/js-runner/lib/testUtils";
 import { LDESClientProcessor } from "../../lib/rdfc-processor";
 import { rmSync } from "fs";
+import { resolve } from "path";
+import { toPath } from "@rdfc/utils-js";
 
 import type { FullProc } from "@rdfc/js-runner";
 
@@ -92,5 +94,59 @@ describe("Tests for rdfc:LdesClient processor", () => {
         expect(proc.startFresh).toBeTruthy();
         expect(proc.streamId).toBe("MyStream");
         expect(proc.sdsify).toBeTruthy();
+    });
+
+    test("rdfc:LdesClient falls back to its default values", async () => {
+        const processor = `
+        @prefix rdfc: <https://w3id.org/rdf-connect#>.
+
+        <http://example.com/ns#processor> a rdfc:LdesClient;
+            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfc:output <jw>.
+        `;
+
+        const configLocation = process.cwd() + "/processor.ttl";
+
+        const procHelper = new ProcHelper<FullProc<LDESClientProcessor>>();
+        await procHelper.importFile(configLocation);
+        await procHelper.importInline("pipeline.ttl", processor);
+        procHelper.getConfig("LdesClient");
+
+        const proc: FullProc<LDESClientProcessor> = await procHelper.getProcessor("http://example.com/ns#processor");
+
+        expect(proc.url).toBe("https://era.ilabt.imec.be/rinf/ldes");
+        expect(proc.ordered).toBe("none");
+        expect(proc.pollInterval).toBe(1000);
+    });
+    test("rdfc:LdesClient accepts locations and the URL written as IRIs", async () => {
+        const processor = `
+        @prefix rdfc: <https://w3id.org/rdf-connect#>.
+
+        <http://example.com/ns#processor> a rdfc:LdesClient;
+            rdfc:url <https://era.ilabt.imec.be/rinf/ldes>;
+            rdfc:output <jw>;
+            rdfc:shapeFile <./tests/data/mock-ldes/full-shape.ttl>;
+            rdfc:savePath <./state-path>;
+            rdfc:conditionFile <./test-condition.ttl>.
+        `;
+
+        const procHelper = new ProcHelper<FullProc<LDESClientProcessor>>();
+        await procHelper.importFile(process.cwd() + "/processor.ttl");
+        await procHelper.importInline(resolve("pipeline.ttl"), processor);
+        procHelper.getConfig("LdesClient");
+
+        const proc: FullProc<LDESClientProcessor> = await procHelper.getProcessor("http://example.com/ns#processor");
+
+        expect(proc.url).toBe("https://era.ilabt.imec.be/rinf/ldes");
+        expect(toPath(proc.shapeFile!)).toBe(resolve("./tests/data/mock-ldes/full-shape.ttl"));
+        expect(toPath(proc.savePath!)).toBe(resolve("./state-path"));
+        expect(toPath(proc.conditionFile!)).toBe(resolve("./test-condition.ttl"));
+
+        // The client gets paths, and the condition file can be read
+        await proc.init();
+        const config = proc.client["config"];
+        expect(config.shapeFile).toBe(resolve("./tests/data/mock-ldes/full-shape.ttl"));
+        expect(config.statePath).toBe(resolve("./state-path"));
+        expect(config.condition.constructor.name).toBe("AndCondition");
     });
 });

@@ -27,7 +27,7 @@ ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before 
 - `--after`: emit only members timestamped after (exclusive) the given timestamp. 
 - `-s` `--save`: path to the save state folder, used both to resume and to update.
 - `--start-fresh`: the client will start from scratch, discarding any existing saved state.
-- `--poll-interval`: time to wait between polling cycles of the LDES. This property applies only when the client is following the LDES.
+- `--poll-interval`: time in milliseconds to wait between polling cycles of the LDES (default: `1000`). This property applies only when the client is following the LDES.
 - `--basic-auth`: user and password for HTTP basic authentication.
 - `--shape-file`: shape file (local or remote via URL) to which LDES members should conform (overwrites LDES configured shape if any).
 - `--only-default-graph`: the client will consider only the default graph (and the member graph if so) for extracting member triples.
