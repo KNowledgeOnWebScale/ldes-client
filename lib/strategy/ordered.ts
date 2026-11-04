@@ -657,7 +657,7 @@ export class OrderedStrategy {
     }
 
     private async emitIfNotOld(member: Member) {
-        let isOld = false;
+        let isOld: boolean;
         try {
             // In the ordered strategy, we need to check again if this is an older version of the member
             // when emitting latest versions only, because older versions might have been fetched and queued
