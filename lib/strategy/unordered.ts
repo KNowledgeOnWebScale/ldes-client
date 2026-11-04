@@ -106,13 +106,13 @@ export class UnorderedStrategy {
                 const memberIri = mem.id.value;
                 const streamed = this.notifier.member(mem, {});
                 if (streamed) {
-                    await this.modulator.addEmitted(memberIri)
+                    await this.modulator.addEmitted(memberIri);
                 }
             },
             done: async (fragment: FetchedPage, { index }) => {
                 this.logger.debug("[memberNotifier - done] Members on page done");
                 this.notifier.fragment(fragment, {});
-                await this.modulator.finished(index)
+                await this.modulator.finished(index);
 
                 // Mark fragment as immutable if cache headers indicate so 
                 if (fragment.immutable) {

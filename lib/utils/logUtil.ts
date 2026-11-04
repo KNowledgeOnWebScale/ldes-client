@@ -48,7 +48,7 @@ class ConsoleLogger implements ILogger {
 }
 
 let winston: any;
-if (typeof process !== "undefined" && process.release?.name === 'node') {
+if (typeof process !== "undefined" && process.release?.name === "node") {
     try {
         const m = await import("winston");
         winston = m.default || m;

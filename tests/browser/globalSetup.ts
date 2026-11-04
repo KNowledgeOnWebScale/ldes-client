@@ -14,7 +14,7 @@ export async function setup() {
     // Setup mock http server
     try {
         server = fastify();
-        await server.register(import('@fastify/cors'));
+        await server.register(import("@fastify/cors"));
         // Serve from the same data directory as the Node tests
         server.register(fastifyStatic, {
             root: path.join(__dirname, "../data/mock-ldes"),
