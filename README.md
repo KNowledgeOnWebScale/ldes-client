@@ -187,10 +187,11 @@ The client runs on Node.js, in the browser and on Cloudflare Workers (workerd). 
 
 ## RDF-Connect
 
-The package exposes `rdfc:LdesClient` as an [RDF-Connect](https://rdf-connect.github.io/) processor. This example defines a following client that writes to the `<members>` channel; connect a downstream reader to consume it.
+The package exposes `rdfcp:LdesClient` as an [RDF-Connect](https://rdf-connect.github.io/) processor. This example defines a following client that writes to the `<members>` channel; connect a downstream reader to consume it.
 
 ```turtle
 @prefix rdfc: <https://w3id.org/rdf-connect#> .
+@prefix rdfcp: <https://w3id.org/rdf-connect/processors#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 
 <> owl:imports <./node_modules/@rdfc/js-runner/index.ttl>,
@@ -204,10 +205,10 @@ The package exposes `rdfc:LdesClient` as an [RDF-Connect](https://rdf-connect.gi
         rdfc:processor <ldes-client>
     ] .
 
-<ldes-client> a rdfc:LdesClient;
-    rdfc:url <https://example.org/ldes>;
-    rdfc:output <members>;
-    rdfc:follow true .
+<ldes-client> a rdfcp:LdesClient;
+    rdfcp:url <https://example.org/ldes>;
+    rdfcp:output <members>;
+    rdfcp:follow true .
 ```
 
 See [processor.ttl](processor.ttl) for configuration properties and [lib/rdfc-processor.ts](lib/rdfc-processor.ts) for the implementation.
