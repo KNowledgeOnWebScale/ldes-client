@@ -175,15 +175,10 @@ describe("Ordered strategy with sequence-based relations", () => {
     });
 
     test("_checkEmit emits members before all pages arrive (not just _checkEnd drain)", async () => {
-        // This test catches the Date < string comparison bug.
-        // Page 2 has a 500ms delay. If _checkEmit works, page 1 members are emitted
-        // during the delay (before page 2 arrives). If broken (Date < string = false),
-        // members are stuck until _checkEnd drains after ALL pages complete.
-        //
-        // Members only have timestamp (no sequence property), GT relation uses sequencePath.
+        // Timestamp boundaries justify early emission even when sequence metadata
+        // is also present and members do not carry sequence values.
         const tsPath = TIMESTAMP_PATH;
         const seqPath = SEQUENCE_PATH;
-        const baseSeq = "01900000-0000-7000-8000-";
 
         const tree = new Tree<{ ts: string }>(
             (id, { ts }) =>
@@ -210,9 +205,9 @@ describe("Ordered strategy with sequence-based relations", () => {
             });
         }
 
-        // GT relations on sequencePath with string values
-        tree.fragment(tree.root()).relation(frag1, GT, seqPath, baseSeq + "000000000000");
-        tree.fragment(frag1).relation(frag2, GT, seqPath, baseSeq + "000000000003");
+        // GT relations on the primary timestamp path
+        tree.fragment(tree.root()).relation(frag1, GT, tsPath, new Date(2025, 0, 1, 0, 0, 0).toISOString());
+        tree.fragment(frag1).relation(frag2, GT, tsPath, new Date(2025, 0, 1, 0, 0, 3).toISOString());
 
         global.fetch = tree.mock();
 

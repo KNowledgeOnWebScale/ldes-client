@@ -57,6 +57,7 @@ export class OrderedStrategy {
     // With ordering ascending GT relations are important
     // With ordering descending LT relations are important
     private readonly launchedRelations: Heap<RelationChain>;
+    private readonly relationFinished = new WeakMap<RelationChain, boolean>();
 
     private modulator: Modulator<NodeChain, Member>;
     private preloadedPages = new Map<string, FetchedPage>();
@@ -78,7 +79,7 @@ export class OrderedStrategy {
     private polling: boolean;
     private toPoll: Heap<NodeChain>;
     private pollInterval?: number;
-    private primaryPathKey?: string;
+    private readonly primaryPathKey?: string;
     private readonly timestampOrdering: boolean;
     private readonly hasSequencePath: boolean;
 
@@ -150,7 +151,7 @@ export class OrderedStrategy {
                     if (newChain.ordering(chain) >= 0) {
                         // Only launch the fetching of this relation if it hasn't been launched already
                         if (!this.launchedRelations.contains(newChain, (e, o) => e.target === o.target)) {
-                            this.launchedRelations.push(newChain);
+                            this.launchRelation(newChain);
                             const newExpected = new Set([...from.expected, from.target]);
                             toFetch.push({ chain: newChain, expected: newExpected });
                         }
@@ -190,6 +191,7 @@ export class OrderedStrategy {
             },
             done: async (fragment: FetchedPage, { chain, index }) => {
                 this.logger.debug(`[memberNotifier - done] Member extraction done for ${chain.target}`);
+                this.relationFinished.set(chain, true);
                 await this.modulator.finished(index);
                 this.notifier.fragment(fragment, {});
 
@@ -212,6 +214,8 @@ export class OrderedStrategy {
             new Heap((a, b) => a.item.chain.ordering(b.item.chain)),
             {
                 ready: async ({ item: { chain, expected }, index }) => {
+                    // Restored pending fragments are queued by the modulator.
+                    if (!this.relationFinished.has(chain)) this.launchRelation(chain);
                     const preloadedPage = this.preloadedPages.get(chain.target);
                     if (preloadedPage) {
                         this.preloadedPages.delete(chain.target);
@@ -230,6 +234,7 @@ export class OrderedStrategy {
                         );
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
+                        this.relationFinished.set(chain, true);
                         await this.modulator.finished(index);
                         // See if we can emit some members or end the process
                         this.background(this.checkEmit());
@@ -347,13 +352,18 @@ export class OrderedStrategy {
                 value: 0,
             });
 
-            this.launchedRelations.push(relation);
+            this.launchRelation(relation);
             this.background(this.modulator.push([{ chain: relation, expected: new Set() }]));
         } else {
             this.logger.debug(
                 "[start] Things are already inflight, not adding start url",
             );
         }
+    }
+
+    private launchRelation(chain: RelationChain) {
+        this.relationFinished.set(chain, false);
+        this.launchedRelations.push(chain);
     }
 
     async cancel() {
@@ -423,7 +433,7 @@ export class OrderedStrategy {
                     this.toPoll.clear();
 
                     for (const rel of toPollArray) {
-                        this.launchedRelations.push(rel.chain);
+                        this.launchRelation(rel.chain);
                     }
                     this.background(this.modulator.push(toPollArray));
                 }, this.pollInterval || 1000);
@@ -560,8 +570,9 @@ export class OrderedStrategy {
                 )
             );
 
-            if (inTransit) {
-                this.logger.debug("[_checkEmit] In transit (blocking): " + inTransit?.chain.target);
+            const completed = this.relationFinished.get(head);
+            if (inTransit || (!head.important() && !completed)) {
+                this.logger.debug("[_checkEmit] In transit (blocking): " + (inTransit?.chain.target ?? head.target));
                 break;
             }
 
@@ -569,17 +580,9 @@ export class OrderedStrategy {
             let member = this.members.pop();
             while (member) {
                 const order = this.timestampOrdering ? member.timestamp : member.sequence;
-                if (order === undefined) {
-                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no ordering value, emitting it anyway");
-                    const streamed = this.notifier.member(member, {}) as boolean;
-                    if (streamed) {
-                        await this.modulator.addEmitted(member.id.value);
-                    }
-                } else if (
-                    !marker.important || (
-                        comparableOrderValues(order, marker.value) && this.compareRelations(order, marker.value) < 0
-                    )
-                ) {
+                if (order === undefined || !marker.important ||
+                    !comparableOrderValues(order, marker.value) ||
+                    this.compareRelations(order, marker.value) < 0) {
                     await this.emitIfNotOld(member);
                 } else {
                     this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with ordering value "
@@ -594,7 +597,9 @@ export class OrderedStrategy {
                 this.members.push(member);
             }
 
-            // At this point we are done with this relation
+            // A bound can let us emit members while its page is still pending.
+            // Keep it in the heap until that page has finished extraction.
+            if (!completed) break;
             head = this.launchedRelations.pop();
         }
 
