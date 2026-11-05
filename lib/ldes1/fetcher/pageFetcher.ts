@@ -31,11 +31,9 @@ export async function statelessPageFetch(
     headers?: Record<string, string>,
 ): Promise<FetchedPage> {
     let etag: string | undefined;
-    let status = 200;
     const fetchWithMetadata: typeof fetch = async (input, init) => {
         const resp = await (fetch_f ?? fetch)(input, init);
         etag = resp.headers.get("etag") ?? undefined;
-        status = Number(resp.headers.get("x-ldes-client-original-status") ?? resp.status);
         return resp;
     };
     const resp = await dereferencer.dereference(location, {
@@ -142,12 +140,10 @@ export class Fetcher {
             );
 
             const data = RdfStore.createDefault();
-            let quadCount = 0;
             await new Promise((resolve, reject) => {
                 resp.data
                     .on("data", (quad) => {
                         data.addQuad(quad);
-                        quadCount++;
                     })
                     .on("end", resolve)
                     .on("error", reject);

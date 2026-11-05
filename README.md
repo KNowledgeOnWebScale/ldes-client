@@ -1,6 +1,6 @@
 # The LDES client
 
-[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg?style=popout)](https://npmjs.com/package/ldes-client)
+[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg?style=popout)](https://npmjs.com/package/ldes-client) [![LDES conformance](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml) [![license: MIT](https://img.shields.io/npm/l/ldes-client.svg)](#license)
 
 This package provides a reference implementation of a [Linked Data Event Stream (LDES)](https://w3id.org/ldes/specification) client.
 
@@ -301,6 +301,24 @@ npm run test:conformance -- --no-fail
 ```
 
 LDES 2.0 tests, which can be the start of a conformance test suite for LDES 2.0, are in [tests/ldes2](tests/ldes2): they run the client against a mock server that serves RDF Message logs in TriG, N-Quads and Jelly-RDF. Run them with `npx vitest run tests/ldes2`, and add `RIVERBENCH=1` to also replicate the real RiverBench dataset over the network.
+
+## Development
+
+```bash
+npm ci                    # install, and set up the git hooks
+npm run build             # type check, compile to dist/ (cleaned first) and bundle the CommonJS build
+npm test                  # unit and integration tests (vitest, with coverage of lib/)
+npm run test:browser      # the same client in a browser (Playwright, Chromium)
+npm run test:conformance  # the LDES 1.0 conformance suite, see "Compliance tests"
+npm run lint              # ESLint, also type-aware (lint:fix fixes what it can)
+npm run typecheck         # type check of lib/, bin/ and tests/
+npm run format            # Prettier
+```
+
+ * **Layout**: [lib/ldes1](lib/ldes1) is the engine for LDES 1.0 (TREE traversal: strategies, fetching and extraction), [lib/ldes2](lib/ldes2) the experimental engine for LDES 2.0, and [lib/client.ts](lib/client.ts) chooses between them. What both use is in [lib/condition](lib/condition), [lib/fetcher](lib/fetcher), [lib/utils](lib/utils) and [lib/types.ts](lib/types.ts): the engine for LDES 2.0 does not depend on the one for LDES 1.0.
+ * **Code quality**: ESLint (flat config, `typescript-eslint`) finds problems, Prettier formats, and `tsc` checks all types, the tests included. The promise rules (`no-floating-promises`, `no-misused-promises`) matter in an event-driven client: a promise that nobody awaits is an error that nobody sees. [husky](https://typicode.github.io/husky) and lint-staged run ESLint and Prettier on the staged files before every commit (installed by `npm install`). CI runs the lint, the type check, the tests, the browser tests and an audit of the dependencies.
+ * **Performance**: [perf/](perf) compares the client with a baseline build (for example `main`) on the same members, over an LDES 1.0 and an LDES 2.0.
+ * **Releases**: describe the changes in [CHANGELOG.md](CHANGELOG.md), where changes of the LDES 2.0 support have their own section. `npm publish` builds first (`prepublishOnly`).
 
 ## License
 

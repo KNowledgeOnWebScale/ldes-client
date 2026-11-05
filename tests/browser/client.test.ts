@@ -1,8 +1,8 @@
-import { describe, expect, test, beforeEach, afterEach } from "vitest";
+import { describe, expect, test } from "vitest";
 import { createUriAndTermNamespace } from "@treecg/types";
 import { RdfStore } from "rdf-stores";
 import { replicateLDES } from "../../lib/client";
-import type { LDESInfo, FetchedPage } from "../../lib/fetcher";
+import type { LDESInfo, FetchedPage } from "../../lib/types";
 
 
 describe("Client tests (Browser)", () => {

@@ -1,3 +1,4 @@
+import type { AddressInfo } from "node:net";
 import {
     afterAll,
     beforeAll,
@@ -77,7 +78,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
 
             await server.listen({ port: 3000 });
             console.log(
-                `Mock server listening on ${server.addresses()[0].port}`,
+                `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
             );
         } catch (err) {
             if (err instanceof Error) {
@@ -219,7 +220,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream, reader] = channel(runner, "input");
 
         // Test function for the stream output
-        const testPromise = testStreamOutput(reader, (msg: string) => {
+        const testPromise = testStreamOutput(reader, (_msg: string) => {
             count++;
         });
 
@@ -254,7 +255,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream, reader] = channel(runner, "input");
 
         // Test function for the stream output
-        const testPromise = testStreamOutput(reader, (msg: string) => {
+        const testPromise = testStreamOutput(reader, (_msg: string) => {
             count++;
         });
 
@@ -289,7 +290,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream, reader] = channel(runner, "input");
 
         // Test function for the stream output
-        const testPromise = testStreamOutput(reader, (msg: string) => {
+        const testPromise = testStreamOutput(reader, (_msg: string) => {
             count++;
         });
 
@@ -324,7 +325,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream, reader] = channel(runner, "input");
 
         // Test function for the stream output
-        const testPromise = testStreamOutput(reader, (msg: string) => {
+        const testPromise = testStreamOutput(reader, (_msg: string) => {
             count++;
         });
 
@@ -359,7 +360,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream, reader] = channel(runner, "input");
 
         // Test function for the stream output
-        const testPromise = testStreamOutput(reader, (msg: string) => {
+        const testPromise = testStreamOutput(reader, (_msg: string) => {
             count++;
         });
 

@@ -16,6 +16,11 @@
     "test": "vitest run --coverage --coverage.include lib --coverage.exclude dist",
     "test:browser": "vitest run -c vitest.browser.config.ts",
     "test:conformance": "sh scripts/test-conformance.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"{lib,bin,tests}/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "prepare": "husky",
     "prepublishOnly": "npm run build"
   },
   "files": [
@@ -54,7 +59,6 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.7",
     "@eslint/js": "^10.0.1",
     "@fastify/cors": "^11.3.1",
     "@fastify/static": "^10.1.6",
@@ -64,8 +68,6 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.5",
     "@types/node": "^26.6.5",
-    "@typescript-eslint/eslint-plugin": "^8.72.0",
-    "@typescript-eslint/parser": "^8.72.0",
     "@vitest/browser": "^5.0.5",
     "@vitest/browser-playwright": "^5.0.5",
     "@vitest/coverage-v8": "^5.0.5",
@@ -86,14 +88,12 @@
     "rollup": "^4.64.12",
     "tsc-alias": "^1.9.8",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^5.0.5"
   },
   "overrides": {
-    "minimatch": "^11.0.1",
-    "@eslint/eslintrc": {
-      "minimatch": "^3.1.5"
-    }
+    "minimatch": "^11.0.1"
   },
   "browser": {
     "fs": false,

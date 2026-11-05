@@ -726,7 +726,6 @@ async function buildInfo(
     viewId: Term,
     contextShapeIds: Term[],
 ): Promise<LDESInfo> {
-    const logger = getLoggerFor("getShape");
     const shapeConfigStore = RdfStore.createDefault();
     if (config.shape) {
         for (const quad of config.shape.quads) {

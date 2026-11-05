@@ -1,3 +1,4 @@
+import type { AddressInfo } from "node:net";
 import { fastify, type FastifyInstance, type FastifyReply, type FastifyRequest, RequestPayload } from "fastify";
 import { fastifyStatic } from "@fastify/static";
 import path from "path";
@@ -53,7 +54,7 @@ export async function setup() {
 
         await server.listen({ port: 3042 });
         console.log(
-            `Mock server listening on ${server.addresses()[0].port}`,
+            `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
         );
     } catch (err) {
         console.error("Failed to start mock server", err);
