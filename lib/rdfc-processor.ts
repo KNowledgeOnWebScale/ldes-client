@@ -19,7 +19,8 @@ type LDESClientArgs = {
     after?: Date;
     ordered: Ordered;
     follow?: boolean;
-    pollInterval: number;
+    /** In milliseconds. The runner applies the default of processor.ttl, a direct caller gets the default of the client. */
+    pollInterval?: number;
     shapeFile?: string;
     noShape?: boolean;
     savePath?: string;

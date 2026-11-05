@@ -52,6 +52,9 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
 
 ### Fixed
 
+- `intoConfig` keeps the default of an option that is passed as `undefined`, instead of replacing it with `undefined`. The
+  RDF-Connect processor passes every option, so an option that the pipeline did not set lost its default: without
+  `fetchConfig`, `concurrentFetches` became `undefined`, which turned off the prefetching of pages of an LDES 2.0.
 - Extracting the members of a page of an LDES 1.0 is linear in the size of the page, instead of quadratic: the members of a
   page are extracted with one bulk extraction (`bulkExtract` of `extract-cbd-shape`), instead of one extraction per member that
   ignores the graphs of all other members. A page of 20 000 members is extracted in about 1 second, where it took close to a minute,
