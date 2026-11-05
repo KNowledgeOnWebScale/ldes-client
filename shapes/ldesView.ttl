@@ -1,3 +1,0 @@
-## A View extraction will extract all data needed for the first time an LDES is being process.
-## It’s going to look into retention policies, shapes, etc.
-
