@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793917824206,
+  "lastUpdate": 1793918554955,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -8933,6 +8933,102 @@ window.BENCHMARK_DATA = {
             "value": 5115.447673901587,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.191–0.201 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "distinct": true,
+          "id": "08be457c35572baeec633d2bf9e1951203127dae",
+          "message": "NPM 0.4.0 and small fixes",
+          "timestamp": "2026-11-05T23:38:48+01:00",
+          "tree_id": "83e81d614e4f2d90f85364fffee72099ca73f078",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/08be457c35572baeec633d2bf9e1951203127dae"
+        },
+        "date": 1793918553933,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 6976.018699569717,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.418–1.440 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 21835.845238350797,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.442–0.472 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 24146.5841377631,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.405–0.421 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 7413.097135176514,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.319–1.359 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 25799.31815136854,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.361–0.446 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 31960.738610495962,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.304–0.323 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 5586.061502928171,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.741–1.836 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 27475.219591159177,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.356–0.402 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 37295.2924334136,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.266–0.274 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 2447.0655431138152,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.396–0.413 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3711.8516442383657,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.263–0.271 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4070.879814503359,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.239–0.258 s"
           }
         ]
       }
