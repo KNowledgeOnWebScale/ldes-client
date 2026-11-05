@@ -52,6 +52,10 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
 
 ### Fixed
 
+- The Dockerfile builds the CLI again. It asked for a `bun.lockb` that does not exist, and the `bun.lock` that it would have used
+  was out of date, so that the build could not work. It is now a Node.js image that is built with `package-lock.json`, like
+  CI does: the build stage compiles the sources, and the final image only has the compiled code and the production dependencies.
+  The build context only has what the build needs.
 - `intoConfig` keeps the default of an option that is passed as `undefined`, instead of replacing it with `undefined`. The
   RDF-Connect processor passes every option, so an option that the pipeline did not set lost its default: without
   `fetchConfig`, `concurrentFetches` became `undefined`, which turned off the prefetching of pages of an LDES 2.0.

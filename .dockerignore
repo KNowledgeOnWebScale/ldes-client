@@ -1,15 +1,15 @@
-node_modules
-Dockerfile*
-docker-compose*
-.dockerignore
-.git
-.gitignore
-README.md
-LICENSE
-.vscode
-Makefile
-helm-charts
-.env
-.editorconfig
-.idea
-coverage*
+# The build context is a whitelist: everything is ignored, except what the Dockerfile needs.
+# This keeps the context small, and the cache of the layers valid when something else changes.
+*
+
+# Dependencies (with the lockfile of npm)
+!package.json
+!package-lock.json
+
+# What `npm run build` needs: the sources, and the configuration of tsc and rollup
+!tsconfig.json
+!rollup.config.mjs
+!lib
+!bin
+# tsconfig.json also includes this one test helper
+!tests/helper.ts

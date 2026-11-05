@@ -49,6 +49,17 @@ ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before 
 - `--http-codes`: list of HTTP response codes over which the client would retry a request.
 - `-m`, `--metadata`: include metadata in the emitted members. Notifies the ldes server that it is interested in metadata, via the HTTP header `Accept: application/metadata+trig`.
 
+### Run it in Docker
+
+The [Dockerfile](Dockerfile) builds the CLI from the sources into a small image (Node.js 24, without the development dependencies). The working directory of the image is `/data`, which is a volume: put the state of `--save` there to keep it between runs.
+
+```bash
+docker build -t ldes-client .
+docker run --rm -v ldes-state:/data ldes-client https://example.org/ldes --follow --save /data/state
+```
+
+Everything after the name of the image are the [options of the CLI](#cli-options); without any, the image shows the help.
+
 ### Use it as a library
 
 You can also use the `ldes-client` programatically as a library in your TS/JS projects as follows:
