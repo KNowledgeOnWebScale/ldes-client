@@ -276,6 +276,7 @@ export class Manager {
                     this.isVersionOfPath,
                     created ? new Date(created) : undefined,
                     this.pathStore,
+                    data,
                 );
             }
         } catch (ex) {

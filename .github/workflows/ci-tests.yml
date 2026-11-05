@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, renovate/**]
   pull_request:
-    branches: [main]
+    branches: [main, experiment-ldes-2.0]
 
 jobs:
   quality:
