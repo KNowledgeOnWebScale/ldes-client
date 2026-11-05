@@ -1,16 +1,15 @@
-import { NamedNode, Parser } from "n3";
 import { DataFactory } from "rdf-data-factory";
 import { BasicLensM, extractShapes, pred } from "rdf-lens";
 import { RdfStore } from "rdf-stores";
 import { RDF, TREE, XSD } from "@treecg/types";
-import { getLoggerFor, getObjects } from "../utils";
+import { getLoggerFor, getObjects, parseQuads } from "../utils";
 import { SHAPES } from "./shapes";
 import { Range } from "./range";
 
 import type { Quad, Term } from "@rdfjs/types";
 import type { Cont } from "rdf-lens";
 import type { PathRange } from "./range";
-import type { Member, RelationValue } from "../fetcher";
+import type { Member, RelationValue } from "../types";
 
 const df = new DataFactory();
 
@@ -42,7 +41,7 @@ export function empty_condition(): Condition {
 }
 
 export function parse_condition(source: string, baseIRI: string): Condition {
-    const shapeQuads = new Parser().parse(SHAPES);
+    const shapeQuads = parseQuads(SHAPES);
     const output = extractShapes(shapeQuads, {
         "http://vocab.deri.ie/csp#And": (obj) =>
             new AndCondition(
@@ -60,17 +59,28 @@ export function parse_condition(source: string, baseIRI: string): Condition {
             ),
     });
 
-    const dataQuads = new Parser({ baseIRI: baseIRI }).parse(source);
+    const dataQuads = parseQuads(source, { baseIRI: baseIRI });
 
     return <Condition>output.lenses[
         "https://w3id.org/rdf-lens/ontology#TypedExtract"
     ].execute({
         quads: dataQuads,
-        id: new NamedNode(baseIRI),
+        id: df.namedNode(baseIRI),
     });
 }
 
 export function cbdEquals(a: Path, b: Path): boolean {
+    // A relation does not have to name a path: that is only equal to another one that does not
+    if (!a.id || !b.id) {
+        return !a.id && !b.id;
+    }
+    // A path that is an IRI (a single predicate) is only equal to that same IRI: it has no quads that could be compared
+    if (
+        (a.id.termType === "NamedNode" || b.id.termType === "NamedNode") &&
+        !a.id.equals(b.id)
+    ) {
+        return false;
+    }
     const sort = (a: Quad, b: Quad) => {
         const ap = a.predicate.value;
         const bp = b.predicate.value;

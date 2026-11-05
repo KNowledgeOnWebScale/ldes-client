@@ -1,0 +1,21 @@
+name: LDES conformance
+
+on:
+  push:
+    branches: [main, renovate/**]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    uses: pietercolpaert/ldes-client-conformance-test-suite/.github/workflows/reusable-client-conformance.yml@main
+    with:
+      adapter: rdf-connect
+      suite-repository: pietercolpaert/ldes-client-conformance-test-suite
+      suite-ref: main
+      node-version: "24"
+      client-build-command: |
+        npm ci
+        npm run build
+      fail-on-non-pass: true

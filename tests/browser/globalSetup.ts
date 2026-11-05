@@ -1,3 +1,4 @@
+import type { AddressInfo } from "node:net";
 import { fastify, type FastifyInstance, type FastifyReply, type FastifyRequest, RequestPayload } from "fastify";
 import { fastifyStatic } from "@fastify/static";
 import path from "path";
@@ -23,6 +24,10 @@ export async function setup() {
         server.addHook(
             "onSend",
             async (request: FastifyRequest, reply: FastifyReply, payload: RequestPayload) => {
+                // Responses without a body, such as the answer to a CORS preflight request: nothing to look at.
+                // The client asks for many media types, so browsers send a preflight request (the Accept header
+                // is longer than the 128 bytes that CORS allows without one).
+                if (payload === null || payload === undefined) return payload;
                 const st = await streamToString(payload);
 
                 if (st.startsWith("# delay ")) {
@@ -49,7 +54,7 @@ export async function setup() {
 
         await server.listen({ port: 3042 });
         console.log(
-            `Mock server listening on ${server.addresses()[0].port}`,
+            `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
         );
     } catch (err) {
         console.error("Failed to start mock server", err);

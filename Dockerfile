@@ -1,38 +1,45 @@
-# use the official Bun image
-# see all versions at https://hub.docker.com/r/oven/bun/tags
-FROM oven/bun:1 as base
+# The ldes-client CLI in a container.
+#
+#   docker build -t ldes-client .
+#   docker run --rm -v ldes-state:/data ldes-client https://example.org/ldes --follow --save /data/state
+#
+# The image is built from the sources with the lockfile of npm (package-lock.json), the same way as in CI.
+# The Debian based image has everything the native dependencies (classic-level) need, so no compiler is installed.
+ARG NODE_VERSION=24
+
+FROM node:${NODE_VERSION}-slim AS build
 WORKDIR /usr/src/app
+# No git hooks in an image
+ENV HUSKY=0
 
-# install dependencies into temp directory
-# this will cache them and speed up future builds
-FROM base AS install
-RUN mkdir -p /temp/dev
-COPY package.json bun.lockb /temp/dev/
-RUN cd /temp/dev && bun install --frozen-lockfile
+# The dependencies first: this layer is cached as long as the lockfile does not change
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# install with --production (exclude devDependencies)
-RUN mkdir -p /temp/prod
-COPY package.json bun.lockb /temp/prod/
-RUN cd /temp/prod && bun install --frozen-lockfile --production
+# What `npm run build` needs: the sources, and the configuration of tsc and rollup
+# (tsconfig.json also includes tests/helper.ts)
+COPY tsconfig.json rollup.config.mjs ./
+COPY lib ./lib
+COPY bin ./bin
+COPY tests/helper.ts ./tests/helper.ts
+RUN npm run build
 
-# copy node_modules from temp directory
-# then copy all (non-ignored) project files into the image
-FROM base AS prerelease
-COPY --from=install /temp/dev/node_modules node_modules
-COPY . .
+# Only what the CLI needs to run
+RUN npm prune --omit=dev
 
-# [optional] tests & build
+FROM node:${NODE_VERSION}-slim AS release
 ENV NODE_ENV=production
-RUN bun test
-RUN bun run build
+WORKDIR /usr/src/app
+# package.json is needed too: it says that the code is an ES module
+COPY --from=build --chown=node:node /usr/src/app/package.json ./
+COPY --from=build --chown=node:node /usr/src/app/node_modules ./node_modules
+COPY --from=build --chown=node:node /usr/src/app/dist ./dist
 
-# copy production dependencies and source code into final image
-FROM base AS release
-COPY --from=install /temp/prod/node_modules node_modules
-COPY --from=prerelease /usr/src/app/bin ./bin
-COPY --from=prerelease /usr/src/app/lib ./lib
-COPY --from=prerelease /usr/src/app/package.json .
+# The client keeps its state (--save) in the working directory, which the user of the image can mount
+RUN mkdir /data && chown node:node /data
+WORKDIR /data
+VOLUME /data
+USER node
 
-# run the app
-USER bun
-ENTRYPOINT [ "bun", "run", "./bin/cli.ts" ]
+ENTRYPOINT ["node", "/usr/src/app/dist/bin/cli.js"]
+CMD ["--help"]

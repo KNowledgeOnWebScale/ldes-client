@@ -3,7 +3,7 @@ import { TREE, XSD } from "@treecg/types";
 import { getLoggerFor, parseInBetweenRelation } from "../utils";
 
 import type { Term } from "@rdfjs/types";
-import type { RelationValue } from "../fetcher";
+import type { RelationValue } from "../types";
 
 export type PathRange = {
     cbdEntry: Term;

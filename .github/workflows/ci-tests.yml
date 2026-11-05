@@ -7,41 +7,70 @@ on:
     branches: [main]
 
 jobs:
+  quality:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check (library, CLI and tests)
+        run: npm run typecheck
+
+      # Informational: renovate takes care of the updates, this shows what is known
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
   test-node:
     name: Run tests
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v7
 
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '24'
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
 
-    - name: Install dependencies
-      run: npm install
+      - name: Install dependencies
+        run: npm ci
 
-    - name: Build
-      run: npm run build
+      - name: Build
+        run: npm run build
 
-    - name: Run tests
-      run: npm test
-  
+      - name: Run tests
+        run: npm test
+
   test-browser:
     name: Run browser tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      
+        uses: actions/checkout@v7
+
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
-          
+          cache: npm
+
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium

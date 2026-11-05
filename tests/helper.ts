@@ -1,8 +1,9 @@
-import { Parser, Writer } from "n3";
+import { Writer } from "n3";
 import { TREE } from "@treecg/types";
+import { parseQuads } from "../lib/utils";
 
 import type { Quad } from "@rdfjs/types";
-import type { Member } from "../lib/fetcher";
+import type { Member } from "../lib/types";
 
 export type FragmentId = number;
 
@@ -28,7 +29,7 @@ function relationToQuads(rel: Relation): Quad[] {
   ${value}
 ].
 `;
-    return new Parser().parse(string);
+    return parseQuads(string);
 }
 
 export async function read(stream: ReadableStream<Member>): Promise<Member[]> {
@@ -77,7 +78,7 @@ export class Fragment<T> {
 
         for (const { id, member } of this.members) {
             out.push(
-                ...new Parser().parse(`<${ldesId}> <${TREE.member}> <${id}>.`),
+                ...parseQuads(`<${ldesId}> <${TREE.member}> <${id}>.`),
             );
             out.push(...memberToQuads(id, member));
         }
@@ -109,14 +110,17 @@ export class Tree<T> {
     private fragments: Fragment<T>[] = [];
     private memberToQuads: (id: string, member: T) => Quad[];
     private timestampPath?: string;
+    private sequencePath?: string;
 
     fetched: Set<string> = new Set();
 
     constructor(
         memberToQuads: (id: string, member: T) => Quad[],
         timestampPath?: string,
+        sequencePath?: string,
     ) {
         this.timestampPath = timestampPath;
+        this.sequencePath = sequencePath;
         this.memberToQuads = memberToQuads;
         this.fragments.push(new Fragment());
     }
@@ -156,9 +160,12 @@ export class Tree<T> {
                     ? ` <https://w3id.org/ldes#timestampPath> <${this.timestampPath}>;`
                     : "";
 
+                const sequencePath = this.sequencePath
+                    ? ` <https://w3id.org/ldes#sequencePath> <${this.sequencePath}>;`
+                    : "";
                 quads.push(
-                    ...new Parser().parse(`
-<> ${path}
+                    ...parseQuads(`
+<> ${path} ${sequencePath}
   <https://w3id.org/tree#view> <>.
 `),
                 );

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { TREE } from "@treecg/types";
-import { Range } from "../lib/condition";
+import { DataFactory } from "rdf-data-factory";
+import type { Term } from "@rdfjs/types";
+import { RdfStore } from "rdf-stores";
+import { Range, cbdEquals } from "../lib/condition";
 
 const lessers = [
     new Range(5, TREE.LessThanOrEqualToRelation, "AoE"),
@@ -154,5 +157,23 @@ describe("range", () => {
                 });
             });
         });
+    });
+});
+
+describe("cbdEquals", () => {
+    const df = new DataFactory();
+    const store = RdfStore.createDefault();
+    const path = (iri: string) => ({ id: df.namedNode(iri), store });
+
+    it("treats the same predicate as equal, and different predicates as different", () => {
+        expect(cbdEquals(path("http://example.org/a"), path("http://example.org/a"))).toBe(true);
+        expect(cbdEquals(path("http://example.org/a"), path("http://example.org/b"))).toBe(false);
+    });
+
+    it("treats a relation without a path as only equal to another one without a path, and does not fail on it", () => {
+        const none = { id: undefined as unknown as Term, store };
+        expect(cbdEquals(none, none)).toBe(true);
+        expect(cbdEquals(none, path("http://example.org/a"))).toBe(false);
+        expect(cbdEquals(path("http://example.org/a"), none)).toBe(false);
     });
 });

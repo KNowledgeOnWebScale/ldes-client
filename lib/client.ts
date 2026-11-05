@@ -1,34 +1,41 @@
-import { RdfDereferencer, rdfDereferencer } from "rdf-dereference";
 import { LDES, RDF, TREE } from "@treecg/types";
 import { CBDShapeExtractor } from "extract-cbd-shape";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
+import { ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
+import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
-import { OrderedStrategy, UnorderedStrategy } from "./strategy";
-import {
-    ModulatorFactory,
-    Fetcher,
-    longPromise,
-    resetPromise,
-    Manager,
-    statelessPageFetch
-} from "./fetcher";
+import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
 import {
     extractMainNodeShape,
     getObjects,
     maybeVersionMaterialize,
+    shaclPathKey,
+    shaclPathTerms,
+    parseQuads,
+    serializeQuads,
     streamToArray,
     getLoggerFor,
     handleExit,
     cleanUpHandlers,
+    longPromise,
+    resetPromise,
 } from "./utils";
 
-import type { Term } from "@rdfjs/types";
+import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
-import type { Ordered, StrategyEvents } from "./strategy";
-import type { LDESInfo, Notifier, FetchedPage, Member } from "./fetcher";
+import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
+import type { Bookmark } from "./ldes2";
+import type { LDESInfo, Notifier, FetchedPage, Member, Ordered, StrategyEvents } from "./types";
+
+type CachedRoot = {
+    url: string;
+    quads: string;
+    immutable: boolean;
+    etag?: string;
+};
 
 // RDF-JS data factory
 const df = new DataFactory();
@@ -43,7 +50,7 @@ type EventReceiver<T> = (params: T) => void;
 export { enhanced_fetch } from "./fetcher";
 export { intoConfig } from "./config";
 export * from "./condition";
-export type { Ordered } from "./strategy";
+export type { Ordered } from "./types";
 
 export type ClientEvents = {
     fragment: FetchedPage;
@@ -56,7 +63,7 @@ export type ClientEvents = {
 export function replicateLDES(
     config: Partial<Config> & { url: string },
     ordered: Ordered = "none",
-    dereferencer?: RdfDereferencer,
+    dereferencer?: MessageDereferencer,
     streamId?: Term,
 ): Client {
     return new Client(intoConfig(config), ordered, dereferencer, streamId);
@@ -68,7 +75,7 @@ export class Client {
     public streamId?: Term;
 
     private config: Config;
-    private dereferencer: RdfDereferencer;
+    private dereferencer: MessageDereferencer;
     private fetcher!: Fetcher;
     private memberManager!: Manager;
     private strategy!: OrderedStrategy | UnorderedStrategy;
@@ -76,6 +83,7 @@ export class Client {
     private closed = false;
     private modulatorFactory: ModulatorFactory;
     private clientStateManager: ClientStateManager;
+    private gate = new Gate();
 
     private listeners: {
         [K in keyof ClientEvents]?: Array<(p: ClientEvents[K]) => void>;
@@ -86,13 +94,13 @@ export class Client {
     constructor(
         config: Config,
         ordered: Ordered = "none",
-        dereferencer?: RdfDereferencer,
+        dereferencer?: MessageDereferencer,
         stream?: Term,
     ) {
         this.memberCount = 0;
         this.fragmentCount = 0;
         this.config = config;
-        this.dereferencer = dereferencer ?? rdfDereferencer;
+        this.dereferencer = dereferencer ?? ldfetchDereferencer;
         this.streamId = stream;
         this.ordered = ordered;
         this.clientStateManager = new ClientStateManager(
@@ -131,12 +139,77 @@ export class Client {
         // Initialize the client state manager
         this.clientStateManager.init();
 
-        // Fetch the given root URL
-        const root: FetchedPage = await statelessPageFetch(
-            this.config.url,
-            this.dereferencer,
-            this.config.fetch,
-        );
+        const rootState = this.clientStateManager.build<string, CachedRoot>("root");
+        let root: FetchedPage | undefined;
+        let cached: CachedRoot | undefined;
+        if (this.config.statePath) {
+            cached = await rootState.get(this.config.url).catch(() => undefined);
+            if (cached?.immutable) {
+                const data = RdfStore.createDefault();
+                parseQuads(cached.quads).forEach((quad) => data.addQuad(quad));
+                root = {
+                    url: cached.url,
+                    data,
+                    immutable: true,
+                    memberCount: 0,
+                };
+                this.logger.debug(`Reusing persisted immutable root ${cached.url}`);
+            }
+        }
+        if (!root) {
+            const headers = cached?.etag
+                ? { "If-None-Match": cached.etag }
+                : undefined;
+            const log = await this.dereferencer.dereferenceMessages(
+                this.config.url,
+                { fetch: this.config.fetch, headers, localFiles: true },
+            );
+            const first = await log.next();
+
+            // Is this an LDES 1.0 or an LDES 2.0? The first message tells.
+            const version = detectVersion(log, first) ??
+                (first && isEventStreamDescription(first) ? 2 : 1);
+            if (version === 2) {
+                this.logger.debug(`Found an LDES 2.0 at ${log.url}`);
+                this.logger.warn(
+                    "LDES 2.0 support is experimental: it follows the evolving proposals for the LDES 2.0 " +
+                    "specification, and can change in any release of this client",
+                );
+                await this.initLdes2(log, first, streamOut, close);
+                return;
+            }
+
+            // An LDES 1.0 page is a document without messages: the first message is the entire page
+            log.close();
+            const data = toStore(first ?? []);
+            root = {
+                url: log.url,
+                data,
+                immutable: false,
+                memberCount: 0,
+                etag: log.headers.get("etag") ?? undefined,
+                status: log.status,
+            };
+            if (root.status === 304 && cached) {
+                parseQuads(cached.quads).forEach((quad) => root!.data.addQuad(quad));
+            }
+            root.immutable = root.data
+                .getQuads(
+                    df.namedNode(root.url),
+                    LDES.terms.custom("immutable"),
+                    null,
+                    null,
+                )
+                .some((quad) => quad.object.value === "true" || quad.object.value === "1");
+            if (this.config.statePath) {
+                await rootState.put(this.config.url, {
+                    url: root.url,
+                    quads: serializeQuads(root.data.getQuads()),
+                    immutable: root.immutable,
+                    etag: root.etag ?? cached?.etag,
+                });
+            }
+        }
         this.fragmentCount++;
         this.emit("fragment", root);
 
@@ -148,30 +221,62 @@ export class Client {
             ? df.namedNode("file://" + this.config.url)
             : df.namedNode(this.config.url);
 
-        //*****************************************************************
-        // TODO: Handle the case where there are multiple views available
-        // through a discovery process.
-        //*****************************************************************
-        const viewQuads = root.data.getQuads(null, TREE.terms.view, null, null);
+        const allViewQuads = root.data.getQuads(null, TREE.terms.view, null, null);
+        const fetchedUrl = df.namedNode(root.url);
+        const currentViewQuads = root.data.getQuads(
+            null,
+            TREE.terms.view,
+            fetchedUrl,
+            null,
+        );
+        const suppliedIriViewQuads = root.data.getQuads(
+            ldesId,
+            TREE.terms.view,
+            null,
+            null,
+        );
         let viewId: Term;
+        let ldesUri: Term | undefined;
 
         if (this.config.urlIsView) {
             viewId = ldesId;
+            if (currentViewQuads.length === 1) {
+                ldesUri = currentViewQuads[0].subject;
+            }
         } else {
-            if (viewQuads.length === 0) {
+            const candidates = currentViewQuads.length > 0
+                ? currentViewQuads
+                : suppliedIriViewQuads.length > 0
+                    ? suppliedIriViewQuads
+                    : isLocalDump
+                        ? allViewQuads
+                        : [];
+            if (candidates.length === 0) {
                 this.logger.error(
-                    "Did not find a tree:view predicate, which is required to interpret the LDES. " +
+                    "Did not find exactly one applicable tree:view predicate, which is required to interpret the LDES. " +
                     "If you are targeting a tree:view directly, use the '--url-is-view' option.",
                 );
-                throw "No view found";
-            } else {
-                viewId = viewQuads[0].object;
+                throw new Error("No applicable tree:view found");
             }
+            if (candidates.length > 1 && !this.config.allowUnsafeAmbiguousView) {
+                throw new Error(
+                    `Ambiguous tree:view discovery: found ${candidates.length} applicable statements`,
+                );
+            }
+            if (candidates.length > 1) {
+                this.logger.warn(
+                    `Found ${candidates.length} applicable tree:view statements; ` +
+                    "the command-line client is taking the first one. This fallback is not specification compliant.",
+                );
+            }
+            const selected = candidates[0];
+            viewId = selected.object;
+            ldesUri = selected.subject;
         }
 
         // This is the actual LDES IRI found in the RDF data.
         // Might be different from the configured ldesId due to HTTP redirects
-        const ldesUri = viewQuads[0]?.subject ||
+        ldesUri = ldesUri ||
             root.data.getQuads(null, RDF.terms.type, LDES.terms.EventStream)[0].subject;
         if (!ldesUri) {
             this.logger.error("Could not find the LDES IRI in the fetched RDF data.");
@@ -187,6 +292,7 @@ export class Client {
             ldesUri,
             viewId,
             root.data,
+            root.url,
             this.dereferencer,
             this.config,
         );
@@ -212,9 +318,10 @@ export class Client {
         );
 
         this.logger.debug(`timestampPath: ${!!info.timestampPath}`);
+        this.logger.debug(`sequencePath: ${!!info.sequencePath}`);
 
-        if (this.ordered !== "none" && !info.timestampPath) {
-            throw "Can only emit members in order, if LDES is configured with timestampPath";
+        if (this.ordered !== "none" && !info.timestampPath && !info.sequencePath) {
+            throw "Can only emit members in order, if LDES is configured with timestampPath or sequencePath";
         }
 
         // Component that manages the fetching of RDF data over HTTP
@@ -223,12 +330,63 @@ export class Client {
             this.config.loose,
             condition,
             this.config.defaultTimezone,
-            this.config.includeMetadata || false,
             this.config.fetch,
         );
 
-        // Event handler object that listens for various runtime events (e.g., page fetching, member extraction, etc.)
-        const notifier: Notifier<StrategyEvents, unknown> = {
+        const notifier = this.buildNotifier(info, streamOut, close, condition);
+
+        // Opt for descending order strategy if last version only is true, to start reading at the newest end.
+        if (this.config.lastVersionOnly) this.ordered = "descending";
+        this.logger.debug("Order chosen: " + this.ordered);
+
+        // Fetching strategy definition, i.e., whether to use ordered or unordered fetching;
+        // keep on polling the LDES (mutable pages) for new data or finish when fully fetched.
+        const pollInterval = info.pollingInterval === undefined
+            ? this.config.pollInterval
+            : info.pollingInterval * 1000;
+        this.strategy =
+            this.ordered !== "none"
+                ? new OrderedStrategy(
+                    this.memberManager,
+                    this.fetcher,
+                    notifier,
+                    this.modulatorFactory,
+                    info,
+                    this.ordered,
+                    this.config.polling,
+                    pollInterval,
+                )
+                : new UnorderedStrategy(
+                    this.memberManager,
+                    this.fetcher,
+                    notifier,
+                    this.modulatorFactory,
+                    this.config.polling,
+                    pollInterval,
+                );
+
+        if (!isLocalDump) this.logger.debug(
+            `Found ${allViewQuads.length} views, choosing ${viewId.value}`,
+        );
+
+        await this.strategy.start(
+            viewId.value,
+            condition,
+            isLocalDump || root.url === viewId.value ? root : undefined,
+            !isLocalDump,
+        );
+    }
+
+    /**
+     * Event handler object that listens for various runtime events (e.g., page fetching, member extraction, etc.)
+     */
+    private buildNotifier(
+        info: LDESInfo,
+        streamOut: (member: Member) => boolean,
+        close: () => void,
+        condition?: ReturnType<typeof handleConditions>,
+    ): Notifier<StrategyEvents, unknown> {
+        return {
             error: (ex: unknown) => this.emit("error", ex),
             fragment: (fragment: FetchedPage) => {
                 this.emit("fragment", fragment);
@@ -249,7 +407,7 @@ export class Client {
                 return streamed;
             },
             pollCycle: () => {
-                condition.poll();
+                condition?.poll();
                 this.emit("poll", undefined);
             },
             mutable: () => {
@@ -259,42 +417,48 @@ export class Client {
                 close();
             },
         };
+    }
 
-        // Opt for descending order strategy if last version only is true, to start reading at the newest end.
-        if (this.config.lastVersionOnly) this.ordered = "descending";
-        this.logger.debug("Order chosen: " + this.ordered);
-
-        // Fetching strategy definition, i.e., whether to use ordered or unordered fetching;
-        // keep on polling the LDES (mutable pages) for new data or finish when fully fetched.
-        this.strategy =
-            this.ordered !== "none"
-                ? new OrderedStrategy(
-                    this.memberManager,
-                    this.fetcher,
-                    notifier,
-                    this.modulatorFactory,
-                    this.ordered,
-                    this.config.polling,
-                    this.config.pollInterval,
-                )
-                : new UnorderedStrategy(
-                    this.memberManager,
-                    this.fetcher,
-                    notifier,
-                    this.modulatorFactory,
-                    this.config.polling,
-                    this.config.pollInterval,
-                );
-
-        if (!isLocalDump) this.logger.debug(
-            `Found ${viewQuads.length} views, choosing ${viewId.value}`,
-        );
-
-        await this.strategy.start(
-            viewId.value,
-            condition,
-            isLocalDump ? root : undefined,
-        );
+    /**
+     * Replicates an LDES 2.0, of which the root page has been opened already.
+     */
+    private async initLdes2(
+        log: Awaited<ReturnType<MessageDereferencer["dereferenceMessages"]>>,
+        first: Quad[] | undefined,
+        streamOut: (member: Member) => boolean,
+        close: () => void,
+    ): Promise<void> {
+        const bookmarks = this.config.statePath
+            ? this.clientStateManager.build<string, Bookmark>("ldes2")
+            : undefined;
+        // The notifier needs the description of the LDES, which is only known when the root page was read.
+        // The members are only emitted after that, so it is safe to complete this reference afterwards.
+        let notifier!: Notifier<StrategyEvents, unknown>;
+        await startLdes2({
+            config: this.config,
+            dereferencer: this.dereferencer,
+            bookmarks,
+            root: { log, first },
+            hooks: {
+                member: (m) => notifier.member(m, undefined) as boolean,
+                fragment: (page) => {
+                    this.fragmentCount++;
+                    this.emit("fragment", page);
+                },
+                pollCycle: () => notifier.pollCycle({}, undefined),
+                mutable: () => notifier.mutable({}, undefined),
+                error: (ex) => notifier.error(ex, undefined),
+                close: () => notifier.close({}, undefined),
+                gate: this.gate,
+                isClosed: () => this.closed,
+            },
+            onDescription: (info) => {
+                this.streamId = this.streamId ?? info.rootNode;
+                // The notifier tells the conditions that the client polls
+                notifier = this.buildNotifier(info, streamOut, close, this.config.condition);
+                this.emit("description", info);
+            },
+        });
     }
 
     stream(strategy?: {
@@ -307,11 +471,14 @@ export class Client {
             // Called when starting the stream
             //
             start: async (controller: Controller) => {
-                this.on("error", async (error) => {
-                    await this.close();
-                    controller.error(error);
+                this.on("error", (error) => {
+                    // A failure to close must not hide the error that the stream has to report
+                    void this.close()
+                        .catch((ex) => this.logger.error(`Could not close the client: ${ex}`))
+                        .then(() => controller.error(error));
                 });
                 this.modulatorFactory.pause();
+                this.gate.pause();
                 await this.init(
                     (member) => {
                         try {
@@ -322,10 +489,10 @@ export class Client {
                             return false;
                         }
                     },
-                    async () => {
+                    () => {
                         if (this.closed) return;
                         controller.close();
-                        await this.close();
+                        this.close().catch((ex) => this.logger.error(`Could not close the client: ${ex}`));
                     },
                 );
             },
@@ -336,8 +503,10 @@ export class Client {
             pull: async () => {
                 resetPromise(emitted);
                 this.modulatorFactory.unpause();
+                this.gate.unpause();
                 await emitted.waiting;
                 this.modulatorFactory.pause();
+                this.gate.pause();
                 return;
             },
 
@@ -365,6 +534,7 @@ export class Client {
     public async close() {
         if (this.closed) return;
         this.closed = true;
+        this.gate.unpause();
         this.memberManager?.close();
         this.fetcher?.close();
         this.modulatorFactory.close();
@@ -382,7 +552,8 @@ async function getInfo(
     ldesId: Term,
     viewId: Term,
     store: RdfStore,
-    dereferencer: RdfDereferencer,
+    fetchedRootUrl: string,
+    dereferencer: MessageDereferencer,
     config: Config,
 ): Promise<LDESInfo> {
     const logger = getLoggerFor("getShape");
@@ -393,7 +564,7 @@ async function getInfo(
             ? config.shapeFile
             : "file://" + config.shapeFile;
         try {
-            const resp = await rdfDereferencer.dereference(config.shapeFile, {
+            const resp = await dereferencer.dereference(config.shapeFile, {
                 localFiles: true,
                 fetch: config.fetch,
             });
@@ -410,34 +581,55 @@ async function getInfo(
     }
 
     let shapeIds;
+    let contextShapeIds;
     let timestampPaths;
+    let sequencePaths;
+    let transactionFinalizedPaths;
     let versionOfPaths;
+    let versionTimestampPaths;
+    let versionSequencePaths;
+    let pollingIntervals;
 
     const isLocalDump = ldesId.value.startsWith("file://");
 
     if (isLocalDump) {
         // We are dealing with a local dump LDES
-        shapeIds = config.noShape ? [] : getObjects(store, null, TREE.terms.shape);
+        contextShapeIds = getObjects(store, null, TREE.terms.shape);
+        shapeIds = config.noShape ? [] : contextShapeIds;
         timestampPaths = getObjects(store, null, LDES.terms.timestampPath);
+        sequencePaths = getObjects(store, null, LDES.terms.custom("sequencePath"));
+        transactionFinalizedPaths = getObjects(store, null, LDES.terms.custom("transactionFinalizedPath"));
         versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
+        versionTimestampPaths = getObjects(store, null, LDES.terms.custom("versionTimestampPath"));
+        versionSequencePaths = getObjects(store, null, LDES.terms.custom("versionSequencePath"));
+        pollingIntervals = getObjects(store, null, LDES.terms.custom("pollingInterval"));
     } else {
         // This is a normal LDES on the Web
-        shapeIds = config.noShape ? [] : getObjects(store, ldesId, TREE.terms.shape);
+        contextShapeIds = getObjects(store, ldesId, TREE.terms.shape);
+        shapeIds = config.noShape ? [] : contextShapeIds;
         timestampPaths = getObjects(store, ldesId, LDES.terms.timestampPath);
+        sequencePaths = getObjects(store, ldesId, LDES.terms.custom("sequencePath"));
+        transactionFinalizedPaths = getObjects(store, ldesId, LDES.terms.custom("transactionFinalizedPath"));
         versionOfPaths = getObjects(store, ldesId, LDES.terms.versionOfPath);
+        versionTimestampPaths = getObjects(store, ldesId, LDES.terms.custom("versionTimestampPath"));
+        versionSequencePaths = getObjects(store, ldesId, LDES.terms.custom("versionSequencePath"));
+        pollingIntervals = getObjects(store, ldesId, LDES.terms.custom("pollingInterval"));
     }
 
     logger.debug(
-        `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${versionOfPaths.length} versionOfPaths`,
+        `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${sequencePaths.length} sequencePaths, ${versionOfPaths.length} versionOfPaths`,
     );
 
     // Only try to dereference the view if we are not dealing with a local dump
     if (isLocalDump) {
         logger.debug("Ignoring view since this is a local dump");
-    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0) {
+    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0 || sequencePaths.length === 0) {
         let tryAgainUrl = viewId.value;
         if (config.urlIsView) {
             tryAgainUrl = ldesId.value;
+        }
+        if (tryAgainUrl === fetchedRootUrl) {
+            return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
         }
         try {
             logger.debug(`Maybe find more info at ${tryAgainUrl}`);
@@ -451,17 +643,33 @@ async function getInfo(
 
             const shapeInView = getObjects(store, null, TREE.terms.shape);
             if (shapeInView) {
+                contextShapeIds = shapeInView;
                 shapeIds = config.noShape ? [] : shapeInView;
             }
 
             if (!timestampPaths.length) {
                 timestampPaths = getObjects(store, null, LDES.terms.timestampPath);
             }
+            if (!sequencePaths.length) {
+                sequencePaths = getObjects(store, null, LDES.terms.custom("sequencePath"));
+            }
+            if (!transactionFinalizedPaths.length) {
+                transactionFinalizedPaths = getObjects(store, null, LDES.terms.custom("transactionFinalizedPath"));
+            }
             if (!versionOfPaths.length) {
                 versionOfPaths = getObjects(store, null, LDES.terms.versionOfPath);
             }
+            if (!versionTimestampPaths.length) {
+                versionTimestampPaths = getObjects(store, null, LDES.terms.custom("versionTimestampPath"));
+            }
+            if (!versionSequencePaths.length) {
+                versionSequencePaths = getObjects(store, null, LDES.terms.custom("versionSequencePath"));
+            }
+            if (!pollingIntervals.length) {
+                pollingIntervals = getObjects(store, null, LDES.terms.custom("pollingInterval"));
+            }
             logger.debug(
-                `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${versionOfPaths.length} isVersionOfPaths`,
+                `Found ${shapeIds.length} shapes, ${timestampPaths.length} timestampPaths, ${sequencePaths.length} sequencePaths, ${versionOfPaths.length} isVersionOfPaths`,
             );
         } catch (ex: unknown) {
             logger.error(`Failed to fetch ${tryAgainUrl}`);
@@ -477,10 +685,49 @@ async function getInfo(
         logger.error(`Expected at most one timestamp path, found ${timestampPaths.length}`);
     }
 
+    if (sequencePaths.length > 1) {
+        logger.error(`Expected at most one sequence path, found ${sequencePaths.length}`);
+    }
+
+    if (transactionFinalizedPaths.length > 1) {
+        logger.error(`Expected at most one transactionFinalized path, found ${transactionFinalizedPaths.length}`);
+    }
+
     if (versionOfPaths.length > 1) {
         logger.error(`Expected at most one versionOf path, found ${versionOfPaths.length}`);
     }
 
+    if (versionTimestampPaths.length > 1) {
+        logger.error(`Expected at most one versionTimestamp path, found ${versionTimestampPaths.length}`);
+    }
+
+    if (versionSequencePaths.length > 1) {
+        logger.error(`Expected at most one versionSequence path, found ${versionSequencePaths.length}`);
+    }
+
+    if (pollingIntervals.length > 1) {
+        logger.error(`Expected at most one polling interval, found ${pollingIntervals.length}`);
+    }
+
+    return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
+}
+
+async function buildInfo(
+    config: Config,
+    store: RdfStore,
+    dereferencer: MessageDereferencer,
+    shapeIds: Term[],
+    timestampPaths: Term[],
+    sequencePaths: Term[],
+    transactionFinalizedPaths: Term[],
+    versionOfPaths: Term[],
+    versionTimestampPaths: Term[],
+    versionSequencePaths: Term[],
+    pollingIntervals: Term[],
+    ldesId: Term,
+    viewId: Term,
+    contextShapeIds: Term[],
+): Promise<LDESInfo> {
     const shapeConfigStore = RdfStore.createDefault();
     if (config.shape) {
         for (const quad of config.shape.quads) {
@@ -498,7 +745,7 @@ async function getInfo(
             store.getQuads(shapeId, null, null).length === 0
         ) {
             // Dereference out-of-band shape
-            const respShape = await rdfDereferencer.dereference(shapeId.value);
+            const respShape = await dereferencer.dereference(shapeId.value, { fetch: config.fetch });
             await new Promise((resolve, reject) => {
                 shapeConfigStore.import(respShape.data)
                     .on("end", resolve)
@@ -508,15 +755,48 @@ async function getInfo(
     }
 
     const shapeStore = shapeIds.length > 0 ? store : shapeConfigStore;
+    const viewDescriptions = getObjects(store, viewId, TREE.terms.custom("viewDescription"));
+    const retentionPolicies = [
+        ...getObjects(store, viewId, LDES.terms.retentionPolicy),
+        ...viewDescriptions.flatMap((description) =>
+            getObjects(store, description, LDES.terms.retentionPolicy)
+        ),
+    ].filter((policy, index, policies) =>
+        policies.findIndex((candidate) => candidate.equals(policy)) === index
+    );
+    const emptyRetentionPolicies = retentionPolicies.filter((policy) =>
+        store.getQuads(policy, null, null, null).length === 0
+    );
+    const pollingInterval = Number(pollingIntervals[0]?.value);
 
     return {
-        extractor: new CBDShapeExtractor(shapeStore, dereferencer, {
-            cbdDefaultGraph: config.onlyDefaultGraph,
+        extractor: new CBDShapeExtractor(shapeStore, dereferencer as unknown as ConstructorParameters<typeof CBDShapeExtractor>[1], {
+            // Generic LDES member extraction is defined over the default graph
+            // (plus the member's own named graph), not unrelated named graphs.
+            cbdDefaultGraph: true,
             fetch: config.fetch,
         }),
         shape: config.shape ? config.shape.shapeId : shapeIds[0],
         timestampPath: timestampPaths[0],
+        timestampPathKey: shaclPathKey(store, timestampPaths[0]),
+        sequencePath: sequencePaths[0],
+        sequencePathTerms: shaclPathTerms(store, sequencePaths[0]),
+        sequencePathKey: shaclPathKey(store, sequencePaths[0]),
+        transactionFinalizedPath: transactionFinalizedPaths[0],
+        transactionFinalizedPathTerms: shaclPathTerms(store, transactionFinalizedPaths[0]),
+        transactionFinalizedObject:
+            getObjects(store, ldesId, LDES.terms.custom("transactionFinalizedObject"))[0] ??
+            getObjects(store, null, LDES.terms.custom("transactionFinalizedObject"))[0],
         versionOfPath: versionOfPaths[0],
+        versionTimestampPath: versionTimestampPaths[0],
+        versionSequencePath: versionSequencePaths[0],
+        pollingInterval: Number.isNaN(pollingInterval) ? undefined : pollingInterval,
+        rootNode: viewId,
+        shapes: contextShapeIds,
+        viewDescriptions,
+        retentionPolicies,
+        emptyRetentionPolicies,
+        contextQuads: store.getQuads(),
         shapeQuads: shapeStore.getQuads(),
     };
 }

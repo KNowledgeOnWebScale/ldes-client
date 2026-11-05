@@ -53,11 +53,15 @@ export function handleExit(callback: () => void | Promise<void>) {
     };
 
     // do app specific cleaning before exiting
-    const sigInt = async () => await fn("SIGINT", 2);
-    const sigTerm = async () => await fn("SIGTERM", 143);
-    const sigBreak = async () => await fn("SIGBREAK", 149);
-    const uncaughtException = async (error: Error) => await fn("uncaughtException", 99, error);
-    const unhandledRejection = async (error: Error) => await fn("unhandledRejection", 99, error);
+    // The listeners of the process are not awaited: a failing callback is logged, not an unhandled rejection
+    const run = (event: string, code: number, error?: Error) => {
+        fn(event, code, error).catch((ex) => logger.error(`[handleExit] The exit callback failed: ${ex}`));
+    };
+    const sigInt = () => run("SIGINT", 2);
+    const sigTerm = () => run("SIGTERM", 143);
+    const sigBreak = () => run("SIGBREAK", 149);
+    const uncaughtException = (error: Error) => run("uncaughtException", 99, error);
+    const unhandledRejection = (error: Error) => run("unhandledRejection", 99, error);
 
     // catch ctrl+c event and exit normally
     process.once("SIGINT", sigInt);

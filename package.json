@@ -1,7 +1,7 @@
 {
   "name": "ldes-client",
-  "description": "This package provides common tooling to work with LDESes.",
-  "version": "0.3.3",
+  "description": "This package provides common tooling to work with LDESs.",
+  "version": "0.4.0",
   "main": "dist/lib/client.js",
   "exports": {
     "import": "./dist/lib/client.js",
@@ -12,16 +12,24 @@
     "ldes-client": "dist/bin/cli.js"
   },
   "scripts": {
-    "build": "tsc && tsc-alias && rollup -c",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc && tsc-alias && rollup -c",
     "test": "vitest run --coverage --coverage.include lib --coverage.exclude dist",
     "test:browser": "vitest run -c vitest.browser.config.ts",
-    "prepublishOnly": "npm run build"
+    "test:conformance": "sh scripts/test-conformance.sh",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"{lib,bin,tests}/**/*.ts\"",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "prepare": "husky",
+    "prepublishOnly": "npm run build",
+    "perf": "node perf/compare-versions.mjs",
+    "test:perf": "node perf/test/report.mjs"
   },
   "files": [
     "dist/**/*",
-    "shapes/**/*",
     "dist/bin/**/*",
-    "processor.ttl"
+    "processor.ttl",
+    "CHANGELOG.md"
   ],
   "directories": {
     "lib": "lib",
@@ -38,18 +46,20 @@
     "@rdfc/utils-js": "^1.0.1",
     "@treecg/types": "^0.4.6",
     "commander": "^15.0.0",
-    "extract-cbd-shape": "^0.3.0b",
+    "extract-cbd-shape": "^0.4.1",
     "heap-js": "^2.7.1",
+    "jsonld-context-parser": "^3.1.1",
+    "jsonld-streaming-parser": "^5.0.2",
+    "ldfetch": "^1.3.8",
     "level": "^10.0.0",
     "n3": "^2.13.12",
+    "n3.js-messages": "^0.2.1",
     "rdf-data-factory": "^2.1.0",
-    "rdf-dereference": "^5.0.0",
     "rdf-lens": "^2.1.0",
-    "rdf-stores": "^2.7.0",
+    "rdf-stores": "^2.9.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.7",
     "@eslint/js": "^10.0.1",
     "@fastify/cors": "^11.3.1",
     "@fastify/static": "^10.1.6",
@@ -57,27 +67,33 @@
     "@rdfc/js-runner": "^3.4.0",
     "@rdfc/proto": "^0.1.3",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.26.4",
+    "@types/n3": "^1.26.5",
     "@types/node": "^26.6.5",
-    "@typescript-eslint/eslint-plugin": "^8.72.0",
-    "@typescript-eslint/parser": "^8.72.0",
-    "@vitest/browser": "^4.1.12",
-    "@vitest/browser-playwright": "^4.1.12",
-    "@vitest/coverage-v8": "^4.1.12",
-    "benchmark": "^2.1.4",
-    "eslint": "^10.8.0",
+    "@vitest/browser": "^5.0.5",
+    "@vitest/browser-playwright": "^5.0.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "buffer": "^6.0.3",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
+    "events": "^3.3.0",
     "fastify": "^5.12.7",
     "globals": "^17.14.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "playwright": "^1.64.1",
     "prettier": "^3.9.10",
-    "rollup": "^4.64.10",
+    "process": "^0.11.10",
+    "rdfjs-jelly": "^0.2.0",
+    "readable-stream": "^4.8.0",
+    "rollup": "^4.64.12",
     "tsc-alias": "^1.9.8",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.12"
+    "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "minimatch": "^11.0.1"
   },
   "browser": {
     "fs": false,

@@ -8,7 +8,7 @@ import { Logger } from "winston";
 import { toPath } from "@rdfc/utils-js";
 
 import type { Quad_Object } from "@rdfjs/types";
-import type { Ordered } from "./strategy";
+import type { Ordered } from "./types";
 
 const df = new DataFactory();
 
@@ -19,7 +19,8 @@ type LDESClientArgs = {
     after?: Date;
     ordered: Ordered;
     follow?: boolean;
-    pollInterval: number;
+    /** In milliseconds. The runner applies the default of processor.ttl, a direct caller gets the default of the client. */
+    pollInterval?: number;
     shapeFile?: string;
     noShape?: boolean;
     savePath?: string;
@@ -93,7 +94,7 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
 
         const reader = this.client.stream({ highWaterMark: 10 }).getReader();
 
-        this.client.on("fragment", async (fragment) => {
+        this.client.on("fragment", (fragment) => {
             this.logger.verbose(`Got fragment: ${fragment.url}`);
         });
 

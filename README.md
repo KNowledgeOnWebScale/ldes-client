@@ -1,258 +1,291 @@
-# The LDES client
+# LDES client
 
-[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg?style=popout)](https://npmjs.com/package/ldes-client)
+[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg)](https://www.npmjs.com/package/ldes-client) [![LDES conformance](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml) [![Performance](https://github.com/rdf-connect/ldes-client/actions/workflows/perf-test.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/perf-test.yml) [![License: MIT](https://img.shields.io/npm/l/ldes-client.svg)](#license)
 
-This package provides a reference implementation of a [Linked Data Event Stream (LDES)](https://w3id.org/ldes/specification) client.
+Replicate a [Linked Data Event Stream (LDES)](https://w3id.org/ldes/specification), filter its members, or keep a local consumer synchronized with new data. Use the client from the command line, as a JavaScript/TypeScript library, or in an [RDF-Connect](https://rdf-connect.github.io/) pipeline.
 
-The main functionality is to extract/replicate members within an LDES, and keeping in-sync with it. This library can be used also as a [RDF-Connect](https://rdf-connect.github.io/) processor to build more complex data processing pipelines.
+**LDES 1.0 support is stable. LDES 2.0 support is experimental** and follows evolving proposals. LDES 2.0 behavior, options and events may change incompatibly in any release. Pin the package version when relying on it, and check [CHANGELOG.md](CHANGELOG.md) when upgrading.
 
-Install the package using: 
-```bash
+## Quick start
+
+Use Node.js 24 or newer. Install the CLI:
+
+```sh
 npm install -g ldes-client
 ```
 
-## Replication and synchronization
+Read all currently available members and exit:
 
-The LDES client has two main modes: `replicate` and `sync`. Both are accessible through the command line interface (CLI) with various alternative options.
-
-```bash
-ldes-client <url> [--follow] [--ordered <order>] [--after <datetime>] [--before <datetime>] [--save <path>] [--poll-interval <number>] [--basic-auth <username>:<password>] [--shape-file <shapeFile>] [--only-default-graph] [--no-shape] [--materialize] [--last-version-only] [--default-timezone <timezone>] [--condition <conditionFile>] [--concurrent <number>] [--retry-count <number>] [--http-codes codes...] [--safe][--url-is-view] [--loose] [--quiet] [--start-fresh] [--metadata]
+```sh
+ldes-client https://example.org/ldes > members.trig
 ```
 
-### CLI options
+Keep polling for new members, saving state so a later run can resume:
 
-- `-f` `--follow`: follow the LDES, the client stays in sync
-- `-o` `--ordered`: temporal order of member emission based on the `ldes:timestampPath` value (if any). `none|ascending|descending` Default: `none`.
-- `--before`: emit only members timestamped before (exclusive) the given timestamp. 
-- `--after`: emit only members timestamped after (exclusive) the given timestamp. 
-- `-s` `--save`: path to the save state folder, used both to resume and to update.
-- `--start-fresh`: the client will start from scratch, discarding any existing saved state.
-- `--poll-interval`: time in milliseconds to wait between polling cycles of the LDES (default: `1000`). This property applies only when the client is following the LDES.
-- `--basic-auth`: user and password for HTTP basic authentication.
-- `--shape-file`: shape file (local or remote via URL) to which LDES members should conform (overwrites LDES configured shape if any).
-- `--only-default-graph`: the client will consider only the default graph (and the member graph if so) for extracting member triples.
-- `--no-shape`: the client ignores any shape defined in the LDES and extracts members based on CBD (Concise Bounded Description) or named graph bounds. 
-- `--materialize`: the client emits the canonical version of every member, based on the `ldes:versionOfPath` property value.
-- `--last-version-only`: the clients emits only the latest version of every member.
-- `-t` `--default-timezone`: default timezone to use for dates in tree:InBetweenRelation. `AoE|Z|±HH:mm` Default: `AoE`.
-- `--condition`: filter the LDES stream to only emit members that adhere to this condition.
-- `--url-is-view`: informs the client that the given URL corresponds already to a `tree:view` avoiding the client to fail when no declared view is found. 
-- `-l` `--loose`: the client is less strict when following `tree:relation` properties and ignores if the page URL does not correspond to the `tree:Node` IRI.
-- `-q` `--quiet`: the client does not print the extracted members in the console when run via the CLI.
-- `--concurrent`: maximum number of concurrent HTTP request that the client can make.
-- `--retry-count`: maximum number of HTTP request retries that the client would perform before failing.
-- `--safe`: enables safe mode of fetching, which will retry when a fetch fails.
-- `--http-codes`: list of HTTP response codes over which the client would retry a request.
-- `-m`, `--metadata`: include metadata in the emitted members. Notifies the ldes server that it is interested in metadata, via the HTTP header `Accept: application/metadata+trig`.
+```sh
+ldes-client https://example.org/ldes --follow --save ./state
+```
 
-### Use it as a library
+Filter by time and emit members in ascending order:
 
-You can also use the `ldes-client` programatically as a library in your TS/JS projects as follows:
+```sh
+ldes-client https://example.org/ldes \
+  --after 2026-01-01T00:00:00Z --before 2026-02-01T00:00:00Z \
+  --ordered ascending
+```
+
+There are no separate replication or synchronization subcommands: `--follow` keeps the process running after it catches up. The client detects the LDES version from the root page.
+
+## Command line
+
+```sh
+npx ldes-client <url> [options]
+npx ldes-client --help
+```
+
+By default, standard output is a TriG RDF Message Log with one message per member. Message delimiters preserve member boundaries. Use `--format n-quads` for a flat stream of quads, or `--comment` to add comments with each member's identifier and available timestamp, sequence, version, type and transaction metadata.
+
+### Reading, filtering and state
+
+| Option | Behavior |
+| --- | --- |
+| `-f, --follow` | Keep polling for new members. |
+| `-o, --ordered <order>` | LDES 1.0 emission order: `none` (default), `ascending` or `descending`. LDES 2.0 retains stream order. |
+| `--after <datetime>` / `--before <datetime>` | Filter by timestamp; both bounds are exclusive. |
+| `--condition <file>` | Apply a [Turtle condition](#conditions). |
+| `-s, --save <path>` | Persist state for resuming and synchronization. |
+| `--start-fresh` | Discard existing saved state and start again. |
+| `--poll-interval <ms>` | Polling interval while following; default `1000`. |
+| `-t, --default-timezone <timezone>` | Default timezone for LDES 1.0 `tree:InBetweenRelation` dates; default `AoE`. See [LDES 2.0](#ldes-20) for timestamps without a timezone. |
+
+### Extraction and output
+
+| Option | Behavior |
+| --- | --- |
+| `--shape-file <path-or-url>` | Override the LDES 1.0 member extraction shape with a local or remote SHACL shape. |
+| `--no-shape` | Extract LDES 1.0 members using Concise Bounded Descriptions (CBD) and named graphs, ignoring declared shapes. |
+| `--only-default-graph` | Restrict LDES 1.0 extraction to the default graph and the member's graph. |
+| `--materialize` | Materialize versioned members using `ldes:versionOfPath`. |
+| `--last-version-only` | Emit only the latest available version of each entity in LDES 1.0. |
+| `--format <format>` | `trig-messages` (default) or `n-quads`. |
+| `-c, --comment` | Add a comment before each member with its available metadata. |
+| `-m, --metadata` | Request LDES 1.0 metadata using `Accept: application/metadata+trig` and include it in the output. |
+| `-q, --quiet` | Suppress member output. |
+
+LDES 2.0 members contain all quads of their message; SHACL/CBD extraction options apply to LDES 1.0.
+
+### Fetching and compatibility
+
+| Option | Behavior |
+| --- | --- |
+| `--concurrent <number>` | Maximum concurrent HTTP requests per domain and LDES 2.0 prefetch window; default `10`. |
+| `--basic-auth <username>:<password>` | HTTP Basic authentication. |
+| `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. |
+| `--http-codes <codes...>` | HTTP status codes to retry. |
+| `--safe` | Retry thrown fetch errors. |
+| `--url-is-view` | Treat the input URL as a TREE view without discovering one. |
+| `-l, --loose` | Follow LDES 1.0 relations even when the page URL differs from the `tree:Node` IRI. |
+
+HTTP statuses `408`, `425`, `429`, `500`, `502`, `503` and `504` are retried with exponential backoff by default. Library callers can customize fetching with `enhanced_fetch`.
+
+### Logging
+
+In Node.js, the CLI and library write logs to standard error, leaving standard output available for member data. Set `LOG_LEVEL` before starting the process to control verbosity:
+
+```sh
+LOG_LEVEL=debug npx ldes-client https://example.org/ldes > members.trig
+```
+
+Supported levels, from least to most verbose, are `error`, `warn`, `info`, `http`, `verbose`, `debug` and `silly`. The default is `info`. Without an explicit `LOG_LEVEL`, `DEBUG=ldes-client` or `DEBUG=*` selects `debug`; `LOG_LEVEL` takes precedence.
+
+`--quiet` suppresses member output, not logs. For Docker, pass the environment variable with `-e LOG_LEVEL=debug` before the image name.
+
+### Docker
+
+Build the [Dockerfile](Dockerfile) and mount a volume for saved state:
+
+```sh
+docker build -t ldes-client .
+docker run --rm -v ldes-state:/data ldes-client \
+  https://example.org/ldes --follow --save /data/state
+```
+
+The image uses Node.js 24, runs as an unprivileged user, and uses `/data` as its working directory. Arguments after the image name are CLI arguments; running the image without arguments displays help.
+
+## JavaScript and TypeScript
+
+Install the library in your project:
+
+```sh
+npm install ldes-client
+```
+
+`replicateLDES` accepts a partial configuration and fills in defaults. Its stream yields members with an RDF/JS identifier (`id`) and an array of RDF/JS quads (`quads`):
 
 ```typescript
-import { replicateLDES, intoConfig } from "ldes-client";
+import { replicateLDES } from "ldes-client";
 
-async function main() {
-  const ldesClient = replicateLDES(intoConfig({
-    url: "http://my.ldes.org",
-    materialize: true,
-    // ... (see above for more options)
-  }));
+const client = replicateLDES({
+  url: "https://example.org/ldes",
+  statePath: "./state",
+});
 
-  const memberReader = ldesClient.stream({ highWaterMark: 10 }).getReader();
-  let member = await memberReader.read();
-
-  while (member) {
-    // Do something with the member
-    // ...
-    // Read the next member
-    member = await memberReader.read();
-
-    if (member.done) {
-      break;
-    }
-  }
+for await (const member of client.stream({ highWaterMark: 10 })) {
+  console.log(member.id.value, member.quads.length);
 }
-
-main().catch((err) => {console.error(err)});
 ```
 
-### `ldes-client` in an RDF-Connect pipeline
+Pass `"ascending"` or `"descending"` as the second argument for ordered LDES 1.0 replication. Set `polling: true` to keep following the stream. Other configuration names include `pollInterval`, `concurrentFetches`, `after` and `before` (JavaScript `Date` objects). See [Config](lib/config.ts) for all options and defaults.
 
-The `ldes-client` is also exposed as an [RDF-Connect](https://rdf-connect.github.io/) processor (see the semantic definition at [processor.ttl](https://github.com/rdf-connect/ldes-client/blob/main/processor.ttl) and the wrapper implementation at [`lib/rdf-connect.ts`](https://github.com/rdf-connect/ldes-client/blob/main/lib/rdfc-processor.ts)) and may be used in a pipeline as follows:
+The client exposes `description`, `fragment`, `poll`, `mutable` and `error` events. The `description` event includes the detected version as `info.ldesVersion`. Member metadata such as `timestamp`, `sequence` and `isVersionOf` is optional; see [the shared types](lib/types.ts).
+
+To customize HTTP retries:
+
+```typescript
+import { enhanced_fetch, replicateLDES } from "ldes-client";
+
+const client = replicateLDES({
+  url: "https://example.org/ldes",
+  fetch: enhanced_fetch({
+    concurrent: 4,
+    retry: { codes: [408, 425, 429, 500, 502, 503, 504], maxRetries: 5 },
+  }),
+});
+```
+
+## RDF-Connect
+
+The package exposes `rdfc:LdesClient` as an [RDF-Connect](https://rdf-connect.github.io/) processor. This example defines a following client that writes to the `<members>` channel; connect a downstream reader to consume it.
 
 ```turtle
-@prefix rdfc: <https://w3id.org/rdf-connect#>.
-@prefix owl: <http://www.w3.org/2002/07/owl#>.
+@prefix rdfc: <https://w3id.org/rdf-connect#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
 
-### Import the processor definitions
-<> owl:imports <./node_modules/@rdfc/js-runner/index.ttl>.
-<> owl:imports <./node_modules/ldes-client/processor.ttl>.
+<> owl:imports <./node_modules/@rdfc/js-runner/index.ttl>,
+               <./node_modules/ldes-client/processor.ttl> .
 
-### Define the channels your processor needs
-<members> a rdfc:Reader, rdfc:Writer.
+<members> a rdfc:Reader, rdfc:Writer .
 
-### Attach the processor to the pipeline under the e.g., the rdfc:NodeRunner
 <> a rdfc:Pipeline;
     rdfc:consistsOf [
         rdfc:instantiates rdfc:NodeRunner;
         rdfc:processor <ldes-client>
-    ].
+    ] .
 
-### Define and configure the processor
 <ldes-client> a rdfc:LdesClient;
-    rdfc:url <http://my.ldes.org>;
+    rdfc:url <https://example.org/ldes>;
     rdfc:output <members>;
-    rdfc:follow true;
-    ...
+    rdfc:follow true .
 ```
+
+See [processor.ttl](processor.ttl) for configuration properties and [lib/rdfc-processor.ts](lib/rdfc-processor.ts) for the implementation.
+
+## LDES 2.0
+
+The same CLI and library entry point support LDES 1.0 and the [LDES 2.0 proposal](https://github.com/SEMICeu/LinkedDataEventStreams/pull/116). The client logs a warning when reading an LDES 2.0.
+
+The experimental LDES 2.0 engine:
+
+- Reads streaming RDF Message Logs in TriG, N-Quads, N-Triples and Turtle, and Jelly-RDF, including gzip-compressed input. NDJSON-LD is not supported. A document without message boundaries is treated as one message.
+- Identifies members using `ldes:member`, `ldes:memberGraph`, `ldes:memberType` or `ldes:memberPath`, preserving every quad in the member message.
+- Merges sorted pages using `ldes:timestampPath` and `ldes:sequencePath`, or implicit page numbers and member positions.
+- Saves a bookmark for resuming, skips pages before it, and remembers completed immutable leaf pages.
+- Applies timestamp bounds and conditions to members, and prunes relations or the remainder of a page when their ordering bounds rule out matches. A `MaxCountCondition` stops traversal at the requested count.
+
+For timestamps without a timezone, an explicit configured offset such as `+01:00` or `Z` takes precedence over `ldes:defaultTimezone`. Without either, comparisons account for the unknown timezone. The CLI default `AoE` is not an explicit offset. When the LDES declares `ldes:pollingInterval`, that value determines the polling interval; otherwise the configured `pollInterval` is used.
+
+ETag revalidation (`If-None-Match`) and the ordering rule for members that finalize a transaction are not yet implemented for LDES 2.0. HTTP fetching and RDF parsing use [ldfetch](https://github.com/pietercolpaert/ldfetch).
+
+### Prefetching pages
+
+The client requests upcoming pages before the merge needs them, up to `--concurrent` / `concurrentFetches` (default `10`). Pages skipped by the bookmark or immutable-page state are not requested. Limited message buffering and backpressure keep prefetching from reading entire large pages into memory. Unused prefetched pages are closed when the consumer stops.
+
+Use `--concurrent 1` to read pages one at a time. See [the performance guide](perf/README.md) for throughput and page-latency benchmarks, methodology, and CI regression checks.
+
+### RiverBench example
+
+[examples/riverbench/root.trig](examples/riverbench/root.trig) describes an LDES 2.0 over the first 10,000 graphs of the RiverBench `assist-iot-weather-graphs` dataset, using its Jelly-RDF distribution as a data page:
+
+```sh
+ldes-client examples/riverbench/root.trig
+```
+
+The example uses named-graph membership, timestamp ordering and an immutable data page. [catalog.ttl](examples/riverbench/catalog.ttl) contains the dataset metadata. Reading it requires network access.
 
 ## Conditions
 
-When passing a condition file to the `ldes-client` CLI, the expected content is a condition where the subject is the file itself.
+Pass `--condition condition.ttl` to filter members with a Turtle condition. The condition's subject must be the file itself (`<>`). Conditions apply to both LDES versions. A condition can prune page traversal when its path matches the relation's `tree:path` in LDES 1.0, or the stream's `ldes:timestampPath` in LDES 2.0; other paths only filter members.
 
+### Simple comparison
 
-### Simple condition
 ```turtle
-@prefix csp: <http://vocab.deri.ie/csp#>.
-@prefix tree: <https://w3id.org/tree#>.
+@prefix csp: <http://vocab.deri.ie/csp#> .
+@prefix tree: <https://w3id.org/tree#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+
 <> a csp:Condition;
-    # Type of relation to filter on
     tree:relationType tree:GreaterThanOrEqualToRelation;
-    # Path to extract values for the filter
-    tree:path <http://def.isotc211.org/iso19156/2011/Observation#OM_Observation.resultTime>;
-    # Alpha value for comparison
-    tree:value "2024-01-14T08:35:35.720Z";
-    tree:compareType "date".
+    tree:path sosa:resultTime;
+    tree:value "2026-01-01T00:00:00Z";
+    tree:compareType "date" .
 ```
 
-### And condition
+### Combine conditions
+
+Use `csp:And` with `csp:and` for an intersection, or `csp:Or` with `csp:or` for a union. For example, this selects timestamps in `[2026-01-01, 2026-02-01)`:
+
 ```turtle
-@prefix csp: <http://vocab.deri.ie/csp#>.
-@prefix tree: <https://w3id.org/tree#>.
+@prefix csp: <http://vocab.deri.ie/csp#> .
+@prefix tree: <https://w3id.org/tree#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+
 <> a csp:And;
-  csp:and [
-    a csp:Condition;
-    tree:relationType tree:GreaterThanOrEqualToRelation;
-    tree:path <http://def.isotc211.org/iso19156/2011/Observation#OM_Observation.resultTime>;
-    tree:value "2024-01-14T08:35:35.720Z"
-    tree:compareType "date";
-  ];
-  csp:and [
-    a csp:Condition;
-    tree:relationType tree:LessThanRelation;
-    tree:path <http://def.isotc211.org/iso19156/2011/Observation#OM_Observation.resultTime>;
-    tree:value "2024-01-15T08:35:35.720Z"
-    tree:compareType "date";
-  ].
+    csp:and [
+        a csp:Condition;
+        tree:relationType tree:GreaterThanOrEqualToRelation;
+        tree:path sosa:resultTime;
+        tree:value "2026-01-01T00:00:00Z";
+        tree:compareType "date"
+    ], [
+        a csp:Condition;
+        tree:relationType tree:LessThanRelation;
+        tree:path sosa:resultTime;
+        tree:value "2026-02-01T00:00:00Z";
+        tree:compareType "date"
+    ] .
 ```
 
-### Or condition
-```turtle
-@prefix sh: <http://www.w3.org/ns/shacl#>.
-@prefix sosa: <http://www.w3.org/ns/sosa/>.
-@prefix as: <https://www.w3.org/ns/activitystreams#>.
-@prefix owl: <http://www.w3.org/2002/07/owl#>.
-@prefix csp:   <http://vocab.deri.ie/csp#> .
-@prefix tree: <https://w3id.org/tree#>.
+`tree:compareType` accepts `string`, `date`, `integer` or `float`. Conditions also support SHACL property paths; see [the condition implementation](lib/condition/condition.ts) and [its shapes](lib/condition/shapes.ts).
 
-<> a csp:Or;
-  csp:or [
-    a csp:Condition;
-    tree:relationType tree:EqualToRelation;
-    tree:value ex:sensor1;
-    tree:path ( sosa:madeBySensor [ sh:inversePath sosa:hosts ] );
-  ];
-  csp:or [
-    a csp:Condition;
-    tree:relationType tree:EqualToRelation;
-    tree:value ex:sensor2;
-    tree:path ( sosa:madeBySensor [ sh:inversePath sosa:hosts ] );
-  ].
+## Development
+
+```sh
+npm ci
+npm run build
+npm test
+npm run lint
+npm run typecheck
 ```
 
-## Use cases
+Additional checks:
 
-These are some of the use cases for which the `ldes-client` can be used:
+| Command | Purpose |
+| --- | --- |
+| `npm run test:browser` | Browser tests using Playwright and Chromium. Install Chromium first with `npx playwright install chromium`. |
+| `npm run test:conformance` | External LDES 1.0 conformance suite. |
+| `npx vitest run tests/ldes2` | LDES 2.0 integration tests against local mock servers. Add `RIVERBENCH=1` to include the network test. |
+| `npm run test:perf` | Benchmark statistics and regression-check tests. |
+| `npm run perf -- --output reports/perf/current.json` | Local replication benchmark; see [perf/README.md](perf/README.md). |
+| `npm run format` | Format TypeScript sources. |
 
-- I want to replicate all/part of a dataset (published as an LDES) as fast as possible. If this would take a long time, I want this to be fault tolerant and be able to stop and resume later without loosing data.
-- I want to stay up to date with all entities present in a dataset (published as an LDES). For this, I don't care about old data, only the newest data per entity is required. Also, I want to periodically trigger the sync process.
-- I want to do timeseries analysis, for which I need all data in order, according to their timestamp. I want options to resume, and later stay in sync.
+Conformance testing uses `../ldes-client-conformance-test-suite`, cloning it if absent and respecting an existing checkout. Reports are written to `reports/conformance/`. Use `npm run test:conformance -- --no-fail` to generate reports without failing on conformance results.
 
-## Software architecture
+CI runs lint, type checking, Node.js and browser tests, conformance checks, and performance regression checks. Performance checks also run on pull requests, comparing the proposed code with its base commit; see [the performance workflow](.github/workflows/perf-test.yml). Husky and lint-staged run checks on staged files before commits. Update [CHANGELOG.md](CHANGELOG.md) for releases; `npm publish` builds the package first.
 
-The client contains two parts, `fetching` the pages (aka. LDES fragments) and `extracting & emitting` the entities (aka. LDES members). Different use cases have different influences on these parts. For example:
-- a time series analysis wants to fetch pages first that contain older members, the member emitter only wants to start emitting members when the oldest page has been found.
-- getting the latest versions of each member is the inverse, first fetch the youngest pages, so members can immediately be emitted.
+### Source layout
 
-The main challenges are related to the coordination between the two parts:
-- the member emitter needs to know what the fragment fetcher is doing (did it know that the oldest page is fetched?)
-- how to handle the unbounded size nature of an LDES?
-  - Keeping state of emitted members is unbounded
-  - Keeping state of visited pages is unbounded
-These are also influenced by the configuration.
+[lib/client.ts](lib/client.ts) detects the LDES version and exposes the public API. [lib/ldes1](lib/ldes1) implements TREE traversal and member extraction; [lib/ldes2](lib/ldes2) implements message-log traversal and merging. The engines share [conditions](lib/condition), [fetching](lib/fetcher), [utilities](lib/utils) and [types](lib/types.ts).
 
-The implementation coordinates the behavior of the two parts through a `Strategy`. So far, two strategies exist:
-- [`unordered`](./lib/strategy/unordered.ts): this strategy fetches pages as soon as they are found and emits members without any regard for their temporal order.
-- [`ordered`](./lib/strategy/ordered.ts): this strategy tries to fetch first (if the LDES structure allows it) the pages that would logically contain the oldest/newest members depending on the configuration (`ascending` or `descending`); and emits members in order based on their timestamp.
+## License
 
-### Fragment Fetcher
-
-The fragment fetcher fetches the fragments. Depending on the chosen strategy, these fragments are managed in a priority queue with different conditions. 
-
-In the case of the `unordered` strategy, the fragments are handled individually in a simple FIFO manner. 
-
-In the case of the `ordered` strategy, the fragments are assembled and targeted via [`RelationChains`](./lib/fetcher/relation.ts#L98), of which two types exist: `important` and `unimportant`. The important relations are, for example, the `tree:GreaterThanRelation` and `tree:GreaterThanOrEqualToRelation` relations, because all other relation types are equivalent.  That is to say, we can only emit members when all unimportant relations are fetched and processed.
-
-Relation chains are chains, because when the client fetches a page, it can find new relations pointing from that page. But we need to distinguish between a relation after an important relation or a relation after an unimportant relation:
-- Important relations squash unimportant relations, these chains should only be fetched if all unimportant relations are done.
-- Unimportant relations squash other unimportant relations. 
-- Important relations squash other important relations, the new _value_ is the bigger value of the two.
-The ordering of these chains is thus, first unimportant relations, then important relations ordered on value. These chains dictate the order in which pages are fetched.
-
-Given that multiple relations can be encountered from every new page, it is possible to fetch multiple pages at the same time. However, when following an ordered strategy and considering that fetching is asynchronous, we can only interpret a page that came from a smaller relation, if no pages are _in flight_. These aspects are managed by a [`Modulator`](./lib/fetcher/modulator.ts).
-
-### Member Extraction and Emission
-
-**TODO: Update this section**
-
-The member manager _just_ extracts members and emits them when they are ready.
-Extracting members is asynchonous, because it is possible that some members require out of band requests.
-
-### State Management
-
-**TODO: Update this section**
-
-### Fault Tolerance
-
-The fetcher tries to be fault tolerant. HTTP codes that indicate that the server is overloaded or something else is going wrong are caught and retried, following an exponential back-off strategy.
-This is the default behaviour when the provided config does not provide a fetch function.
-
-Caught HTTP codes:
-
-- 408: Request timeout
-- 425: Too Early
-- 429: Too Many requests
-- 500: Internal Server Error
-- 502: Bad Gateway
-- 503: Service Unavailable
-- 504: Gateway Timeout
-
-```typescript
-// Provide your own codes with a custom retry function
-config.fetch = enhanced_fetch({ retry: { codes: [408, 425, 429, 500, 502, 503, 504] } });
-```
-
-
-## Expected Features
-
- * Use view that is indicated as EventSource
- * conformance tests and test cases
-
-
-## Authors and license
-
- - Tests and design: Pieter Colpaert
- - Actual implementation: Arthur Vercruysse, Ieben Smessaert, Julián Rojas
-
-© 2026 -- Ghent University - IMEC. MIT license
+© 2026 Ghent University – IMEC. MIT license.

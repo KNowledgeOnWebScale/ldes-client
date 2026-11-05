@@ -1,5 +1,4 @@
 import { urlToUrl, getLoggerFor } from "../utils";
-import { createLineBufferedFetch } from "./lineBuffer";
 
 const logger = getLoggerFor("EnhancedFetch");
 
@@ -47,14 +46,10 @@ export function enhanced_fetch(
         ? handle_basic_auth(safe_f, config.auth)
         : safe_f;
 
-    const limitedFetch = limit_fetch_per_domain(
-        retry_fetch(fetch_f, config.retry || {}),
+    return limit_fetch_per_domain(
+        empty_special_status_fetch(retry_fetch(fetch_f, config.retry || {})),
         config.concurrent,
     );
-
-    // Apply line buffering to work around N3.js chunk-splitting bug
-    // https://github.com/rdfjs/N3.js/issues/578
-    return createLineBufferedFetch(limitedFetch);
 }
 
 export function limit_fetch_per_domain(
@@ -132,6 +127,27 @@ export function handle_basic_auth(
     };
 
     return auth_f;
+}
+
+export function empty_special_status_fetch(fetch_f: typeof fetch): typeof fetch {
+    const status_f: typeof fetch = async (input, init) => {
+        const resp = await fetch_f(input, init);
+        if (resp.status !== 304 && resp.status !== 410) {
+            return resp;
+        }
+
+        const headers = new Headers(resp.headers);
+        headers.set("content-type", "text/turtle");
+        headers.set("x-ldes-client-original-status", resp.status.toString());
+
+        return new Response("", {
+            headers,
+            status: 200,
+            statusText: "OK",
+        });
+    };
+
+    return status_f;
 }
 
 export function retry_fetch(
