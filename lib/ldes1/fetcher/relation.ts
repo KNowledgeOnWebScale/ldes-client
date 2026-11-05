@@ -5,7 +5,7 @@ import { getObjects, getLoggerFor, shaclPathKey } from "../../utils";
 
 import type { Term } from "@rdfjs/types";
 import type { Condition } from "../../condition";
-import type { RelationValue } from "../../types";
+import type { OrderValue } from "../../types";
 
 export interface FoundRelation {
     source: string;
@@ -24,7 +24,7 @@ export interface RelationKind {
 
 export type SimpleRelation = {
     important: boolean;
-    value: RelationValue;
+    value: OrderValue;
 };
 
 export function extractRelations(
@@ -104,14 +104,14 @@ export class RelationChain {
     source: string;
     relations: SimpleRelation[];
     target: string;
-    private cmp?: (a: RelationValue, b: RelationValue) => number;
+    private cmp?: (a: OrderValue, b: OrderValue) => number;
 
     constructor(
         source: string,
         target: string,
         relations: SimpleRelation[] = [],
         additional?: SimpleRelation,
-        cmp?: (a: RelationValue, b: RelationValue) => number,
+        cmp?: (a: OrderValue, b: OrderValue) => number,
     ) {
         this.source = source;
         this.target = target;
