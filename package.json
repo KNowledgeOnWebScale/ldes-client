@@ -25,7 +25,6 @@
   },
   "files": [
     "dist/**/*",
-    "shapes/**/*",
     "dist/bin/**/*",
     "processor.ttl",
     "CHANGELOG.md"
