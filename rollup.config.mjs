@@ -15,20 +15,37 @@ const externals = [
 ];
 
 export default {
-    input: './dist/lib/client.js',
+    input: {
+        client: './dist/lib/client.js',
+        'storage/index': './dist/lib/storage/index.js',
+        'storage/level': './dist/lib/storage/level.js',
+        'storage/memory': './dist/lib/storage/memory.js',
+        'storage/do-sqlite': './dist/lib/storage/do-sqlite.js',
+    },
     output: {
-        file: './dist/lib/client.cjs',
+        dir: './dist/lib',
+        entryFileNames: '[name].cjs',
+        chunkFileNames: 'chunks/[name]-[hash].cjs',
         format: 'cjs',
     },
     plugins: [
         {
             name: 'dynamic-import-to-require',
             transform(code, id) {
+                let transformed = code;
+                let changed = false;
                 if (id.includes('logUtil')) {
-                    return {
-                        code: code.replace(/await import\(['"]winston['"]\)/g, 'require("winston")'),
-                        map: null
-                    };
+                    // Handle both literal import("winston") and variable import(name)
+                    // where name = "winston" — rewrite to require("winston")
+                    transformed = transformed.replace(/await import\(['"]winston['"]\)/g, 'require("winston")');
+                    transformed = transformed.replace(
+                        /const name = "winston";\s*const m = await import\(.*?name\)/g,
+                        'const m = require("winston")'
+                    );
+                    changed = true;
+                }
+                if (changed) {
+                    return { code: transformed, map: null };
                 }
             }
         }

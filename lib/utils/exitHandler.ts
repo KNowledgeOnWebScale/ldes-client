@@ -10,17 +10,37 @@ const listeners: {
 }[] = [];
 
 /**
+ * Returns true if we're in an environment that supports process signal handling.
+ * CF Workers with nodejs_compat expose a `process` global but may not support
+ * signal handling, so we check for `process.once` specifically.
+ */
+function hasProcessSignals(): boolean {
+    return (
+        typeof process !== "undefined" &&
+        typeof process.once === "function" &&
+        typeof process.removeListener === "function"
+    );
+}
+
+/**
  * Clean up all registered exit handlers.
  * This is useful when running multiple client instances in the same process.
  * For example, when running unit tests.
  */
 export function cleanUpHandlers() {
+    if (!hasProcessSignals()) return;
     listeners.forEach(({ event, listener }) => {
         process.removeListener(event, listener);
     });
+    listeners.length = 0;
 }
 
 export function handleExit(callback: () => void | Promise<void>) {
+    if (!hasProcessSignals()) {
+        // Environment doesn't support process signals (e.g., CF Workers)
+        return;
+    }
+
     // attach user callback to the process event emitter
     // if no callback, it will still exit gracefully on Ctrl-C
     callback = callback || noOp;

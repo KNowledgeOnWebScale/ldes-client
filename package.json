@@ -4,8 +4,26 @@
   "version": "0.4.0",
   "main": "dist/lib/client.js",
   "exports": {
-    "import": "./dist/lib/client.js",
-    "require": "./dist/lib/client.cjs"
+    ".": {
+      "import": "./dist/lib/client.js",
+      "require": "./dist/lib/client.cjs"
+    },
+    "./storage": {
+      "import": "./dist/lib/storage/index.js",
+      "require": "./dist/lib/storage/index.cjs"
+    },
+    "./storage/do-sqlite": {
+      "import": "./dist/lib/storage/do-sqlite.js",
+      "require": "./dist/lib/storage/do-sqlite.cjs"
+    },
+    "./storage/memory": {
+      "import": "./dist/lib/storage/memory.js",
+      "require": "./dist/lib/storage/memory.cjs"
+    },
+    "./storage/level": {
+      "import": "./dist/lib/storage/level.js",
+      "require": "./dist/lib/storage/level.cjs"
+    }
   },
   "type": "module",
   "bin": {
@@ -89,7 +107,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@inferal-oss/cf-dosql": "^0.1.0",
+    "@cloudflare/workers-types": "^5.20261103.1"
   },
   "overrides": {
     "minimatch": "^11.0.1"

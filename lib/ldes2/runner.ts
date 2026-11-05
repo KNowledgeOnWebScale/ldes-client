@@ -14,7 +14,7 @@ import { detectVersion, isEventStreamDescription, toStore } from "./description"
 import { membershipRule } from "./membership";
 import { synchronize } from "./traversal";
 
-import type { Level } from "level";
+import type { KVStore } from "../storage";
 import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "../config";
 import type { Condition } from "../condition";
@@ -43,7 +43,7 @@ export type Ldes2Hooks = {
 export type Ldes2Start = {
     config: Config;
     dereferencer: MessageDereferencer;
-    bookmarks?: Level<string, Bookmark>;
+    bookmarks?: KVStore<string, Bookmark>;
     root: { log: MessageLog; first: Quad[] | undefined };
     hooks: Ldes2Hooks;
     /** Called as soon as the context information is read, before any member is emitted */
