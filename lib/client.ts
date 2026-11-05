@@ -471,9 +471,11 @@ export class Client {
             // Called when starting the stream
             //
             start: async (controller: Controller) => {
-                this.on("error", async (error) => {
-                    await this.close();
-                    controller.error(error);
+                this.on("error", (error) => {
+                    // A failure to close must not hide the error that the stream has to report
+                    void this.close()
+                        .catch((ex) => this.logger.error(`Could not close the client: ${ex}`))
+                        .then(() => controller.error(error));
                 });
                 this.modulatorFactory.pause();
                 this.gate.pause();
@@ -487,10 +489,10 @@ export class Client {
                             return false;
                         }
                     },
-                    async () => {
+                    () => {
                         if (this.closed) return;
                         controller.close();
-                        await this.close();
+                        this.close().catch((ex) => this.logger.error(`Could not close the client: ${ex}`));
                     },
                 );
             },

@@ -94,7 +94,7 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
 
         const reader = this.client.stream({ highWaterMark: 10 }).getReader();
 
-        this.client.on("fragment", async (fragment) => {
+        this.client.on("fragment", (fragment) => {
             this.logger.verbose(`Got fragment: ${fragment.url}`);
         });
 

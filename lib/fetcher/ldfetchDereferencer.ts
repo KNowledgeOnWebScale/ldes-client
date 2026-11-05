@@ -263,7 +263,8 @@ export class LdfetchDereferencer implements MessageDereferencer {
     ): Promise<DereferenceOutput> {
         const log = await this.dereferenceMessages(url, options);
         const data = new Readable({ objectMode: true, read() {} });
-        (async () => {
+        // Nobody waits for this: a failure destroys the stream, which reports it
+        void (async () => {
             try {
                 for await (const message of log) {
                     for (const quad of message) data.push(quad);

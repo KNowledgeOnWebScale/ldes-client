@@ -180,6 +180,10 @@ export class Manager {
                 page.memberCount = members.length;
                 await notifier.done(page, state);
             }
+        }).catch((ex) => {
+            this.logger.error(ex);
+            // There is no member to name: the error is about the page
+            notifier.error({ error: ex, type: "extract", memberId: namedNode(page.url) }, state);
         });
     }
 

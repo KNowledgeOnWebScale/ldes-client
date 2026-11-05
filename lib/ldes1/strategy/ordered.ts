@@ -225,7 +225,7 @@ export class OrderedStrategy {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
                         await this.modulator.finished(index);
                         // See if we can emit some members or end the process
-                        this.checkEmit();
+                        this.background(this.checkEmit());
                     }
                 },
             },
@@ -294,9 +294,9 @@ export class OrderedStrategy {
         const unemitted = await this.modulator.getAllUnemitted();
         if (unemitted.length > 0) {
             this.logger.debug(`[start] Found ${unemitted.length} unemitted members in the saved state`);
-            await Promise.all(unemitted.map(async (member) => {
-                await this.members.push(member);
-            }));
+            for (const member of unemitted) {
+                this.members.push(member);
+            }
         }
 
         // Schedule any mutable pages found in a previous run
@@ -306,7 +306,7 @@ export class OrderedStrategy {
         });
 
         if (root && !traverseRoot) {
-            this.manager.extractMembers(
+            this.background(this.manager.extractMembers(
                 root,
                 {
                     chain: new RelationChain("", ""),
@@ -314,7 +314,7 @@ export class OrderedStrategy {
                     modulator: this.modulator,
                 },
                 this.memberNotifier
-            );
+            ));
             return;
         } else if (root) {
             this.preloadedPages.set(root.url, root);
@@ -346,7 +346,7 @@ export class OrderedStrategy {
             });
 
             this.launchedRelations.push(relation);
-            this.modulator.push([{ chain: relation, expected: new Set() }]);
+            this.background(this.modulator.push([{ chain: relation, expected: new Set() }]));
         } else {
             this.logger.debug(
                 "[start] Things are already inflight, not adding start url",
@@ -423,7 +423,7 @@ export class OrderedStrategy {
                     for (const rel of toPollArray) {
                         this.launchedRelations.push(rel.chain);
                     }
-                    this.modulator.push(toPollArray);
+                    this.background(this.modulator.push(toPollArray));
                 }, this.pollInterval || 1000);
             } else {
                 this.logger.debug("[_checkEnd] Closing the notifier, polling is not set");
@@ -552,6 +552,14 @@ export class OrderedStrategy {
      * The original process then picks up these pending requests in its loop, 
      * ensuring sequential execution without overlapping asynchronous operations
      */
+    /**
+     * Runs work that nobody waits for. When it fails, that is reported as an error of the client, where it would
+     * otherwise be an unhandled rejection that stops the process.
+     */
+    private background(work: Promise<unknown>) {
+        work.catch((ex) => this.notifier.error(ex, {}));
+    }
+
     private async checkEmit() {
         if (this.isEmitChecking) {
             this.shouldCheckEmitAgain = true;

@@ -127,7 +127,7 @@ export class UnorderedStrategy {
                     this.logger.debug(`[memberNotifier - done] Remembering immutable page to avoid future refetching: ${fragment.url}`);
                     if (!await this.modulator.addImmutable(fragment.url)) return;
                 }
-                this.checkEnd();
+                this.background(this.checkEnd());
             },
         };
 
@@ -150,11 +150,11 @@ export class UnorderedStrategy {
                             );
                         } else if (!(await this.modulator.seen(item.target))) {
                             this.logger.debug(`[modulator - ready] Ready to fetch page: ${item.target}`);
-                            this.fetcher.fetch(item, { index }, this.fetchNotifier);
+                            this.background(this.fetcher.fetch(item, { index }, this.fetchNotifier));
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${item.target}`);
                         await this.modulator.finished(index);
-                        this.checkEnd();
+                        this.background(this.checkEnd());
                     }
                 },
             },
@@ -190,17 +190,17 @@ export class UnorderedStrategy {
         if (!(await this.modulator.init(condition))) return;
 
         if (root && !traverseRoot) {
-            this.manager.extractMembers(
+            this.background(this.manager.extractMembers(
                 root,
                 { index: 0, modulator: this.modulator },
                 this.memberNotifier
-            );
+            ));
         } else if (root) {
             this.preloadedPages.set(root.url, root);
             await this.modulator.push([{ target: root.url, expected: new Set() }]);
         } else if ((await this.modulator.pendingCount()) < 1) {
             this.logger.debug("[start] Nothing in pending, adding start url");
-            this.modulator.push([{ target: url, expected: new Set() }]);
+            this.background(this.modulator.push([{ target: url, expected: new Set() }]));
         } else {
             this.logger.debug(
                 "[start] Pending things are already being processed, not adding start url",
@@ -213,12 +213,20 @@ export class UnorderedStrategy {
         await this.processing;
     }
 
+    /**
+     * Runs work that nobody waits for. When it fails, that is reported as an error of the client, where it would
+     * otherwise be an unhandled rejection that stops the process.
+     */
+    private background(work: Promise<unknown>) {
+        work.catch((ex) => this.notifier.error(ex, {}));
+    }
+
     private handleFetched(page: FetchedPage, index: number) {
-        this.manager.extractMembers(
+        this.background(this.manager.extractMembers(
             page,
             { index, modulator: this.modulator },
             this.memberNotifier
-        );
+        ));
     }
 
     /**
@@ -258,10 +266,14 @@ export class UnorderedStrategy {
             // Make sure we don't schedule multiple polling cycles
             if (this.polling) {
                 this.logger.debug(`[_checkEnd] Polling is enabled, setting timeout of ${this.pollInterval || 1000} ms to poll`);
-                setTimeout(async () => {
-                    if (this.canceled) return;
-                    this.notifier.pollCycle({}, {});
-                    this.modulator.push(await this.modulator.getAllMutable());
+                setTimeout(() => {
+                    this.background(
+                        (async () => {
+                            if (this.canceled) return;
+                            this.notifier.pollCycle({}, {});
+                            await this.modulator.push(await this.modulator.getAllMutable());
+                        })(),
+                    );
                 }, this.pollInterval || 1000);
             } else {
                 this.logger.debug("[_checkEnd] Closing the notifier, polling is not set");

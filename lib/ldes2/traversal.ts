@@ -289,7 +289,8 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         upcoming.sort((a, b) => compareLower(a.lower, b.lower));
         for (const relation of upcoming.slice(0, prefetchWindow - prefetched.size)) {
             logger.debug(`Requesting ${relation.page} ahead`);
-            prefetchPage(relation);
+            // A failure is reported when the page is needed, see prefetchPage
+            void prefetchPage(relation);
         }
     };
 
@@ -454,7 +455,9 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         pages.forEach((page) => page.log.close());
         // Pages that were requested ahead, and are not needed any more
         finishedRun = true;
-        prefetched.forEach((pending) => pending.then(({ log }) => log.close(), () => undefined));
+        prefetched.forEach((pending) => {
+            void pending.then(({ log }) => log.close(), () => undefined);
+        });
         prefetched.clear();
     }
 }

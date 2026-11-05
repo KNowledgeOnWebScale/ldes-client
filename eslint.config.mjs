@@ -30,7 +30,8 @@ export default defineConfig([
 
     {
         // Rules that need type information. A promise that is not awaited is how an error gets lost in an
-        // event-driven client. Warnings for now: some of them are on purpose, and have to be marked as such.
+        // event-driven client. Work that nobody waits for on purpose is marked with `void`, or goes through
+        // `background()` in the strategies, which reports a failure as an error of the client.
         files: ["lib/**/*.ts", "bin/**/*.ts"],
         languageOptions: {
             parserOptions: {
@@ -39,9 +40,9 @@ export default defineConfig([
             },
         },
         rules: {
-            "@typescript-eslint/no-floating-promises": "warn",
-            "@typescript-eslint/no-misused-promises": "warn",
-            "@typescript-eslint/await-thenable": "warn",
+            "@typescript-eslint/no-floating-promises": "error",
+            "@typescript-eslint/no-misused-promises": "error",
+            "@typescript-eslint/await-thenable": "error",
         },
     },
 

@@ -176,6 +176,8 @@ type ModulatorState<F, M> = {
  * This is a factory to keep track whether the Modulator should be paused or not.
  */
 export class ModulatorFactory {
+    private logger = getLoggerFor(this);
+
     concurrent: number;
     paused: boolean = false;
     saveState: boolean = false;
@@ -244,7 +246,9 @@ export class ModulatorFactory {
 
     unpause() {
         this.paused = false;
-        Object.values(this.children).forEach(async (modulator) => await modulator.checkReady());
+        for (const modulator of Object.values(this.children)) {
+            modulator.checkReady().catch((ex) => this.logger.error(`Could not continue the fragments: ${ex}`));
+        }
     }
 
     close() {

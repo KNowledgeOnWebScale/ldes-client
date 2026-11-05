@@ -52,29 +52,14 @@ export function getObjects(
     });
 }
 
-export function readableToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
+export async function readableToArray<T>(stream: ReadableStream<T>): Promise<T[]> {
     const out: T[] = [];
     const reader = stream.getReader();
-    return new Promise((res, rej) => {
-        const next = () => {
-            reader
-                .read()
-                .catch(rej)
-                .then((obj) => {
-                    if (obj) {
-                        if (obj.done) {
-                            res(out);
-                        } else {
-                            out.push(obj.value);
-                            next();
-                        }
-                    } else {
-                        res(out);
-                    }
-                });
-        };
-        next();
-    });
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) return out;
+        out.push(value);
+    }
 }
 
 /**
