@@ -23,7 +23,7 @@ export class ClientStateManager {
         }
         try {
             if (this.storage.init) {
-                this.storage.init(this.fresh);
+                await this.storage.init(this.fresh);
             }
         } catch (ex: unknown) {
             this.logger.error("Could not initialize the state manager");

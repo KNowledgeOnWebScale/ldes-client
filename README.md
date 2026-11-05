@@ -278,6 +278,10 @@ By default, the client stores progress with Level. Set `statePath` to keep that
 state between client instances. Without a path, Level uses temporary storage.
 Existing `statePath` and `startFresh` options continue to work.
 
+Custom storage can return a promise from `init(fresh)`: the client waits for it
+before creating stores. When using an adapter directly, await `storage.init()`
+or `storage.init(true)` before accessing it; `true` clears saved client state.
+
 Applications can provide a `Storage` implementation through the `storage` config
 option. Injected storage enables resume tracking even without `statePath`.
 `startFresh: true` clears the adapter's client state before replication starts.

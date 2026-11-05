@@ -8,23 +8,24 @@
 import type { KVStore, Storage } from "./index";
 
 class MemoryKVStore<K extends string | number, V> implements KVStore<K, V> {
-    private store = new Map<K, V>();
+    private store = new Map<string, V>();
 
     async get(key: K): Promise<V | undefined> {
-        return this.store.get(key);
+        const value = this.store.get(String(key));
+        return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
     }
 
     async put(key: K, value: V): Promise<void> {
         // Deep-clone via JSON round-trip to match Level's valueEncoding: "json" behavior
-        this.store.set(key, JSON.parse(JSON.stringify(value)));
+        this.store.set(String(key), JSON.parse(JSON.stringify(value)));
     }
 
     async del(key: K): Promise<void> {
-        this.store.delete(key);
+        this.store.delete(String(key));
     }
 
     async has(key: K): Promise<boolean> {
-        return this.store.has(key);
+        return this.store.has(String(key));
     }
 
     async clear(): Promise<void> {
@@ -39,7 +40,7 @@ class MemoryKVStore<K extends string | number, V> implements KVStore<K, V> {
                     const ka = String(a[0]), kb = String(b[0]);
                     return ka < kb ? -1 : ka > kb ? 1 : 0;
                 });
-                return entries.map(([, v]) => v);
+                return entries.map(([, v]) => JSON.parse(JSON.stringify(v)) as V);
             },
         };
     }
@@ -60,9 +61,9 @@ export class MemoryStorage implements Storage {
         // Use init(fresh=true) to clear data explicitly.
     }
 
-    init(fresh?: boolean): void {
+    async init(fresh?: boolean): Promise<void> {
         if (fresh) {
-            this.stores.clear();
+            await Promise.all(Array.from(this.stores.values(), (store) => store.clear()));
         }
     }
 }

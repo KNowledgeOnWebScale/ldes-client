@@ -135,6 +135,7 @@ async function setupPreview(): Promise<void> {
         const errOut = e.stderr?.toString() ?? "";
         throw new Error(
             `wrangler deploy failed.\nstdout: ${out}\nstderr: ${errOut}`,
+            { cause: err },
         );
     }
 

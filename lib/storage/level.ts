@@ -76,14 +76,13 @@ export class LevelStorage implements Storage {
     private location: string;
     private isTemporary: boolean;
     private db?: Level;
+    private fresh: boolean;
 
     constructor(location?: string, fresh?: boolean) {
+        this.fresh = fresh ?? false;
         if (location) {
             this.location = location;
             this.isTemporary = false;
-            if (fresh) {
-                this.clearFiles();
-            }
         } else {
             this.location = this.getDefaultLocation();
             this.isTemporary = true;
@@ -99,9 +98,18 @@ export class LevelStorage implements Storage {
         }
     }
 
-    init(): void {
-        this.ensureStatePath(this.location);
-        this.db = new Level(this.location);
+    async init(fresh = false): Promise<void> {
+        if (!this.db) {
+            this.ensureStatePath(this.location);
+            this.db = new Level(this.location);
+        }
+        await this.db.open();
+        if (fresh || this.fresh) {
+            // Clear through Level so this also works with IndexedDB and keeps
+            // existing sublevel handles attached to the same database.
+            await this.db.clear();
+            this.fresh = false;
+        }
     }
 
     store<K extends string | number, V>(name: string): KVStore<K, V> {

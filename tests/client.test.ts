@@ -113,7 +113,7 @@ describe("Client tests", () => {
                 configOverrides() {
                     if (!state) {
                         state = createDurableObjectState();
-                        storage = new DOSqliteStorage(state.ctx.storage as any);
+                        storage = new DOSqliteStorage(state.ctx.storage);
                     }
                     return { storage };
                 },

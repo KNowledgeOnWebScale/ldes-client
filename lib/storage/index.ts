@@ -6,6 +6,7 @@
  */
 
 export interface KVStore<K extends string | number, V> {
+    /** Keys use their string form; JSON values returned by reads are independent copies. */
     get(key: K): Promise<V | undefined>;
     put(key: K, value: V): Promise<void>;
     del(key: K): Promise<void>;
@@ -17,5 +18,6 @@ export interface KVStore<K extends string | number, V> {
 export interface Storage {
     store<K extends string | number, V>(name: string): KVStore<K, V>;
     close(): Promise<void>;
-    init?(fresh?: boolean): void;
+    /** Resolve after opening/resetting storage, before the client builds stores. */
+    init?(fresh?: boolean): void | Promise<void>;
 }
