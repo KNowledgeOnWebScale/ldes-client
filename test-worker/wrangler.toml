@@ -1,0 +1,16 @@
+name = "ldes-client-test"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "LDES_STATE"
+class_name = "LDESState"
+
+[[durable_objects.bindings]]
+name = "MOCK_LDES"
+class_name = "MockLDES"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["LDESState", "MockLDES"]

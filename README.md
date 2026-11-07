@@ -212,6 +212,49 @@ ldes-client examples/riverbench/root.trig
 
 The example uses named-graph membership, timestamp ordering and an immutable data page. [catalog.ttl](examples/riverbench/catalog.ttl) contains the dataset metadata. Reading it requires network access.
 
+### State Management
+
+By default, the client stores progress with Level. Set `statePath` to keep that
+state between client instances. Without a path, Level uses temporary storage.
+Existing `statePath` and `startFresh` options continue to work.
+
+Custom storage can return a promise from `init(fresh)`: the client waits for it
+before creating stores. When using an adapter directly, await `storage.init()`
+or `storage.init(true)` before accessing it; `true` clears saved client state.
+
+Applications can provide a `Storage` implementation through the `storage` config
+option. Injected storage enables resume tracking even without `statePath`.
+`startFresh: true` clears the adapter's client state before replication starts.
+
+`MemoryStorage` keeps state while the same adapter instance is reused:
+
+```typescript
+import { replicateLDES, MemoryStorage } from "ldes-client";
+
+const storage = new MemoryStorage();
+const client = replicateLDES({ url, storage });
+```
+
+Cloudflare Workers can persist state in a SQLite-backed Durable Object:
+
+```typescript
+import { replicateLDES } from "ldes-client";
+import { DOSqliteStorage } from "ldes-client/storage/do-sqlite";
+
+const storage = new DOSqliteStorage(ctx.storage);
+const client = replicateLDES({ url, storage });
+```
+
+Enable `nodejs_compat` for the client dependencies. The adapter uses its own
+`ldes_client_storage` table; a custom table name can be passed as the second
+constructor argument. Durable Object and memory adapter lifetimes belong to the
+caller; closing a client leaves their saved data available for the next run.
+
+See `test-worker/` for a runnable local integration fixture. Run
+`npm run build`, then `cd test-worker && npm ci && npm test`.
+The optional `test:preview` command deploys temporary Workers to your Cloudflare
+account and requires credentials; it is separate from local tests.
+
 ## Conditions
 
 Pass `--condition condition.ttl` to filter members with a Turtle condition. The condition's subject must be the file itself (`<>`). Conditions apply to both LDES versions. A condition can prune page traversal when its path matches the relation's `tree:path` in LDES 1.0, or the stream's `ldes:timestampPath` in LDES 2.0; other paths only filter members.

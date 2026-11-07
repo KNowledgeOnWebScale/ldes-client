@@ -1,0 +1,21 @@
+{
+  "name": "ldes-client-test-worker",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "test": "vitest run",
+    "test:preview": "PREVIEW=1 vitest run"
+  },
+  "dependencies": {
+    "ldes-client": "file:.."
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.0.0"
+  },
+  "type": "module"
+}
