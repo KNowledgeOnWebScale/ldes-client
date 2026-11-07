@@ -44,8 +44,10 @@
     "test:perf": "node perf/test/report.mjs"
   },
   "files": [
-    "dist/**/*",
-    "dist/bin/**/*",
+    "dist/lib/**/*.js",
+    "dist/lib/**/*.cjs",
+    "dist/lib/**/*.d.ts",
+    "dist/bin/cli.js",
     "processor.ttl",
     "CHANGELOG.md"
   ],

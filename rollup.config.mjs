@@ -1,4 +1,4 @@
-import pkg from './package.json' with { type: 'json' };
+import pkg from "./package.json" with { type: "json" };
 
 // Get all dependencies from package.json to mark them as external
 const dependencies = Object.keys(pkg.dependencies || {});
@@ -6,12 +6,12 @@ const peerDependencies = Object.keys(pkg.peerDependencies || {});
 const externals = [
     ...dependencies,
     ...peerDependencies,
-    'fs',
-    'fs/promises',
-    'path',
-    'os',
-    'url',
-    'stream'
+    "fs",
+    "fs/promises",
+    "path",
+    "os",
+    "url",
+    "stream",
 ];
 
 export default {
@@ -30,7 +30,7 @@ export default {
     },
     plugins: [
         {
-            name: 'dynamic-import-to-require',
+            name: "dynamic-import-to-require",
             transform(code, id) {
                 let transformed = code;
                 let changed = false;
@@ -47,11 +47,11 @@ export default {
                 if (changed) {
                     return { code: transformed, map: null };
                 }
-            }
-        }
+            },
+        },
     ],
     external: (id) => {
         // Mark as external if it's in the list or starts with a dependency name (handling subpaths)
-        return externals.some(dep => id === dep || id.startsWith(`${dep}/`));
+        return externals.some((dep) => id === dep || id.startsWith(`${dep}/`));
     },
 };
