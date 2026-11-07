@@ -39,7 +39,9 @@
     "format": "prettier --write \"{lib,bin,tests}/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "prepare": "husky",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "perf": "node perf/compare-versions.mjs",
+    "test:perf": "node perf/test/report.mjs"
   },
   "files": [
     "dist/**/*",
@@ -92,7 +94,6 @@
     "@vitest/browser": "^5.0.5",
     "@vitest/browser-playwright": "^5.0.5",
     "@vitest/coverage-v8": "^5.0.5",
-    "benchmark": "^2.1.4",
     "buffer": "^6.0.3",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",

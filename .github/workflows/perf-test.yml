@@ -1,37 +1,134 @@
-name: Benchmark for ldes client
+name: Performance
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
 permissions:
-  contents: write
-  deployments: write
+  contents: read
+
+concurrency:
+  group: perf-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  benchmark-inband:
-    name: Benchmark for ldes client
+  benchmark:
+    name: Replication regression check
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: current
     steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+      - name: Checkout current code
+        uses: actions/checkout@v7
         with:
-          node-version: '24.x'
-      - run: npm ci
-      - run: npm run build --if-present
-      - run: node ./perf/perftest.js | tee >(grep 'ops' > output.txt)
-      
-      - name: Store benchmark result
+          path: current
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Select baseline commit
+        id: baseline
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$PR_BASE" ]; then
+            baseline_ref="$PR_BASE"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            baseline_ref="$PUSH_BEFORE"
+          else
+            baseline_ref="$(git rev-parse HEAD^)"
+          fi
+          echo "ref=$baseline_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout baseline
+        uses: actions/checkout@v7
+        with:
+          path: baseline
+          ref: ${{ steps.baseline.outputs.ref }}
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            current/package-lock.json
+            baseline/package-lock.json
+
+      - name: Build current code
+        run: |
+          npm ci
+          npm run build
+          npm run test:perf
+
+      - name: Build baseline
+        working-directory: baseline
+        run: |
+          npm ci
+          npm run build
+
+      - name: Compare replication throughput and page latency
+        run: |
+          benchmark_status=0
+          npm run perf -- --baseline ../baseline \
+            --members 10000 --page-sizes 100,1000,10000 \
+            --repeats 5 --warmups 1 --timeout 120 \
+            --fail-on-regression 25 --output reports/perf/replication.json \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --benchmark-output reports/perf/replication-history.json || benchmark_status=1
+          npm run perf -- --baseline ../baseline \
+            --members 1000 --page-sizes 100 --delay 50 \
+            --repeats 5 --warmups 1 --timeout 120 \
+            --fail-on-regression 25 --output reports/perf/latency.json \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --benchmark-output reports/perf/latency-history.json || benchmark_status=1
+          exit "$benchmark_status"
+
+      - name: Upload measurements
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-results
+          path: current/reports/perf/
+          if-no-files-found: warn
+          retention-days: 30
+
+  publish:
+    name: Publish main performance history
+    needs: benchmark
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: performance-results
+          path: reports/perf
+      - name: Combine history series
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const read = (name) => JSON.parse(readFileSync(`reports/perf/${name}-history.json`, 'utf8'));
+          writeFileSync('reports/perf/history.json', JSON.stringify([...read('replication'), ...read('latency')]));
+          JS
+      - name: Store benchmark history
         uses: benchmark-action/github-action-benchmark@v1
         with:
-            name: Benchmark for ldes client
-            tool: 'benchmarkjs'
-            output-file-path: output.txt
-            github-token: ${{ secrets.GITHUB_TOKEN }}
-            benchmark-data-dir-path: docs/
-            auto-push: true
-            # Show alert with commit comment on detecting possible performance regression
-            alert-threshold: '500%'
-            comment-on-alert: true
-            fail-on-alert: true
-            alert-comment-cc-users: '@xdxxxdx'
+          name: LDES replication (HTTP)
+          tool: customBiggerIsBetter
+          output-file-path: reports/perf/history.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          benchmark-data-dir-path: docs/
+          auto-push: true
+          # Same-run baseline comparisons above determine pass/fail. Historical runner noise does not.
+          fail-on-alert: false
+          comment-on-alert: false

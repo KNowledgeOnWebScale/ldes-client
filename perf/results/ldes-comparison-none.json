@@ -1,0 +1,1003 @@
+{
+  "metadata": {
+    "node": "v25.9.0",
+    "platform": "linux 6.8.0-146-generic x64",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1265U",
+    "logicalCpus": 12,
+    "members": 20000,
+    "quadsPerMember": 8,
+    "pageSizes": [
+      100,
+      1000,
+      5000,
+      20000
+    ],
+    "ordered": "none",
+    "repeats": 5,
+    "warmups": 1,
+    "branchCommit": "c97b56928c28fdbd90fb5bf04427b12b5c805131",
+    "baselinePath": "/tmp/ldes-pr-baseline-e3b3c44/dist",
+    "baselineCommit": "e3b3c44a729ca89d345fe7abccfee0a66726d933",
+    "config": "defaults"
+  },
+  "summary": [
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "seconds": 1.479459556,
+      "minSeconds": 1.327090675,
+      "maxSeconds": 1.569919388,
+      "membersPerSecond": 13518.449976472355,
+      "firstMemberSeconds": 0.10396416600000001,
+      "peakRssMiB": 375.984375,
+      "responseBytes": 3877728
+    },
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "seconds": 1.3099158359999998,
+      "minSeconds": 1.298275278,
+      "maxSeconds": 1.8200550510000002,
+      "membersPerSecond": 15268.156510782119,
+      "firstMemberSeconds": 0.15156250500000004,
+      "peakRssMiB": 392.75390625,
+      "responseBytes": 3877728
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "seconds": 0.503208899,
+      "minSeconds": 0.485209495,
+      "maxSeconds": 0.519475236,
+      "membersPerSecond": 39744.92509918828,
+      "firstMemberSeconds": 0.054489779,
+      "peakRssMiB": 190.32421875,
+      "responseBytes": 3797504
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "seconds": 0.48212606599999996,
+      "minSeconds": 0.46562324999999993,
+      "maxSeconds": 0.5468821760000001,
+      "membersPerSecond": 41482.926168941056,
+      "firstMemberSeconds": 0.064691534,
+      "peakRssMiB": 183.9609375,
+      "responseBytes": 3978946
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "seconds": 1.962798381,
+      "minSeconds": 1.911908573,
+      "maxSeconds": 2.021089758,
+      "membersPerSecond": 10189.533572883052,
+      "firstMemberSeconds": 0.145453275,
+      "peakRssMiB": 419.796875,
+      "responseBytes": 3780508
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "seconds": 1.2317908539999998,
+      "minSeconds": 1.1201080439999997,
+      "maxSeconds": 1.264671337,
+      "membersPerSecond": 16236.522567978089,
+      "firstMemberSeconds": 0.49279726400000007,
+      "peakRssMiB": 458.71875,
+      "responseBytes": 3780508
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "seconds": 0.40406238499999997,
+      "minSeconds": 0.382198883,
+      "maxSeconds": 0.42049052600000003,
+      "membersPerSecond": 49497.30720418334,
+      "firstMemberSeconds": 0.04963782500000002,
+      "peakRssMiB": 192.640625,
+      "responseBytes": 3728464
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "seconds": 0.334704505,
+      "minSeconds": 0.325858083,
+      "maxSeconds": 0.3477459460000001,
+      "membersPerSecond": 59754.20020115953,
+      "firstMemberSeconds": 0.048605733999999984,
+      "peakRssMiB": 184.8828125,
+      "responseBytes": 3858650
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "seconds": 7.188353951,
+      "minSeconds": 6.9870276890000005,
+      "maxSeconds": 8.007169322,
+      "membersPerSecond": 2782.278131590574,
+      "firstMemberSeconds": 0.249535941,
+      "peakRssMiB": 455.76171875,
+      "responseBytes": 3771896
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "seconds": 1.3106354649999998,
+      "minSeconds": 1.253313324,
+      "maxSeconds": 1.40032985,
+      "membersPerSecond": 15259.773242897865,
+      "firstMemberSeconds": 0.856085334,
+      "peakRssMiB": 486.21875,
+      "responseBytes": 3771896
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "seconds": 0.39086557,
+      "minSeconds": 0.377039779,
+      "maxSeconds": 0.45697823600000004,
+      "membersPerSecond": 51168.487416274605,
+      "firstMemberSeconds": 0.03857802000000004,
+      "peakRssMiB": 187.52734375,
+      "responseBytes": 3722342
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "seconds": 0.32857594900000003,
+      "minSeconds": 0.307898936,
+      "maxSeconds": 0.478090179,
+      "membersPerSecond": 60868.727796020146,
+      "firstMemberSeconds": 0.04726298300000002,
+      "peakRssMiB": 176.15625,
+      "responseBytes": 3867288
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "seconds": 34.889018304000004,
+      "minSeconds": 33.867461147,
+      "maxSeconds": 36.951850617,
+      "membersPerSecond": 573.2462812720361,
+      "firstMemberSeconds": 1.469136193,
+      "peakRssMiB": 789.4765625,
+      "responseBytes": 3769801
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "seconds": 1.8081612629999997,
+      "minSeconds": 1.7528360649999999,
+      "maxSeconds": 1.938657627,
+      "membersPerSecond": 11060.960329841997,
+      "firstMemberSeconds": 1.327786357,
+      "peakRssMiB": 742.609375,
+      "responseBytes": 3769801
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "seconds": 0.397722421,
+      "minSeconds": 0.378638209,
+      "maxSeconds": 0.451941749,
+      "membersPerSecond": 50286.327709948244,
+      "firstMemberSeconds": 0.045726769999999986,
+      "peakRssMiB": 188.2265625,
+      "responseBytes": 3720766
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "seconds": 0.295203872,
+      "minSeconds": 0.287710348,
+      "maxSeconds": 0.30401218,
+      "membersPerSecond": 67749.78886455798,
+      "firstMemberSeconds": 0.0383895,
+      "peakRssMiB": 182.56640625,
+      "responseBytes": 4004215
+    }
+  ],
+  "samples": [
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.298275278,
+      "firstMemberSeconds": 0.152041923,
+      "maxBlocked": 31.488587000000052,
+      "peakRss": 425361408
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.49644253,
+      "firstMemberSeconds": 0.05434610399999997,
+      "maxBlocked": 63.26786100000004,
+      "peakRss": 199766016
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.5468821760000001,
+      "firstMemberSeconds": 0.10927293199999998,
+      "maxBlocked": 72.64965799999999,
+      "peakRss": 194334720
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.962798381,
+      "firstMemberSeconds": 0.14864745699999998,
+      "maxBlocked": 104.64103899999998,
+      "peakRss": 440188928
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.245372713,
+      "firstMemberSeconds": 0.48158425,
+      "maxBlocked": 141.15707199999997,
+      "peakRss": 475299840
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.42049052600000003,
+      "firstMemberSeconds": 0.05576906100000002,
+      "maxBlocked": 219.81622299999998,
+      "peakRss": 197730304
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.33039952200000006,
+      "firstMemberSeconds": 0.048825778000000014,
+      "maxBlocked": 116.41641799999996,
+      "peakRss": 192827392
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 7.188353951,
+      "firstMemberSeconds": 0.24589541599999998,
+      "maxBlocked": 223.455427,
+      "peakRss": 479059968
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.253313324,
+      "firstMemberSeconds": 0.846343599,
+      "maxBlocked": 332.1377580000001,
+      "peakRss": 524632064
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.39086557,
+      "firstMemberSeconds": 0.043200121999999966,
+      "maxBlocked": 10.654158999999993,
+      "peakRss": 196636672
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.307898936,
+      "firstMemberSeconds": 0.04550606400000004,
+      "maxBlocked": 155.80064500000003,
+      "peakRss": 185294848
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 34.889018304000004,
+      "firstMemberSeconds": 1.430014135,
+      "maxBlocked": 373.2646209999999,
+      "peakRss": 818593792
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.7528360649999999,
+      "firstMemberSeconds": 1.304219404,
+      "maxBlocked": 869.050461,
+      "peakRss": 778682368
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.382242922,
+      "firstMemberSeconds": 0.040235727,
+      "maxBlocked": 238.020916,
+      "peakRss": 196448256
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 1,
+      "members": 20000,
+      "seconds": 0.29474503599999996,
+      "firstMemberSeconds": 0.04278047800000002,
+      "maxBlocked": 174.585627,
+      "peakRss": 191066112
+    },
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "round": 1,
+      "members": 20000,
+      "seconds": 1.4856115730000001,
+      "firstMemberSeconds": 0.11765937199999998,
+      "maxBlocked": 19.76852199999996,
+      "peakRss": 417095680
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.485209495,
+      "firstMemberSeconds": 0.05371501999999998,
+      "maxBlocked": 52.466823999999974,
+      "peakRss": 199671808
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.48212606599999996,
+      "firstMemberSeconds": 0.07875498299999999,
+      "maxBlocked": 48.962567000000035,
+      "peakRss": 194138112
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 2.021089758,
+      "firstMemberSeconds": 0.145453275,
+      "maxBlocked": 157.16756899999996,
+      "peakRss": 443420672
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 1.264671337,
+      "firstMemberSeconds": 0.493227461,
+      "maxBlocked": 89.15493800000013,
+      "peakRss": 479244288
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.402485017,
+      "firstMemberSeconds": 0.04963782500000002,
+      "maxBlocked": 130.64680600000003,
+      "peakRss": 206831616
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.338260086,
+      "firstMemberSeconds": 0.04764058400000005,
+      "maxBlocked": 119.42052000000001,
+      "peakRss": 193626112
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 6.9870276890000005,
+      "firstMemberSeconds": 0.25969752700000004,
+      "maxBlocked": 199.822316,
+      "peakRss": 476688384
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 1.269251245,
+      "firstMemberSeconds": 0.839626998,
+      "maxBlocked": 337.851529,
+      "peakRss": 524042240
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.37876566199999995,
+      "firstMemberSeconds": 0.038345778999999997,
+      "maxBlocked": 7.222804000000053,
+      "peakRss": 195469312
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.327943417,
+      "firstMemberSeconds": 0.045240583000000015,
+      "maxBlocked": 109.67539299999999,
+      "peakRss": 185032704
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 34.651663803999995,
+      "firstMemberSeconds": 1.456224989,
+      "maxBlocked": 390.83057299999996,
+      "peakRss": 831819776
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 1.8563258560000002,
+      "firstMemberSeconds": 1.3794767980000002,
+      "maxBlocked": 909.2870129999999,
+      "peakRss": 781778944
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.397722421,
+      "firstMemberSeconds": 0.05279724499999998,
+      "maxBlocked": 248.281047,
+      "peakRss": 197369856
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 2,
+      "members": 20000,
+      "seconds": 0.287710348,
+      "firstMemberSeconds": 0.03762054899999998,
+      "maxBlocked": 165.96827000000002,
+      "peakRss": 191434752
+    },
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 1.4611159619999998,
+      "firstMemberSeconds": 0.099469643,
+      "maxBlocked": 17.61607499999991,
+      "peakRss": 378417152
+    },
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "round": 2,
+      "members": 20000,
+      "seconds": 1.3099158359999998,
+      "firstMemberSeconds": 0.15156250500000004,
+      "maxBlocked": 34.052536999999916,
+      "peakRss": 410443776
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.46562324999999993,
+      "firstMemberSeconds": 0.05739961199999999,
+      "maxBlocked": 51.145385999999974,
+      "peakRss": 192897024
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.9917691640000004,
+      "firstMemberSeconds": 0.14428101599999998,
+      "maxBlocked": 90.32418099999995,
+      "peakRss": 440524800
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.1829832470000001,
+      "firstMemberSeconds": 0.49279726400000007,
+      "maxBlocked": 115.23394600000006,
+      "peakRss": 481001472
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.4177489610000001,
+      "firstMemberSeconds": 0.04440409400000005,
+      "maxBlocked": 118.313605,
+      "peakRss": 203476992
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.334704505,
+      "firstMemberSeconds": 0.048605733999999984,
+      "maxBlocked": 104.78340500000002,
+      "peakRss": 195481600
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 7.907241197,
+      "firstMemberSeconds": 0.36414490899999996,
+      "maxBlocked": 288.483989,
+      "peakRss": 470790144
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.40032985,
+      "firstMemberSeconds": 0.9664619409999999,
+      "maxBlocked": 357.996536,
+      "peakRss": 503885824
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.407473504,
+      "firstMemberSeconds": 0.03857802000000004,
+      "maxBlocked": 9.558138999999983,
+      "peakRss": 197799936
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.32857594900000003,
+      "firstMemberSeconds": 0.04726298300000002,
+      "maxBlocked": 108.03681500000005,
+      "peakRss": 184713216
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 36.951850617,
+      "firstMemberSeconds": 1.5388544240000002,
+      "maxBlocked": 410.93890999999996,
+      "peakRss": 827826176
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.938657627,
+      "firstMemberSeconds": 1.3474212239999999,
+      "maxBlocked": 856.367606,
+      "peakRss": 782258176
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.378638209,
+      "firstMemberSeconds": 0.045726769999999986,
+      "maxBlocked": 242.99997099999996,
+      "peakRss": 198696960
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.30401218,
+      "firstMemberSeconds": 0.0383895,
+      "maxBlocked": 177.27015900000004,
+      "peakRss": 192045056
+    },
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.327090675,
+      "firstMemberSeconds": 0.10396416600000001,
+      "maxBlocked": 22.190566999999987,
+      "peakRss": 385597440
+    },
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "round": 3,
+      "members": 20000,
+      "seconds": 1.304176965,
+      "firstMemberSeconds": 0.14758367800000002,
+      "maxBlocked": 22.14372800000001,
+      "peakRss": 411127808
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 3,
+      "members": 20000,
+      "seconds": 0.503208899,
+      "firstMemberSeconds": 0.057730021999999964,
+      "maxBlocked": 34.963847999999984,
+      "peakRss": 196579328
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.948185359,
+      "firstMemberSeconds": 0.143186442,
+      "maxBlocked": 113.33288700000003,
+      "peakRss": 438517760
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.1201080439999997,
+      "firstMemberSeconds": 0.45582316599999995,
+      "maxBlocked": 118.35904500000015,
+      "peakRss": 487890944
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.40406238499999997,
+      "firstMemberSeconds": 0.05011735699999997,
+      "maxBlocked": 120.25837900000005,
+      "peakRss": 201998336
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.325858083,
+      "firstMemberSeconds": 0.04773940499999998,
+      "maxBlocked": 100.55103300000002,
+      "peakRss": 194637824
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 7.080474743,
+      "firstMemberSeconds": 0.235404749,
+      "maxBlocked": 158.475327,
+      "peakRss": 477900800
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.321679115,
+      "firstMemberSeconds": 0.8832163040000001,
+      "maxBlocked": 343.97494099999994,
+      "peakRss": 507981824
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.45697823600000004,
+      "firstMemberSeconds": 0.03987408400000004,
+      "maxBlocked": 8.40531900000002,
+      "peakRss": 195117056
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.478090179,
+      "firstMemberSeconds": 0.06193684299999996,
+      "maxBlocked": 134.97988100000003,
+      "peakRss": 184020992
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 36.610787853999994,
+      "firstMemberSeconds": 2.4152624059999996,
+      "maxBlocked": 609.7453889999999,
+      "peakRss": 809029632
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.756203655,
+      "firstMemberSeconds": 1.310759092,
+      "maxBlocked": 871.881842,
+      "peakRss": 778432512
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.40317422099999994,
+      "firstMemberSeconds": 0.038925963999999966,
+      "maxBlocked": 263.562365,
+      "peakRss": 195104768
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.295203872,
+      "firstMemberSeconds": 0.03810701499999999,
+      "maxBlocked": 172.628307,
+      "peakRss": 190353408
+    },
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.569919388,
+      "firstMemberSeconds": 0.100657096,
+      "maxBlocked": 26.67936099999997,
+      "peakRss": 394248192
+    },
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "round": 4,
+      "members": 20000,
+      "seconds": 1.327478599,
+      "firstMemberSeconds": 0.14658556599999997,
+      "maxBlocked": 29.74720900000011,
+      "peakRss": 411832320
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.5051631040000001,
+      "firstMemberSeconds": 0.05822228100000001,
+      "maxBlocked": 35.39349999999996,
+      "peakRss": 199569408
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 4,
+      "members": 20000,
+      "seconds": 0.497890674,
+      "firstMemberSeconds": 0.060414355,
+      "maxBlocked": 46.66751400000004,
+      "peakRss": 190033920
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "this branch, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.2317908539999998,
+      "firstMemberSeconds": 0.5469867240000001,
+      "maxBlocked": 86.41554999999994,
+      "peakRss": 482267136
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.382198883,
+      "firstMemberSeconds": 0.04612847799999997,
+      "maxBlocked": 114.23832900000002,
+      "peakRss": 197668864
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.3477459460000001,
+      "firstMemberSeconds": 0.050808821000000025,
+      "maxBlocked": 114.64005999999995,
+      "peakRss": 193863680
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "baseline, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 8.007169322,
+      "firstMemberSeconds": 0.249535941,
+      "maxBlocked": 249.74844900000005,
+      "peakRss": 479440896
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "this branch, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.3106354649999998,
+      "firstMemberSeconds": 0.856085334,
+      "maxBlocked": 172.01047700000004,
+      "peakRss": 509837312
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.377039779,
+      "firstMemberSeconds": 0.03837805399999996,
+      "maxBlocked": 7.062545,
+      "peakRss": 199016448
+    },
+    {
+      "layout": "4 × 5000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.34144839199999993,
+      "firstMemberSeconds": 0.05031599499999999,
+      "maxBlocked": 182.81204200000002,
+      "peakRss": 183058432
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "baseline, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 33.867461147,
+      "firstMemberSeconds": 1.469136193,
+      "maxBlocked": 357.20039900000006,
+      "peakRss": 833449984
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "this branch, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.8081612629999997,
+      "firstMemberSeconds": 1.327786357,
+      "maxBlocked": 887.775122,
+      "peakRss": 778342400
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.451941749,
+      "firstMemberSeconds": 0.055363647000000016,
+      "maxBlocked": 311.18222199999997,
+      "peakRss": 197521408
+    },
+    {
+      "layout": "1 × 20000",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.29669679399999993,
+      "firstMemberSeconds": 0.03937134400000002,
+      "maxBlocked": 176.84996,
+      "peakRss": 191479808
+    },
+    {
+      "layout": "200 × 100",
+      "label": "baseline, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.479459556,
+      "firstMemberSeconds": 0.11306284899999997,
+      "maxBlocked": 26.885265000000004,
+      "peakRss": 421965824
+    },
+    {
+      "layout": "200 × 100",
+      "label": "this branch, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.8200550510000002,
+      "firstMemberSeconds": 0.17201251,
+      "maxBlocked": 51.10089199999993,
+      "peakRss": 433942528
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 TriG",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.519475236,
+      "firstMemberSeconds": 0.054489779,
+      "maxBlocked": 37.30501700000002,
+      "peakRss": 196231168
+    },
+    {
+      "layout": "200 × 100",
+      "label": "branch, LDES 2.0 Jelly",
+      "round": 5,
+      "members": 20000,
+      "seconds": 0.47315003199999994,
+      "firstMemberSeconds": 0.064691534,
+      "maxBlocked": 49.26846499999999,
+      "peakRss": 191762432
+    },
+    {
+      "layout": "20 × 1000",
+      "label": "baseline, LDES 1.0",
+      "round": 5,
+      "members": 20000,
+      "seconds": 1.911908573,
+      "firstMemberSeconds": 0.14553593199999998,
+      "maxBlocked": 111.69892099999993,
+      "peakRss": 437698560
+    }
+  ]
+}

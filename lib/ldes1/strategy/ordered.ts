@@ -6,6 +6,8 @@ import {
     getLoggerFor,
     deserializeMember,
     serializeMember,
+    termToOrderValue,
+    isNumericOrderValue,
 } from "../../utils";
 import { GTRs, LTR } from "./types";
 import { Condition } from "../../condition";
@@ -19,16 +21,20 @@ import type {
 } from "../fetcher";
 import type {
     Member,
-    RelationValue,
     LDESInfo,
     FetchedPage,
     Notifier,
-    NumericOrderValue,
     OrderValue,
     StrategyEvents,
     Ordered,
     SerializedMember,
 } from "../../types";
+
+type StoredRelation = {
+    important: boolean;
+    value: OrderValue;
+    valueType?: "date" | "raw";
+};
 
 type NodeChain = {
     chain: RelationChain;
@@ -51,6 +57,7 @@ export class OrderedStrategy {
     // With ordering ascending GT relations are important
     // With ordering descending LT relations are important
     private readonly launchedRelations: Heap<RelationChain>;
+    private readonly relationFinished = new WeakMap<RelationChain, boolean>();
 
     private modulator: Modulator<NodeChain, Member>;
     private preloadedPages = new Map<string, FetchedPage>();
@@ -72,7 +79,9 @@ export class OrderedStrategy {
     private polling: boolean;
     private toPoll: Heap<NodeChain>;
     private pollInterval?: number;
-    private orderingPathKeys: Set<string>;
+    private readonly primaryPathKey?: string;
+    private readonly timestampOrdering: boolean;
+    private readonly hasSequencePath: boolean;
 
     private canceled = false;
     private isEmitChecking = false;
@@ -100,10 +109,9 @@ export class OrderedStrategy {
         this.notifier = notifier;
         this.polling = polling;
         this.pollInterval = pollInterval;
-        this.orderingPathKeys = new Set([
-            info.timestampPathKey,
-            info.sequencePathKey,
-        ].filter((value): value is string => value !== undefined));
+        this.timestampOrdering = info.timestampPath !== undefined;
+        this.hasSequencePath = info.sequencePath !== undefined;
+        this.primaryPathKey = this.timestampOrdering ? info.timestampPathKey : info.sequencePathKey;
 
         this.toPoll = new Heap((a, b) => a.chain.ordering(b.chain));
         this.launchedRelations = new Heap((a, b) => a.ordering(b));
@@ -143,7 +151,7 @@ export class OrderedStrategy {
                     if (newChain.ordering(chain) >= 0) {
                         // Only launch the fetching of this relation if it hasn't been launched already
                         if (!this.launchedRelations.contains(newChain, (e, o) => e.target === o.target)) {
-                            this.launchedRelations.push(newChain);
+                            this.launchRelation(newChain);
                             const newExpected = new Set([...from.expected, from.target]);
                             toFetch.push({ chain: newChain, expected: newExpected });
                         }
@@ -183,6 +191,7 @@ export class OrderedStrategy {
             },
             done: async (fragment: FetchedPage, { chain, index }) => {
                 this.logger.debug(`[memberNotifier - done] Member extraction done for ${chain.target}`);
+                this.relationFinished.set(chain, true);
                 await this.modulator.finished(index);
                 this.notifier.fragment(fragment, {});
 
@@ -205,6 +214,8 @@ export class OrderedStrategy {
             new Heap((a, b) => a.item.chain.ordering(b.item.chain)),
             {
                 ready: async ({ item: { chain, expected }, index }) => {
+                    // Restored pending fragments are queued by the modulator.
+                    if (!this.relationFinished.has(chain)) this.launchRelation(chain);
                     const preloadedPage = this.preloadedPages.get(chain.target);
                     if (preloadedPage) {
                         this.preloadedPages.delete(chain.target);
@@ -223,6 +234,7 @@ export class OrderedStrategy {
                         );
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
+                        this.relationFinished.set(chain, true);
                         await this.modulator.finished(index);
                         // See if we can emit some members or end the process
                         this.background(this.checkEmit());
@@ -232,40 +244,45 @@ export class OrderedStrategy {
             (inp: NodeChain) => {
                 // Serialize: Convert Set to Array for JSON storage
                 return {
-                    chain: inp.chain,
+                    chain: {
+                        source: inp.chain.source,
+                        target: inp.chain.target,
+                        relations: inp.chain.relations.map(({ important, value }) => ({
+                            important,
+                            value: value instanceof Date ? value.toISOString() : value,
+                            valueType: value instanceof Date ? "date" : "raw",
+                        })),
+                    },
                     expected: Array.from(inp.expected),
                 };
             },
             (inp: unknown) => {
                 const { chain, expected } = <{
-                    chain: RelationChain;
+                    chain: { source: string; target: string; relations: StoredRelation[] };
                     expected: string[];
                 }>inp;
-                const cmp =
-                    this.ordered === "ascending"
-                        ? (a: RelationValue, b: RelationValue) => {
-                            if (a > b) return 1;
-                            if (a < b) return -1;
-                            return 0;
-                        }
-                        : (a: RelationValue, b: RelationValue) => {
-                            if (a > b) return -1;
-                            if (a < b) return 1;
-                            return 0;
-                        };
-
-                // Try to parse relations as dates
-                const relations = chain.relations.map((r) => ({
-                    ...r,
-                    value: parseRelationValue(r.value),
-                }));
+                const relations = chain.relations.map(({ important, value, valueType }) => {
+                    // In legacy state the relation's path was not saved. Only
+                    // restore a date automatically for timestamp-only streams.
+                    const legacyDate = valueType === undefined && this.timestampOrdering &&
+                        !this.hasSequencePath && typeof value === "string" &&
+                        /^[+-]?\d{4,6}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value);
+                    if ((valueType === "date" || legacyDate) && typeof value === "string") {
+                        const date = new Date(value);
+                        if (!Number.isNaN(date.getTime())) return { important, value: date };
+                    }
+                    return {
+                        important: important && !(valueType === undefined && this.timestampOrdering && this.hasSequencePath),
+                        value,
+                    };
+                });
                 return {
                     chain: new RelationChain(
                         chain.source,
                         chain.target,
                         relations,
                         undefined,
-                        cmp,
+                        this.compareRelations,
                     ),
                     expected: new Set(expected),
                 };
@@ -277,7 +294,7 @@ export class OrderedStrategy {
         /**
          * Member heap that determines their emission order
          */
-        this.members = new Heap((a, b) => compareMembers(a, b, ordered));
+        this.members = new Heap((a, b) => compareMembers(a, b, ordered, this.timestampOrdering));
     }
 
     async start(
@@ -323,35 +340,30 @@ export class OrderedStrategy {
         if (await this.modulator.pendingCount() < 1) {
             this.logger.debug(`[start] Starting at ${url}`);
 
-            // Setting comparator functions for relations
-            const cmp = (a: RelationValue, b: RelationValue) => {
-                if (a > b) return 1;
-                if (a < b) return -1;
-                return 0;
-            };
-            const relCmp = this.ordered === "ascending"
-                ? (a: RelationValue, b: RelationValue) => +1 * cmp(a, b)
-                : (a: RelationValue, b: RelationValue) => -1 * cmp(a, b);
-
             // Pushing the root relation
             const relation = new RelationChain(
                 "",
                 url,
                 [],
                 undefined,
-                relCmp,
+                this.compareRelations,
             ).push(url, {
                 important: false,
                 value: 0,
             });
 
-            this.launchedRelations.push(relation);
+            this.launchRelation(relation);
             this.background(this.modulator.push([{ chain: relation, expected: new Set() }]));
         } else {
             this.logger.debug(
                 "[start] Things are already inflight, not adding start url",
             );
         }
+    }
+
+    private launchRelation(chain: RelationChain) {
+        this.relationFinished.set(chain, false);
+        this.launchedRelations.push(chain);
     }
 
     async cancel() {
@@ -421,7 +433,7 @@ export class OrderedStrategy {
                     this.toPoll.clear();
 
                     for (const rel of toPollArray) {
-                        this.launchedRelations.push(rel.chain);
+                        this.launchRelation(rel.chain);
                     }
                     this.background(this.modulator.push(toPollArray));
                 }, this.pollInterval || 1000);
@@ -438,99 +450,31 @@ export class OrderedStrategy {
      * Sorting in ascending order: if a relation comes in with a LT relation, then that relation is not important, because it can be handled later
      * Sorting in descending order: if a relation comes in with a GT relation, then that relation is not important, because it can be handled later
      */
+    private compareRelations = (a: OrderValue, b: OrderValue): number =>
+        (this.ordered === "ascending" ? 1 : -1) * compareOrderValues(a, b);
+
     private extractRelation(rel: FoundRelation): SimpleRelation {
-        const val = (s: string) => {
-            return parseRelationValue(s);
-        };
-        let value = undefined;
-        const betweens = rel.relations
-            .filter((x) => x.type.value === TREE.custom("InBetweenRelation"))
-            .flatMap((x) => x.value || [])
-            .flatMap((x) => {
-                let dataType = undefined;
-                if (x.termType === "Literal") {
-                    dataType = x.datatype.value;
-                }
-                const between = parseInBetweenRelation(x.value, dataType, "Z");
-                if (between) {
-                    return [between];
-                }
-                return [];
-            });
+        let bound: OrderValue | undefined;
+        const relationTypes = this.ordered === "ascending" ? GTRs : LTR;
+        for (const relation of rel.relations) {
+            if (this.primaryPathKey === undefined || relation.pathKey !== this.primaryPathKey) continue;
+            const term = relation.value?.[0];
+            if (!term) continue;
 
-        if (this.ordered === "ascending") {
-            value = betweens
-                .map((x) => <undefined | number | Date>x.min)
-                .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
-                    if (a > b) {
-                        return b;
-                    } else {
-                        return a;
-                    }
-                }, value);
+            let value: OrderValue | undefined;
+            if (this.timestampOrdering && relation.type.value === TREE.custom("InBetweenRelation")) {
+                const datatype = term.termType === "Literal" ? term.datatype.value : undefined;
+                const interval = parseInBetweenRelation(term.value, datatype, "Z");
+                value = this.ordered === "ascending" ? interval?.min : interval?.max;
+            } else if (relationTypes.some((type) => type.equals(relation.type))) {
+                const date = this.timestampOrdering ? new Date(term.value) : undefined;
+                value = date && !Number.isNaN(date.getTime()) ? date : termToOrderValue(term);
+            }
+            if (value !== undefined && (bound === undefined || this.compareRelations(value, bound) < 0)) {
+                bound = value;
+            }
         }
-        if (this.ordered === "descending") {
-            value = betweens
-                .map((x) => <undefined | number | Date>x.max)
-                .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
-                    if (a > b) {
-                        return a;
-                    } else {
-                        return b;
-                    }
-                }, value);
-        }
-
-        if (this.ordered === "ascending") {
-            value = rel.relations
-                .filter((x) => GTRs.some((gr) => x.type.value === gr.value))
-                .filter((x) => this.matchesOrderingPath(x))
-                .filter((a) => a.value)
-                .map((a) => <undefined | number | Date>val(a.value![0].value))
-                .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
-                    if (a > b) {
-                        return b;
-                    } else {
-                        return a;
-                    }
-                }, value);
-        } else if (this.ordered === "descending") {
-            value = rel.relations
-                .filter((x) => LTR.some((gr) => x.type.value === gr.value))
-                .filter((x) => this.matchesOrderingPath(x))
-                .filter((a) => a.value)
-                .map((a) => <undefined | number | Date>val(a.value![0].value))
-                .reduce((a, b) => {
-                    if (!a) return b;
-                    if (!b) return a;
-                    if (a > b) {
-                        return a;
-                    } else {
-                        return b;
-                    }
-                }, value);
-        }
-        if (value !== undefined) {
-            return {
-                important: true,
-                value,
-            };
-        } else {
-            return {
-                important: false,
-                value: 0,
-            };
-        }
-    }
-
-    private matchesOrderingPath(relation: FoundRelation["relations"][number]): boolean {
-        return relation.pathKey !== undefined && this.orderingPathKeys.has(relation.pathKey);
+        return { important: bound !== undefined, value: bound ?? 0 };
     }
 
     private async handleFetched(page: FetchedPage, state: { chain: RelationChain, index: number }) {
@@ -609,7 +553,7 @@ export class OrderedStrategy {
             }
 
             this.logger.debug("[_checkEmit] Marker found: {important: " + marker.important
-                + ", value: " + new Date(marker.value).toISOString() + "}");
+                + ", value: " + String(marker.value) + "}");
 
             // A relation should only be blocked by PEER branches that are in transit.
             // It should NOT be blocked by its own descendants or by itself.
@@ -626,32 +570,23 @@ export class OrderedStrategy {
                 )
             );
 
-            if (inTransit) {
-                this.logger.debug("[_checkEmit] In transit (blocking): " + inTransit?.chain.target);
+            const completed = this.relationFinished.get(head);
+            if (inTransit || (!head.important() && !completed)) {
+                this.logger.debug("[_checkEmit] In transit (blocking): " + (inTransit?.chain.target ?? head.target));
                 break;
             }
 
             // Proceed to emit some members in order
             let member = this.members.pop();
             while (member) {
-                // Euhm yeah, what to do if there is no timestamp?
-                if (member.order === undefined) {
-                    this.logger.warn("[_checkEmit] Member " + member.id.value + " has no ordering value, emitting it anyway");
-                    const streamed = this.notifier.member(member, {}) as boolean;
-                    if (streamed) {
-                        await this.modulator.addEmitted(member.id.value);
-                    }
-                } else if (
-                    !marker.important || (
-                        this.ordered == "ascending"
-                            ? (member.order) < (marker.value)
-                            : (member.order) > (marker.value)
-                    )
-                ) {
+                const order = this.timestampOrdering ? member.timestamp : member.sequence;
+                if (order === undefined || !marker.important ||
+                    !comparableOrderValues(order, marker.value) ||
+                    this.compareRelations(order, marker.value) < 0) {
                     await this.emitIfNotOld(member);
                 } else {
                     this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with ordering value "
-                        + String(member.order) + " didn't fit in the marker range");
+                        + String(order) + " didn't fit in the marker range");
                     break;
                 }
                 member = this.members.pop();
@@ -662,7 +597,9 @@ export class OrderedStrategy {
                 this.members.push(member);
             }
 
-            // At this point we are done with this relation
+            // A bound can let us emit members while its page is still pending.
+            // Keep it in the heap until that page has finished extraction.
+            if (!completed) break;
             head = this.launchedRelations.pop();
         }
 
@@ -700,25 +637,21 @@ export class OrderedStrategy {
     }
 }
 
-function parseRelationValue(value: RelationValue): RelationValue {
-    if (typeof value !== "string") {
-        return value;
+function comparableOrderValues(a: OrderValue, b: OrderValue): boolean {
+    if (isNumericOrderValue(a) || isNumericOrderValue(b)) {
+        return (isNumericOrderValue(a) || typeof a === "number") &&
+            (isNumericOrderValue(b) || typeof b === "number");
     }
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric)) {
-        return numeric;
-    }
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) {
-        return date;
-    }
-    return value;
+    if (a instanceof Date || b instanceof Date) return a instanceof Date && b instanceof Date;
+    return typeof a === typeof b;
 }
 
-function compareMembers(a: Member, b: Member, ordered: Ordered): number {
+function compareMembers(a: Member, b: Member, ordered: Ordered, timestampOrdering: boolean): number {
     if (a.id.equals(b.id)) return 0;
-    let order = compareOrderValues(a.order, b.order);
-    if (order === 0 && a.timestamp !== undefined && b.timestamp !== undefined) {
+    let order = timestampOrdering
+        ? compareOrderValues(a.timestamp, b.timestamp)
+        : compareOrderValues(a.sequence, b.sequence);
+    if (order === 0 && timestampOrdering) {
         order = compareOrderValues(a.sequence, b.sequence);
     }
     if (order !== 0) {
@@ -737,18 +670,16 @@ function compareOrderValues(
     if (a === undefined && b === undefined) return 0;
     if (a === undefined) return 1;
     if (b === undefined) return -1;
-    if (isNumericOrderValue(a) && isNumericOrderValue(b)) {
-        return compareNumericStrings(a.value, b.value);
+    if ((isNumericOrderValue(a) || typeof a === "number") &&
+        (isNumericOrderValue(b) || typeof b === "number")) {
+        return compareNumericStrings(isNumericOrderValue(a) ? a.value : String(a),
+            isNumericOrderValue(b) ? b.value : String(b));
     }
     const left = a instanceof Date ? a.getTime() : a;
     const right = b instanceof Date ? b.getTime() : b;
     if (left < right) return -1;
     if (left > right) return 1;
     return 0;
-}
-
-function isNumericOrderValue(value: OrderValue): value is NumericOrderValue {
-    return typeof value === "object" && !(value instanceof Date) && value.type === "numeric";
 }
 
 function compareNumericStrings(a: string, b: string): number {

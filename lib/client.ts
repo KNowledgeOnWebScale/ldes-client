@@ -629,7 +629,7 @@ async function getInfo(
     // Only try to dereference the view if we are not dealing with a local dump
     if (isLocalDump) {
         logger.debug("Ignoring view since this is a local dump");
-    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0) {
+    } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0 || sequencePaths.length === 0) {
         let tryAgainUrl = viewId.value;
         if (config.urlIsView) {
             tryAgainUrl = ldesId.value;

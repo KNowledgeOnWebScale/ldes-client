@@ -4,8 +4,7 @@ import { RelationChain } from "../../lib/ldes1";
 
 import type { SimpleRelation } from "../../lib/ldes1";
 
-// This probably should not be here
-type Comparable = number | string | Date;
+import type { OrderValue } from "../../lib/types";
 
 describe("Chain relations", () => {
     test("correct chaining", () => {
@@ -132,8 +131,8 @@ describe("Chain relations", () => {
         const params: [
             SimpleRelation[],
             SimpleRelation | undefined,
-            (a: Comparable, b: Comparable) => number,
-        ] = [[], undefined, (a: Comparable, b: Comparable) => (a == b ? 0 : a < b ? 1 : -1)];
+            (a: OrderValue, b: OrderValue) => number,
+        ] = [[], undefined, (a: OrderValue, b: OrderValue) => (a == b ? 0 : a < b ? 1 : -1)];
 
         let value1 = new RelationChain("", "", ...params).push("", {
             value: 0,
@@ -207,8 +206,8 @@ describe("Chain relations", () => {
         const params: [
             SimpleRelation[],
             SimpleRelation | undefined,
-            (a: Comparable, b: Comparable) => number,
-        ] = [[], undefined, (a: Comparable, b: Comparable) => (a == b ? 0 : a < b ? 1 : -1)];
+            (a: OrderValue, b: OrderValue) => number,
+        ] = [[], undefined, (a: OrderValue, b: OrderValue) => (a == b ? 0 : a < b ? 1 : -1)];
 
         const value1 = new RelationChain("", "", ...params);
         const value2 = new RelationChain("", "", ...params).push("", {
@@ -235,8 +234,8 @@ describe("Chain relations", () => {
         const params: [
             SimpleRelation[],
             SimpleRelation | undefined,
-            (a: Comparable, b: Comparable) => number,
-        ] = [[], undefined, (a: Comparable, b: Comparable) => (a == b ? 0 : a < b ? 1 : -1)];
+            (a: OrderValue, b: OrderValue) => number,
+        ] = [[], undefined, (a: OrderValue, b: OrderValue) => (a == b ? 0 : a < b ? 1 : -1)];
 
         const value0 = new RelationChain("", "", ...params).push("", {
             value: new Date("2001-03-01T00:00:00.000Z"),

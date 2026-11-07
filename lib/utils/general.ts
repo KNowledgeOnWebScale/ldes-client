@@ -161,6 +161,7 @@ export function memberFromQuads(
     isVersionOfPath: Term | undefined,
     created?: Date,
     pathStore?: RdfStore,
+    pageData?: RdfStore,
 ): Member {
     // Indexing every member into its own store is expensive, so only do it when
     // a path actually requires the store (complex SHACL paths). Plain predicate
@@ -194,7 +195,10 @@ export function memberFromQuads(
                 : date;
         }
     }
-    const sequence = extractSequenceValue(sequencePath, resolvePath);
+    const sequence = extractSequenceValue(sequencePath, resolvePath) ??
+        (pageData && extractSequenceValue(sequencePath, (path) =>
+            resolveShaclPath(pageData, member, path, pathStore ?? pageData)[0],
+        ));
     const order = timestamp ?? sequence;
     const transactionFinalized = extractFinalizedValue(
         transactionFinalizedPath,
@@ -291,7 +295,7 @@ const dateDatatypes = new Set([
     "http://www.w3.org/2001/XMLSchema#dateTimeStamp",
 ]);
 
-function termToOrderValue(term: Term): OrderValue {
+export function termToOrderValue(term: Term): OrderValue {
     if (term.termType === "Literal") {
         if (numericDatatypes.has(term.datatype.value)) {
             return { type: "numeric", value: term.value };
