@@ -1,12 +1,14 @@
 import { Readable } from "stream";
 import RdfParsers from "ldfetch/lib/RdfParsers.js";
-import { FetchDocumentLoader } from "jsonld-context-parser";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
 import { errorMessage } from "../utils/general";
+import { ContextCache, uncachedDocumentLoader } from "./contextCache";
 
 import type { Quad, Stream } from "@rdfjs/types";
 import type { EventEmitter } from "events";
+import type HttpCache from "ldfetch/lib/HttpCache.js";
+import type { ContextCacheOptions } from "./contextCache";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
@@ -160,9 +162,6 @@ type Accept = (info: TransferInfo, transfer: Transfer) => void;
 
 /** What a request for a document gave: a log without messages (not modified, gone), or a transfer that is being read */
 type Opened = { kind: "empty"; log: MessageLog } | { kind: "parsed" };
-
-const CONTEXT_TTL = 10 * 60 * 1000;
-const MAX_CACHED_CONTEXTS = 100;
 
 const JSON_TYPES = ["application/ld+json", "application/json"];
 
@@ -390,33 +389,29 @@ export class MessageLog implements AsyncIterable<Quad[]> {
 export class LdfetchDereferencer implements MessageDereferencer {
     /**
      * External JSON-LD contexts, which clients SHOULD cache: the pages of an LDES usually share them.
-     * ldfetch creates a new document loader for every document, which does not cache.
+     * They are cached following HTTP caching semantics, with a minimum TTL (see {@link ContextCacheOptions}).
+     * Pages themselves are never cached. Undefined when caching contexts is disabled.
      */
-    private contexts = new Map<string, { loaded: ReturnType<FetchDocumentLoader["load"]>; expires: number }>();
+    private contexts?: ContextCache;
 
+    /**
+     * @param accept the Accept header for IRIs that are dereferenced
+     * @param contextCache how external JSON-LD contexts are cached: options of the HTTP cache of ldfetch
+     * (`minTTL`, `maxTTL`, `store`, ...), an `HttpCache` to share, or `false` to not cache them.
+     * The default follows the cache headers, but keeps a context for at least 10 minutes.
+     * @param transferRetry what to do when the transfer of a document is interrupted
+     */
     constructor(
         private readonly accept: string = DEFAULT_ACCEPT,
+        contextCache?: ContextCacheOptions | HttpCache | false,
         private readonly transferRetry: TransferRetry = DEFAULT_TRANSFER_RETRY,
-    ) {}
+    ) {
+        if (contextCache !== false) this.contexts = new ContextCache(contextCache);
+    }
 
-    private cachedDocumentLoader(fetch_f: typeof fetch) {
-        const loader = new FetchDocumentLoader(fetch_f);
-        return {
-            load: (url: string) => {
-                const now = Date.now();
-                let entry = this.contexts.get(url);
-                if (!entry || entry.expires < now) {
-                    const loaded = loader.load(url);
-                    entry = { loaded, expires: now + CONTEXT_TTL };
-                    if (this.contexts.size >= MAX_CACHED_CONTEXTS) {
-                        this.contexts.delete(this.contexts.keys().next().value!);
-                    }
-                    this.contexts.set(url, entry);
-                    loaded.catch(() => this.contexts.delete(url));
-                }
-                return entry.loaded;
-            },
-        };
+    /** Statistics of the context cache (hits, misses, revalidations, stores), undefined when it is disabled */
+    getContextCacheStats() {
+        return this.contexts?.getStats();
     }
 
     /** Dereferences an IRI to a stream of quads, in which all messages (if any) are merged */
@@ -566,7 +561,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             });
             const jsonld = new JsonLdParser({
                 baseIRI: url,
-                documentLoader: this.cachedDocumentLoader(fetch_f),
+                documentLoader: this.contexts?.documentLoader(fetch_f) ?? uncachedDocumentLoader(fetch_f),
             });
             jsonld.write(Buffer.concat(chunks).toString("utf8"));
             jsonld.end();

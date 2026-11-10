@@ -7,6 +7,7 @@ import { getLoggerFor, memberComment } from "../lib/utils";
 import { replicateLDES, enhanced_fetch, intoConfig, processConditionFile } from "../lib/client";
 
 import type { FetchConfig } from "../lib/fetcher";
+import type { ContextCacheOptions } from "../lib/fetcher/contextCache";
 import type { Ordered, LDESInfo } from "../lib/types";
 
 const program = new Command();
@@ -30,6 +31,7 @@ let defaultTimezone: string | undefined;
 let includeMetadata: boolean = false;
 let startFresh: boolean = false;
 let comment: boolean = false;
+let contextCache: ContextCacheOptions | false | undefined;
 let format: "trig-messages" | "n-quads" = "trig-messages";
 
 const fetch_config: FetchConfig = {
@@ -56,6 +58,8 @@ program
             .choices(["trig-messages", "n-quads"])
             .default("trig-messages"),
     )
+    .option("--context-min-ttl <seconds>", "keep external JSON-LD contexts for at least this long, whatever their cache headers say", "600")
+    .option("--no-context-cache", "don't cache external JSON-LD contexts")
     .option("--http-codes [codes...]", "What HTTP error codes to retry")
     .option("--last-version-only", "emit only the latest available version of every member")
     .option("-l --loose", "ignores if the page URL does not correspond to the tree:Node IRI when following tree:relation")
@@ -91,6 +95,13 @@ program
         defaultTimezone = program.defaultTimezone;
         includeMetadata = program.metadata;
         startFresh = program.startFresh;
+        const minTTL = Number(program.contextMinTtl);
+        if (!(minTTL >= 0)) {
+            console.error(`--context-min-ttl ${program.contextMinTtl} is not a number of seconds`);
+            process.exit(1);
+        }
+        // --no-context-cache gives contextCache === false
+        contextCache = program.contextCache === false ? false : { minTTL };
         format = program.format;
         comment = program.comment;
 
@@ -156,6 +167,7 @@ async function main() {
             includeMetadata,
             concurrentFetches: fetch_config.concurrent,
             startFresh,
+            contextCache,
             // A page of which the transfer is interrupted is requested again as often as a request that fails with an HTTP code
             transferRetry: { maxRetries: fetch_config.retry!.maxRetries },
             fetch: enhanced_fetch(fetch_config),

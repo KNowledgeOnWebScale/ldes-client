@@ -264,7 +264,7 @@ describe("A transfer that is interrupted", () => {
             for await (const message of log) sizes.push(message.length);
             return sizes;
         };
-        const dereferencer = () => new LdfetchDereferencer(undefined, { maxRetries: 3, base: 1 });
+        const dereferencer = () => new LdfetchDereferencer(undefined, undefined, { maxRetries: 3, base: 1 });
 
         test("continues after the messages that were read, without repeating them", async () => {
             // The first transfer has two messages (the second ends where the connection is lost, so only the first is complete)

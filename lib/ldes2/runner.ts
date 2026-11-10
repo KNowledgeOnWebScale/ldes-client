@@ -22,7 +22,8 @@ import type { Key } from "./key";
 import type { FetchedPage, LDESInfo, Member } from "../types";
 import type { MessageDereferencer, MessageLog } from "../fetcher/ldfetchDereferencer";
 import type { Gate } from "./gate";
-import type { Bookmark, StreamContext, Traversal } from "./traversal";
+import type { Bookmark, SavedBookmark, StreamContext, Traversal } from "./traversal";
+import { loadBookmark, saveBookmark } from "./traversal";
 import type { Description, OrderMode } from "./description";
 
 const logger = getLoggerFor("Ldes2Client");
@@ -43,7 +44,7 @@ export type Ldes2Hooks = {
 export type Ldes2Start = {
     config: Config;
     dereferencer: MessageDereferencer;
-    bookmarks?: Level<string, Bookmark>;
+    bookmarks?: Level<string, SavedBookmark>;
     root: { log: MessageLog; first: Quad[] | undefined };
     hooks: Ldes2Hooks;
     /** Called as soon as the context information is read, before any member is emitted */
@@ -151,12 +152,13 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
     const rootUrl = start.root.log.url;
     const bookmarkKey = config.url;
 
-    let bookmark: Bookmark = { members: [] };
+    let bookmark: Bookmark = { members: new Set() };
     if (start.bookmarks) {
-        bookmark = (await start.bookmarks.get(bookmarkKey).catch(() => undefined)) ?? bookmark;
+        const saved = await start.bookmarks.get(bookmarkKey).catch(() => undefined);
+        if (saved) bookmark = loadBookmark(saved);
     }
     const persist = async () => {
-        await start.bookmarks?.put(bookmarkKey, bookmark).catch((ex) => {
+        await start.bookmarks?.put(bookmarkKey, saveBookmark(bookmark)).catch((ex) => {
             logger.error(`Could not save the bookmark: ${ex}`);
         });
     };

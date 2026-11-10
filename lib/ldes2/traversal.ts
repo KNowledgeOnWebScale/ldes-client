@@ -34,13 +34,25 @@ const PREFETCH_BUFFERED_MESSAGES = 64;
 /** The state that is needed to continue a synchronization: it stays small, no matter how long the stream becomes */
 export type Bookmark = {
     key?: Key;
-    members: string[];
+    /** The identifiers of the emitted members that share the key: a set, because many members can share a key */
+    members: Set<string>;
     /**
      * Pages that are marked immutable by the page that links to them, that have been read completely, and that have no
      * relations: they do not need to be fetched again as long as a relation links to them.
      */
     immutable?: string[];
 };
+
+/** A bookmark as it is saved in the state of the client, which is JSON: the members are an array */
+export type SavedBookmark = Omit<Bookmark, "members"> & { members: string[] };
+
+export function saveBookmark(bookmark: Bookmark): SavedBookmark {
+    return { ...bookmark, members: [...bookmark.members] };
+}
+
+export function loadBookmark(saved: SavedBookmark): Bookmark {
+    return { ...saved, members: new Set(saved.members) };
+}
 
 /** The paths and rules of the `ldes:EventStream` that are needed to read members */
 export type StreamContext = {
@@ -359,8 +371,8 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 const comparison = bookmark.key ? compareKeysCertain(next.key, bookmark.key) : { order: 1, certain: true };
                 const skip =
                     (comparison.certain && comparison.order < 0) ||
-                    (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.includes(next.id.value))) ||
-                    (!comparison.certain && bookmark.members.includes(next.id.value));
+                    (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.has(next.id.value))) ||
+                    (!comparison.certain && bookmark.members.has(next.id.value));
                 if (!skip) {
                     if (!(await traversal.emit(toMember(context, next)))) {
                         return emitted;
@@ -369,12 +381,12 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     if (!comparison.certain) {
                         // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
                         bookmark.key = latestEarliest(bookmark.key!, next.key);
-                        bookmark.members.push(next.id.value);
+                        bookmark.members.add(next.id.value);
                     } else if (comparison.order > 0) {
                         bookmark.key = next.key;
-                        bookmark.members = [next.id.value];
+                        bookmark.members = new Set([next.id.value]);
                     } else {
-                        bookmark.members.push(next.id.value);
+                        bookmark.members.add(next.id.value);
                     }
                 }
                 await page.advance();

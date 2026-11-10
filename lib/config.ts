@@ -4,6 +4,7 @@ import { enhanced_fetch } from "./fetcher/enhancedFetch";
 import type { NamedNode, Quad } from "@rdfjs/types";
 import type { Condition } from "./condition";
 import type { TransferRetry } from "./fetcher/ldfetchDereferencer";
+import type { ContextCacheOptions } from "./fetcher/contextCache";
 
 export interface ShapeConfig {
     quads: Quad[];
@@ -36,6 +37,13 @@ export interface Config {
     concurrentFetches?: number;
     startFresh?: boolean;
     fetch?: typeof fetch;
+    /**
+     * How external JSON-LD contexts (such as https://schema.org) are cached. Only these are cached, not the pages.
+     * They follow HTTP caching semantics, but are kept for at least `minTTL` seconds (default: 600),
+     * as contexts hardly ever change and are often served without useful cache headers.
+     * Pass `false` to not cache contexts.
+     */
+    contextCache?: ContextCacheOptions | false;
     /**
      * What to do when the server drops the connection while a page is being transferred, after it sent a successful response.
      * The page is requested again, with a doubling time between the requests. The default is 5 new requests, starting after 500 ms.
