@@ -1,6 +1,6 @@
 # LDES client
 
-[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg)](https://www.npmjs.com/package/ldes-client) [![LDES conformance](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml) [![Performance](https://github.com/rdf-connect/ldes-client/actions/workflows/perf-test.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/perf-test.yml) [![License: MIT](https://img.shields.io/npm/l/ldes-client.svg)](#license)
+[![CI tests](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ci-tests.yml) [![npm](https://img.shields.io/npm/v/ldes-client.svg)](https://www.npmjs.com/package/ldes-client) [![LDES conformance](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml/badge.svg)](https://github.com/rdf-connect/ldes-client/actions/workflows/ldes-conformance.yml)
 
 Replicate a [Linked Data Event Stream (LDES)](https://w3id.org/ldes/specification), filter its members, or keep a local consumer synchronized with new data. Use the client from the command line, as a JavaScript/TypeScript library, or in an [RDF-Connect](https://rdf-connect.github.io/) pipeline.
 
@@ -20,10 +20,10 @@ Read all currently available members and exit:
 ldes-client https://example.org/ldes > members.trig
 ```
 
-Keep polling for new members, saving state so a later run can resume:
+Keep polling for new members:
 
 ```sh
-ldes-client https://example.org/ldes --follow --save ./state
+ldes-client https://example.org/ldes --follow
 ```
 
 Filter by time and emit members in ascending order:
@@ -35,6 +35,18 @@ ldes-client https://example.org/ldes \
 ```
 
 There are no separate replication or synchronization subcommands: `--follow` keeps the process running after it catches up. The client detects the LDES version from the root page.
+
+### Saving state and resuming
+
+Give `--save` a path to save what the client has read:
+
+```sh
+ldes-client https://example.org/ldes --follow --save ./state > members.trig
+```
+
+The state is saved while the client runs and when you stop it with Ctrl-C. To resume, run the same command with the same `--save` path: the client continues from the saved state and does not emit the members it already emitted, so it only produces what is new. Without `--follow`, it reads what is new and exits, which is how you synchronize on a schedule (for example with cron). Append the output (`>>`) if you want to keep the earlier members in the same file.
+
+Use `--start-fresh` to discard the saved state and read everything again. Use a separate state path for every LDES you replicate. In the library, the same is done with `statePath` (or a custom `storage`, see [State Management](#state-management)).
 
 ## Command line
 
@@ -166,6 +178,10 @@ replicateLDES({
   contextCache: { minTTL: 3600 },
 });
 ```
+
+### Supported runtimes
+
+The client runs on Node.js, in the browser and on Cloudflare Workers (workerd). We make sure that it keeps running on Cloudflare Workers: a CI job (`test-worker`) runs the built package in workerd, so that a change that breaks it fails the build. To keep it working, the core does not depend on the filesystem, native modules or process signals: LevelDB and Winston are only loaded where they are available, state goes through the pluggable `Storage` interface (see [State Management](#state-management)), and network access goes through `fetch`. A change that cannot keep this must say so in the pull request and in [CHANGELOG.md](CHANGELOG.md).
 
 ## RDF-Connect
 
@@ -331,6 +347,7 @@ Additional checks:
 | Command | Purpose |
 | --- | --- |
 | `npm run test:browser` | Browser tests using Playwright and Chromium. Install Chromium first with `npx playwright install chromium`. |
+| `npm run build && cd test-worker && npm ci && npm test` | Integration tests in a local Cloudflare Workers runtime (workerd). |
 | `npm run test:conformance` | External LDES 1.0 conformance suite. |
 | `npx vitest run tests/ldes2` | LDES 2.0 integration tests against local mock servers. Add `RIVERBENCH=1` to include the network test. |
 | `npm run test:perf` | Benchmark statistics and regression-check tests. |
@@ -339,7 +356,7 @@ Additional checks:
 
 Conformance testing uses `../ldes-client-conformance-test-suite`, cloning it if absent and respecting an existing checkout. Reports are written to `reports/conformance/`. Use `npm run test:conformance -- --no-fail` to generate reports without failing on conformance results.
 
-CI runs lint, type checking, Node.js and browser tests, conformance checks, and performance regression checks. Performance checks also run on pull requests, comparing the proposed code with its base commit; see [the performance workflow](.github/workflows/perf-test.yml). Husky and lint-staged run checks on staged files before commits. Update [CHANGELOG.md](CHANGELOG.md) for releases; `npm publish` builds the package first.
+CI runs lint, type checking, Node.js and browser tests, the Cloudflare Workers (workerd) integration tests in `test-worker/`, conformance checks, and performance regression checks. Performance checks also run on pull requests, comparing the proposed code with its base commit; see [the performance workflow](.github/workflows/perf-test.yml). Husky and lint-staged run checks on staged files before commits. Update [CHANGELOG.md](CHANGELOG.md) for releases; `npm publish` builds the package first.
 
 ### Source layout
 
