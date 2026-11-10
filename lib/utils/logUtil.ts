@@ -1,3 +1,5 @@
+import { loadWinston } from "#load-winston";
+
 import type { Logform } from "winston";
 import type { ConsoleTransportInstance } from "winston/lib/winston/transports";
 
@@ -62,17 +64,7 @@ class ConsoleLogger implements ILogger {
     }
 }
 
-let winston: typeof import("winston") | undefined;
-if (typeof process !== "undefined" && process.release?.name === "node") {
-    try {
-        const m = await import("winston");
-        winston = m.default || m;
-    } catch (e) {
-        // If winston fails to load in Node.js (e.g., not installed),
-        // we'll fall back to ConsoleLogger.
-        console.warn("Winston could not be loaded in Node.js environment. Falling back to ConsoleLogger.", e);
-    }
-}
+const winston = loadWinston();
 
 let consoleTransport: ConsoleTransportInstance | undefined;
 

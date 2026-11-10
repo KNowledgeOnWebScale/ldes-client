@@ -1,6 +1,6 @@
 import { getLoggerFor } from "../../utils/";
 import { Condition } from "../../condition";
-import { Level } from "level";
+import type { KVStore } from "../../storage";
 
 import type { ClientStateManager } from "../../state";
 import type { Notifier } from "../../types";
@@ -155,14 +155,14 @@ export interface Modulator<F, M> {
 }
 
 type ModulatorState<F, M> = {
-    condition: Level<number, string>;
-    todo: Level<number, F>;
-    inflight: Level<number, F>;
-    mutable: Level<string, F>;
-    emitted: Level<string, boolean>;
-    immutable?: Level<string, boolean>;
-    unemitted?: Level<string, M>;
-    latestVersions?: Level<string, number>;
+    condition: KVStore<number, string>;
+    todo: KVStore<number, F>;
+    inflight: KVStore<number, F>;
+    mutable: KVStore<string, F>;
+    emitted: KVStore<string, boolean>;
+    immutable?: KVStore<string, boolean>;
+    unemitted?: KVStore<string, M>;
+    latestVersions?: KVStore<string, number>;
     fragmentEncoder?: (item: F) => unknown;
     fragmentParser?: (item: unknown) => F;
     memberEncoder?: (item: M) => unknown;
@@ -528,7 +528,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
             const p = this.versionStateSync.then(async () => {
                 // Again, if things are shutting down, relay back that we must not emit new notifications
                 if (this.closed) throw new Error("Modulator is closed");
-                const latestVersion = await latestVersions.get(memberId).catch(() => undefined);
+                const latestVersion = await latestVersions.get(memberId);
                 if (latestVersion === undefined || version > latestVersion) {
                     // This member is a newer version
                     await latestVersions.put(memberId, version);
@@ -598,9 +598,9 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         try {
             return await fn(this.modulatorState);
         } catch (err) {
-            if ((err as Error & { code: string }).code === "LEVEL_DATABASE_NOT_OPEN") {
-                return def;
-            }
+            // Race with shutdown: storage may close between the closed check
+            // and the actual operation. Return the default rather than crash.
+            if (this.closed) return def;
             throw err;
         }
     }

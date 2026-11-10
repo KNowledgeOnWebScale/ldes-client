@@ -12,6 +12,6 @@ export default defineConfig({
                 },
             },
         },
-        exclude: ["node_modules", "dist", "tests/browser/**/*"],
+        exclude: ["node_modules", "dist", "tests/browser/**/*", "test-worker/**/*"],
     },
 });
