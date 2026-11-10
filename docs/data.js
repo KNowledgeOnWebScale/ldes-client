@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794319054189,
+  "lastUpdate": 1794319367968,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -9221,6 +9221,102 @@ window.BENCHMARK_DATA = {
             "value": 3981.4923196196955,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.249–0.253 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "90bf673b3650dab657cd2dab8a12af8afdcd4b2b",
+          "message": "Merge pull request #163 from KNowledgeOnWebScale/speedup/bookmark-lookup\n\nLook up the LDES 2.0 bookmark in a Set",
+          "timestamp": "2026-11-10T14:59:03+01:00",
+          "tree_id": "434c49c18fdda950c8363d54f1176415d2c682da",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/90bf673b3650dab657cd2dab8a12af8afdcd4b2b"
+        },
+        "date": 1794319367082,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 10028.735566680125,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.986–1.126 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 29321.957930578894,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.337–0.347 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 32451.60631492163,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.305–0.309 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 10434.184826081082,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.911–1.048 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 35322.40582431996,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.276–0.290 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 42029.53178151728,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.232–0.266 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 7298.034281399437,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.309–1.391 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 36187.67740104155,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.268–0.295 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 49244.647190566284,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.200–0.210 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3206.5099539864864,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.311–0.324 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4447.29351903298,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.221–0.231 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4777.465672846154,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.207–0.211 s"
           }
         ]
       }
