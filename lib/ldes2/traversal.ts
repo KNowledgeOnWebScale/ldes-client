@@ -215,6 +215,8 @@ type Source = { kind: "page"; page: OpenPage } | { kind: "relation"; relation: R
  */
 export async function synchronize(traversal: Traversal): Promise<number> {
     const { context, bookmark } = traversal;
+    // The identifiers of the bookmark, to look them up in constant time: many members can share its key
+    let bookmarked = new Set(bookmark.members);
     const pages: OpenPage[] = [];
     const relations: Relation[] = [];
     const seen = new Set<string>();
@@ -359,8 +361,8 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 const comparison = bookmark.key ? compareKeysCertain(next.key, bookmark.key) : { order: 1, certain: true };
                 const skip =
                     (comparison.certain && comparison.order < 0) ||
-                    (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.includes(next.id.value))) ||
-                    (!comparison.certain && bookmark.members.includes(next.id.value));
+                    (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmarked.has(next.id.value))) ||
+                    (!comparison.certain && bookmarked.has(next.id.value));
                 if (!skip) {
                     if (!(await traversal.emit(toMember(context, next)))) {
                         return emitted;
@@ -370,11 +372,14 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                         // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
                         bookmark.key = latestEarliest(bookmark.key!, next.key);
                         bookmark.members.push(next.id.value);
+                        bookmarked.add(next.id.value);
                     } else if (comparison.order > 0) {
                         bookmark.key = next.key;
                         bookmark.members = [next.id.value];
+                        bookmarked = new Set(bookmark.members);
                     } else {
                         bookmark.members.push(next.id.value);
+                        bookmarked.add(next.id.value);
                     }
                 }
                 await page.advance();
