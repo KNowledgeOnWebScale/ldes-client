@@ -1,7 +1,7 @@
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { LDES } from "@treecg/types";
-import { getLoggerFor } from "../../utils";
+import { errorMessage, getLoggerFor } from "../../utils";
 import { extractRelations } from "./relation";
 
 import type { Dereferencer, DereferenceOptions } from "../../fetcher/ldfetchDereferencer";
@@ -153,7 +153,7 @@ export class Fetcher {
                 cache,
             );
         } catch (ex) {
-            this.logger.error(`[fetch] Fetch failed for ${node.target} ${JSON.stringify(ex)}`);
+            this.logger.error(`[fetch] Fetch failed for ${node.target} ${errorMessage(ex)}`);
             notifier.error(ex, state);
         }
     }

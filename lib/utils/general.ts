@@ -104,6 +104,12 @@ export function extractMainNodeShape(store: RdfStore): NamedNode {
     }
 }
 
+/** The message of an error. An `Error` has no enumerable properties, so `JSON.stringify` of it gives `{}`. */
+export function errorMessage(error: unknown): string {
+    const cause = error instanceof Error && error.cause instanceof Error ? ` (${errorMessage(error.cause)})` : "";
+    return error instanceof Error ? `${error.message}${cause}` : typeof error === "string" ? error : JSON.stringify(error);
+}
+
 export function urlToUrl(input: Parameters<typeof fetch>[0]): URL {
     if (typeof input === "string") {
         return new URL(input);

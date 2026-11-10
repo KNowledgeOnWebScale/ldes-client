@@ -13,6 +13,12 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   `ETag`/`Last-Modified`, and `Cache-Control: no-store` is honoured. Configure it with the new `contextCache` option
   (`minTTL`, `maxTTL`, `store`, or `false`). Pages are still not cached
   ([#32](https://github.com/KNowledgeOnWebScale/ldes-client/issues/32)).
+- A page of which the server drops the connection after it sent a successful response and a part of the body is requested
+  again, instead of failing the replication with `TypeError: terminated`. This holds for LDES 1.0 and LDES 2.0: in an
+  LDES 2.0 the client continues after the members that it read already, and it fails when the page has changed in between.
+  The schedule is that of the retries of HTTP codes (`--retry-count`, or `transferRetry` in the library). When a page keeps
+  being interrupted, the error names the page. Errors are logged with their message, instead of `{}`
+  ([#107](https://github.com/KNowledgeOnWebScale/ldes-client/issues/107)).
 
 ## 0.4.0
 
