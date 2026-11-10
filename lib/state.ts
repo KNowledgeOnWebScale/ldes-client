@@ -48,10 +48,7 @@ export class ClientStateManager {
         if (!this.db) {
             throw new Error("State manager not initialized");
         }
-        return this.db.sublevel<K, V>(
-            prefix,
-            { valueEncoding: "json" }
-        ) as unknown as Level<K, V>;
+        return this.db.sublevel<K, V>(prefix, { valueEncoding: "json" }) as unknown as Level<K, V>;
     }
 
     async close() {

@@ -28,11 +28,7 @@ const LT = "https://w3id.org/tree#LessThanRelation";
  * Each page has `perPage` members. Pages are linked by GT relations
  * whose tree:path points to sequencePath and tree:value is a UUIDv7-like string.
  */
-function sequenceTree(
-    perPage: number,
-    pages: number,
-    opts?: { timestampPath?: string; sequencePath?: string },
-): Tree<{ ts: string; seq: string }> {
+function sequenceTree(perPage: number, pages: number, opts?: { timestampPath?: string; sequencePath?: string }): Tree<{ ts: string; seq: string }> {
     const tsPath = opts?.timestampPath ?? TIMESTAMP_PATH;
     const seqPath = opts?.sequencePath ?? SEQUENCE_PATH;
 
@@ -79,19 +75,13 @@ function sequenceTree(
  * the marker is a string (from sequencePath GT relation) but member.sequence
  * is undefined, so the comparison must fall back correctly.
  */
-function cfStreamLikeTree(
-    perPage: number,
-    pages: number,
-): Tree<{ ts: string }> {
+function cfStreamLikeTree(perPage: number, pages: number): Tree<{ ts: string }> {
     const tsPath = TIMESTAMP_PATH;
     const seqPath = SEQUENCE_PATH;
 
     // Members only have timestamp, NOT sequence property
     const tree = new Tree<{ ts: string }>(
-        (id, { ts }) =>
-            new Parser().parse(
-                `<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`,
-            ),
+        (id, { ts }) => new Parser().parse(`<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`),
         tsPath,
         seqPath, // declared in metadata but NOT on member quads
     );
@@ -123,10 +113,7 @@ describe("Ordered strategy with sequence-based relations", () => {
         const tree = cfStreamLikeTree(3, 3);
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const members = await read(client.stream());
         expect(members.length).toBe(9);
@@ -139,10 +126,7 @@ describe("Ordered strategy with sequence-based relations", () => {
         const baseSeq = "01900000-0000-7000-8000-";
 
         const tree = new Tree<{ ts: string }>(
-            (id, { ts }) =>
-                new Parser().parse(
-                    `<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`,
-                ),
+            (id, { ts }) => new Parser().parse(`<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`),
             tsPath,
             seqPath,
         );
@@ -165,10 +149,7 @@ describe("Ordered strategy with sequence-based relations", () => {
 
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const members = await read(client.stream());
         expect(members.length).toBe(10);
@@ -181,10 +162,7 @@ describe("Ordered strategy with sequence-based relations", () => {
         const seqPath = SEQUENCE_PATH;
 
         const tree = new Tree<{ ts: string }>(
-            (id, { ts }) =>
-                new Parser().parse(
-                    `<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`,
-                ),
+            (id, { ts }) => new Parser().parse(`<${id}> <${tsPath}> "${ts}"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`),
             tsPath,
             seqPath,
         );
@@ -211,10 +189,7 @@ describe("Ordered strategy with sequence-based relations", () => {
 
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const reader = client.stream({ highWaterMark: 10 }).getReader();
 
@@ -226,13 +201,14 @@ describe("Ordered strategy with sequence-based relations", () => {
         let pendingRead = reader.read();
         while (Date.now() < deadline) {
             const result = await Promise.race([
-                pendingRead.then(r => r),
-                new Promise<null>(resolve =>
-                    setTimeout(() => resolve(null), Math.max(1, deadline - Date.now()))
-                ),
+                pendingRead.then((r) => r),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), Math.max(1, deadline - Date.now()))),
             ]);
             if (result === null) break; // timeout — pendingRead still active
-            if (result.done || !result.value) { pendingRead = null!; break; }
+            if (result.done || !result.value) {
+                pendingRead = null!;
+                break;
+            }
             earlyMembers.push(result.value);
             pendingRead = reader.read();
         }
@@ -258,10 +234,7 @@ describe("Ordered strategy with sequence-based relations", () => {
         const tree = sequenceTree(3, 3);
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const members = await read(client.stream());
         expect(members.length).toBe(9);
@@ -314,23 +287,14 @@ describe("Ordered strategy with sequence-based relations", () => {
 
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "descending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "descending");
 
         const members = await read(client.stream());
         expect(members.length).toBe(4);
     });
 
     test("GT relation with unrelated path is ignored (not a crash)", async () => {
-        const tree = new Tree<number>(
-            (id, val) =>
-                new Parser().parse(
-                    `<${id}> <http://example.com/value> ${val}.`,
-                ),
-            "http://example.com/value",
-        );
+        const tree = new Tree<number>((id, val) => new Parser().parse(`<${id}> <http://example.com/value> ${val}.`), "http://example.com/value");
 
         const frag1 = tree.newFragment();
         tree.fragment(frag1).addMember("a1", 1);
@@ -339,25 +303,12 @@ describe("Ordered strategy with sequence-based relations", () => {
         tree.fragment(frag2).addMember("a2", 2);
 
         // GT relation with an unrelated path (not timestampPath, not sequencePath)
-        tree.fragment(tree.root()).relation(
-            frag1,
-            GT,
-            "http://example.com/unrelated",
-            "some-value",
-        );
-        tree.fragment(frag1).relation(
-            frag2,
-            GT,
-            "http://example.com/unrelated",
-            "another-value",
-        );
+        tree.fragment(tree.root()).relation(frag1, GT, "http://example.com/unrelated", "some-value");
+        tree.fragment(frag1).relation(frag2, GT, "http://example.com/unrelated", "another-value");
 
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const members = await read(client.stream());
         // Should still emit members without crashing
@@ -368,10 +319,7 @@ describe("Ordered strategy with sequence-based relations", () => {
         const seqPath = "http://example.com/seqId";
 
         const tree = new Tree<string>(
-            (id, seq) =>
-                new Parser().parse(
-                    `<${id}> <${seqPath}> "${seq}".`,
-                ),
+            (id, seq) => new Parser().parse(`<${id}> <${seqPath}> "${seq}".`),
             undefined, // no timestampPath
             seqPath,
         );
@@ -389,10 +337,7 @@ describe("Ordered strategy with sequence-based relations", () => {
 
         global.fetch = tree.mock();
 
-        const client = replicateLDES(
-            { url: tree.base() + tree.root() },
-            "ascending",
-        );
+        const client = replicateLDES({ url: tree.base() + tree.root() }, "ascending");
 
         const members = await read(client.stream());
         expect(members.length).toBe(4);

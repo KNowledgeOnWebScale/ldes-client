@@ -43,11 +43,15 @@ async function extract(manager: Manager, page: FetchedPage, emitted: string[] = 
     let finished!: () => void;
     const done = new Promise<void>((resolve) => (finished = resolve));
     const state = { modulator: { wasEmitted: async (id: string) => emitted.includes(id) } };
-    await manager.extractMembers(page, state as never, {
-        extracted: (member: Member) => void members.push(member),
-        done: () => finished(),
-        error: (error: unknown) => void errors.push(error),
-    } as never);
+    await manager.extractMembers(
+        page,
+        state as never,
+        {
+            extracted: (member: Member) => void members.push(member),
+            done: () => finished(),
+            error: (error: unknown) => void errors.push(error),
+        } as never,
+    );
     await done;
     return { members, errors };
 }
@@ -59,10 +63,7 @@ async function oneByOne(extractor: CBDShapeExtractor, page: FetchedPage) {
     const members: Term[] = page.data.getQuads(null, df.namedNode(TREE.member), null, null).map((q) => q.object);
     const out = new Map<string, string[]>();
     for (const member of members) {
-        const quads = await extractor.extract(page.data, member, undefined, [
-            df.namedNode(LDES.custom("IngestionMetadata")),
-            ...members,
-        ]);
+        const quads = await extractor.extract(page.data, member, undefined, [df.namedNode(LDES.custom("IngestionMetadata")), ...members]);
         out.set(member.value, key(quads));
     }
     return out;
@@ -134,7 +135,9 @@ ex:m3 dcterms:created "2026-01-03T00:00:00Z"^^xsd:dateTime .
 `);
         const inner = extractor();
         const broken = {
-            bulkExtract: async () => { throw new Error("bulk is broken"); },
+            bulkExtract: async () => {
+                throw new Error("bulk is broken");
+            },
             extract: async (store: RdfStore, id: Term, shape: Term | undefined, ignored: Term[]) => {
                 if (id.value.endsWith("m2")) throw new Error("m2 is broken");
                 return inner.extract(store, id, shape, ignored);

@@ -1,7 +1,6 @@
-
-import { defineConfig } from "vitest/config"
-import tsconfigPaths from "vite-tsconfig-paths"
-import { playwright } from "@vitest/browser-playwright"
+import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
+import { playwright } from "@vitest/browser-playwright";
 
 export default defineConfig({
     plugins: [tsconfigPaths()],
@@ -30,4 +29,4 @@ export default defineConfig({
         include: ["tests/browser/**/*.test.ts"],
         globalSetup: ["./tests/browser/globalSetup.ts"],
     },
-})
+});

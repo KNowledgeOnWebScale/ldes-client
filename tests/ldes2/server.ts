@@ -39,7 +39,8 @@ export class MockServer {
     /** Serves a TriG message log, in which messages are separated by MESSAGE */
     trig(path: string, ...messages: string[]) {
         this.pages.set(path, {
-            body: `VERSION "1.2-messages"\n${PREFIXES.replace(/PREFIX /g, "PREFIX ")}\n` +
+            body:
+                `VERSION "1.2-messages"\n${PREFIXES.replace(/PREFIX /g, "PREFIX ")}\n` +
                 messages.map((message) => message.replaceAll("<>", `<${this.base}${path}>`)).join("\nMESSAGE\n"),
             type: "application/trig",
         });

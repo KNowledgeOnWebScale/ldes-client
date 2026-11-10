@@ -3,10 +3,7 @@ export function quantile(values, fraction) {
     const sorted = values.toSorted((a, b) => a - b);
     const position = (sorted.length - 1) * fraction;
     const lower = Math.floor(position);
-    return (
-        sorted[lower] +
-        (sorted[Math.ceil(position)] - sorted[lower]) * (position - lower)
-    );
+    return sorted[lower] + (sorted[Math.ceil(position)] - sorted[lower]) * (position - lower);
 }
 
 export function summarize(cases, samples, repeats, members) {
@@ -26,9 +23,7 @@ export function summarize(cases, samples, repeats, members) {
                     r.peakRss <= 0,
             )
         ) {
-            throw new Error(
-                `Incomplete or invalid measurements: ${scenario.id}`,
-            );
+            throw new Error(`Incomplete or invalid measurements: ${scenario.id}`);
         }
         const times = runs.map((r) => r.seconds);
         const seconds = quantile(times, 0.5);
@@ -60,27 +55,16 @@ export function compare(summary, threshold) {
     return summary
         .filter((r) => r.client === "current")
         .map((current) => {
-            const baseline = summary.find(
-                (r) =>
-                    r.client === "baseline" &&
-                    r.format === current.format &&
-                    r.layout === current.layout,
-            );
+            const baseline = summary.find((r) => r.client === "baseline" && r.format === current.format && r.layout === current.layout);
             if (!baseline) return { id: current.id, status: "no baseline" };
-            const slowdownPercent =
-                (current.seconds / baseline.seconds - 1) * 100;
+            const slowdownPercent = (current.seconds / baseline.seconds - 1) * 100;
             // A median shift alone can be an outlier on shared CI runners. Require the middle 50% of timings to separate too.
             const separated = current.lowerQuartile > baseline.upperQuartile;
             return {
                 id: current.id,
                 baselineId: baseline.id,
                 slowdownPercent,
-                status:
-                    slowdownPercent > threshold
-                        ? separated
-                            ? "regression"
-                            : "noisy slowdown"
-                        : "pass",
+                status: slowdownPercent > threshold ? (separated ? "regression" : "noisy slowdown") : "pass",
             };
         });
 }
@@ -94,11 +78,7 @@ export function markdown(result) {
         `Current: \`${m.branchCommit || "unknown"}\`; baseline: \`${m.baselineCommit || "none"}\`.`,
         "",
     ];
-    if (error)
-        lines.push(
-            `**Benchmark failed:** ${error.replaceAll("\n", " ").replaceAll("|", "\\|")}`,
-            "",
-        );
+    if (error) lines.push(`**Benchmark failed:** ${error.replaceAll("\n", " ").replaceAll("|", "\\|")}`, "");
     if (summary.length) {
         lines.push(
             "| Data pages × members/page | Format | Client | Median (s) | Range (s) | Members/s | First member (ms) | Peak RSS (MiB) | Change in time |",

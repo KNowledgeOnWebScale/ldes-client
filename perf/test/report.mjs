@@ -20,79 +20,46 @@ const runs = (c, times) =>
     }));
 function result(baseTimes, currentTimes, format = "ldes1") {
     const cases = [scenario("baseline", format), scenario("current", format)];
-    return summarize(
-        cases,
-        [...runs(cases[0], baseTimes), ...runs(cases[1], currentTimes)],
-        5,
-        100,
-    );
+    return summarize(cases, [...runs(cases[0], baseTimes), ...runs(cases[1], currentTimes)], 5, 100);
 }
 
 test("median throughput resists one slow outlier", () => {
-    const [r] = summarize(
-        [scenario("current")],
-        runs(scenario("current"), [1, 1, 1, 1, 100]),
-        5,
-        100,
-    );
+    const [r] = summarize([scenario("current")], runs(scenario("current"), [1, 1, 1, 1, 100]), 5, 100);
     assert.equal(r.seconds, 1);
     assert.equal(r.membersPerSecond, 100);
     assert.equal(r.maxSeconds, 100);
 });
 
 test("incomplete runs or missing members cannot look like a speedup", () => {
-    assert.throws(
-        () => summarize([scenario("current")], [], 5, 100),
-        /Incomplete/,
-    );
+    assert.throws(() => summarize([scenario("current")], [], 5, 100), /Incomplete/);
     const samples = runs(scenario("current"), [1, 1, 1, 1, 1]);
     samples[0].members = 99;
-    assert.throws(
-        () => summarize([scenario("current")], samples, 5, 100),
-        /invalid/,
-    );
+    assert.throws(() => summarize([scenario("current")], samples, 5, 100), /invalid/);
 });
 
 test("non-finite timings and memory measurements fail validation", () => {
     for (const field of ["seconds", "firstMemberSeconds", "peakRss"]) {
         const samples = runs(scenario("current"), [1, 1, 1, 1, 1]);
         samples[0][field] = Infinity;
-        assert.throws(
-            () => summarize([scenario("current")], samples, 5, 100),
-            /invalid/,
-        );
+        assert.throws(() => summarize([scenario("current")], samples, 5, 100), /invalid/);
     }
 });
 
 test("stable slowdowns over 25% fail for each matching format", () => {
     for (const format of ["ldes1", "trig", "jelly"]) {
-        const [r] = compare(
-            result([1, 1, 1, 1, 1], [1.3, 1.3, 1.3, 1.3, 1.3], format),
-            25,
-        );
+        const [r] = compare(result([1, 1, 1, 1, 1], [1.3, 1.3, 1.3, 1.3, 1.3], format), 25);
         assert.equal(r.status, "regression");
         assert.ok(Math.abs(r.slowdownPercent - 30) < 0.001);
     }
 });
 
 test("improvements and the threshold boundary pass", () => {
-    assert.equal(
-        compare(result([1, 1, 1, 1, 1], [0.5, 0.5, 0.5, 0.5, 0.5]), 25)[0]
-            .status,
-        "pass",
-    );
-    assert.equal(
-        compare(result([1, 1, 1, 1, 1], [1.25, 1.25, 1.25, 1.25, 1.25]), 25)[0]
-            .status,
-        "pass",
-    );
+    assert.equal(compare(result([1, 1, 1, 1, 1], [0.5, 0.5, 0.5, 0.5, 0.5]), 25)[0].status, "pass");
+    assert.equal(compare(result([1, 1, 1, 1, 1], [1.25, 1.25, 1.25, 1.25, 1.25]), 25)[0].status, "pass");
 });
 
 test("overlapping middle quartiles are reported as noise instead of failing", () => {
-    assert.equal(
-        compare(result([0.5, 0.5, 1, 2, 2], [1, 1, 1.5, 1.5, 2]), 25)[0].status,
-        "noisy slowdown",
-    );
+    assert.equal(compare(result([0.5, 0.5, 1, 2, 2], [1, 1, 1.5, 1.5, 2]), 25)[0].status, "noisy slowdown");
 });
 
 test("new formats are not compared against another format", () => {

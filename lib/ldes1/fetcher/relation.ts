@@ -27,31 +27,18 @@ export type SimpleRelation = {
     value: OrderValue;
 };
 
-export function extractRelations(
-    store: RdfStore,
-    node: Term,
-    loose: boolean,
-    condition: Condition,
-    defaultTimezone: string,
-): FoundRelation[] {
+export function extractRelations(store: RdfStore, node: Term, loose: boolean, condition: Condition, defaultTimezone: string): FoundRelation[] {
     const logger = getLoggerFor("extractRelations");
 
-    const relationIds = loose
-        ? getObjects(store, null, TREE.terms.relation, null)
-        : getObjects(store, node, TREE.terms.relation, null);
+    const relationIds = loose ? getObjects(store, null, TREE.terms.relation, null) : getObjects(store, node, TREE.terms.relation, null);
 
     const source = node.value;
 
-    const conditions = new Map<
-        string,
-        { cond: RelationCondition; relation: FoundRelation }
-    >();
+    const conditions = new Map<string, { cond: RelationCondition; relation: FoundRelation }>();
 
     for (const relationId of relationIds) {
         const nodes = getObjects(store, relationId, TREE.terms.node, null);
-        const ty =
-            getObjects(store, relationId, RDF.terms.type, null)[0] ||
-            TREE.Relation;
+        const ty = getObjects(store, relationId, RDF.terms.type, null)[0] || TREE.Relation;
         const path = getObjects(store, relationId, TREE.terms.path, null)[0];
         const value = getObjects(store, relationId, TREE.terms.value, null);
 
@@ -154,13 +141,7 @@ export class RelationChain {
     }
 
     push(target: string, relation: SimpleRelation): RelationChain {
-        return new RelationChain(
-            this.target,
-            target,
-            this.relations,
-            relation,
-            this.cmp,
-        );
+        return new RelationChain(this.target, target, this.relations, relation, this.cmp);
     }
 
     important(): boolean {

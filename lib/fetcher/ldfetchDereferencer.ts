@@ -28,7 +28,10 @@ function toReadable(body: ReadableStream<Uint8Array>): Readable {
             );
         },
         destroy(error, callback) {
-            reader.cancel(error ?? undefined).then(() => callback(error), () => callback(error));
+            reader.cancel(error ?? undefined).then(
+                () => callback(error),
+                () => callback(error),
+            );
         },
     });
 }
@@ -113,12 +116,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     private source?: Readable;
     private paused = false;
 
-    constructor(
-        url: string,
-        status: number,
-        headers: Headers,
-        contentType: string,
-    ) {
+    constructor(url: string, status: number, headers: Headers, contentType: string) {
         this.url = url;
         this.status = status;
         this.headers = headers;
@@ -257,10 +255,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
     }
 
     /** Dereferences an IRI to a stream of quads, in which all messages (if any) are merged */
-    async dereference(
-        url: string,
-        options: DereferenceOptions = {},
-    ): Promise<DereferenceOutput> {
+    async dereference(url: string, options: DereferenceOptions = {}): Promise<DereferenceOutput> {
         const log = await this.dereferenceMessages(url, options);
         const data = new Readable({ objectMode: true, read() {} });
         // Nobody waits for this: a failure destroys the stream, which reports it
@@ -283,10 +278,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
     }
 
     /** Dereferences an IRI to an RDF Message log */
-    async dereferenceMessages(
-        url: string,
-        options: DereferenceOptions = {},
-    ): Promise<MessageLog> {
+    async dereferenceMessages(url: string, options: DereferenceOptions = {}): Promise<MessageLog> {
         if (!/^https?:\/\//i.test(url)) {
             return this.dereferenceFile(url, options);
         }
@@ -297,9 +289,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         }
         const response = await (options.fetch ?? fetch)(url, { headers });
 
-        const originalStatus = Number(
-            response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status,
-        );
+        const originalStatus = Number(response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status);
         if (response.status >= 400) {
             await response.body?.cancel().catch(() => undefined);
             throw new Error(`Could not dereference ${url}: HTTP ${response.status}`);
@@ -326,21 +316,14 @@ export class LdfetchDereferencer implements MessageDereferencer {
         return log;
     }
 
-    private async dereferenceFile(
-        location: string,
-        options: DereferenceOptions,
-    ): Promise<MessageLog> {
+    private async dereferenceFile(location: string, options: DereferenceOptions): Promise<MessageLog> {
         if (!options.localFiles) {
-            throw new Error(
-                `Tried to read local file ${location} without enabling localFiles`,
-            );
+            throw new Error(`Tried to read local file ${location} without enabling localFiles`);
         }
         const { createReadStream } = await import("fs");
         const { fileURLToPath, pathToFileURL } = await import("url");
         const { resolve } = await import("path");
-        const path = location.startsWith("file://")
-            ? fileURLToPath(location)
-            : resolve(location);
+        const path = location.startsWith("file://") ? fileURLToPath(location) : resolve(location);
         const source = createReadStream(path);
         const url = pathToFileURL(path).href;
         const log = await this.parse(source, url, url, 200, new Headers(), "", null, options.fetch ?? fetch);
@@ -365,11 +348,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             requestUrl,
             contentDisposition,
         });
-        const contentType = RdfParsers.resolveContentType(
-            prepared.contentType,
-            url,
-            requestUrl,
-        );
+        const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
 
         const log = new MessageLog(url, status, headers, contentType);

@@ -4,30 +4,20 @@ import { RdfStore } from "rdf-stores";
 import { replicateLDES } from "../../lib/client";
 import type { LDESInfo, FetchedPage } from "../../lib/types";
 
-
 describe("Client tests (Browser)", () => {
     // Note: The globalSetup runs the server on port 3042
     const LDES = "http://localhost:3042/mock-ldes.ttl";
     const INBETWEEN_LDES = "http://localhost:3042/mock-ldes-inbetween.ttl";
 
-    const EX = createUriAndTermNamespace(
-        "http://example.org/",
-        "Clazz1",
-        "Clazz2",
-        "modified",
-        "isVersionOf",
-        "prop1",
-        "subprop",
-    );
+    const EX = createUriAndTermNamespace("http://example.org/", "Clazz1", "Clazz2", "modified", "isVersionOf", "prop1", "subprop");
 
     const STATE_KEY = "client-state";
 
     async function databaseExists(name: string): Promise<boolean> {
         const databases = await indexedDB.databases();
         const prefixedName = "level-js-" + name;
-        return databases.some(db => db.name === name || db.name === prefixedName);
+        return databases.some((db) => db.name === name || db.name === prefixedName);
     }
-
 
     test("Fetching a tree:InBetweenRelation LDES subset", async () => {
         // Setup client
@@ -68,9 +58,7 @@ describe("Client tests (Browser)", () => {
             mem.quads.forEach((q) => store.addQuad(q));
 
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         }
 
         expect(client.memberCount).toBe(3);
@@ -122,9 +110,7 @@ describe("Client tests (Browser)", () => {
             mem.quads.forEach((q) => store.addQuad(q));
 
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         }
 
         expect(client.memberCount).toBe(12);
@@ -188,9 +174,7 @@ describe("Client tests (Browser)", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes1.done) {
@@ -251,9 +235,7 @@ describe("Client tests (Browser)", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -330,9 +312,7 @@ describe("Client tests (Browser)", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes1.done) {
@@ -346,9 +326,7 @@ describe("Client tests (Browser)", () => {
         expect(gotFragmentEvent1).toBe(true);
         expect(gotDescEvent1).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps1.every((v, i) => i === 0 || v >= timestamps1[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps1.every((v, i) => i === 0 || v >= timestamps1[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(await databaseExists(STATE_KEY + "-4")).toBeTruthy();
 
@@ -403,9 +381,7 @@ describe("Client tests (Browser)", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -421,9 +397,7 @@ describe("Client tests (Browser)", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(await databaseExists(STATE_KEY + "-4")).toBeTruthy();
 
@@ -539,9 +513,7 @@ describe("Client tests (Browser)", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -557,9 +529,7 @@ describe("Client tests (Browser)", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(await databaseExists(STATE_KEY + "-5")).toBeTruthy();
 

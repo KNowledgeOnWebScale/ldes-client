@@ -18,15 +18,7 @@ describe("Client tests", () => {
     const INBETWEEN_LDES = "http://localhost:3001/mock-ldes-inbetween.ttl";
     const CALENDAR_LDES = "http://localhost:3001/mock-calendar-ldes.ttl";
     const REVERSE_LDES = "http://localhost:3001/mock-ldes-reverse.ttl";
-    const EX = createUriAndTermNamespace(
-        "http://example.org/",
-        "Clazz1",
-        "Clazz2",
-        "modified",
-        "isVersionOf",
-        "prop1",
-        "subprop"
-    );
+    const EX = createUriAndTermNamespace("http://example.org/", "Clazz1", "Clazz2", "modified", "isVersionOf", "prop1", "subprop");
 
     let server: FastifyInstance;
 
@@ -37,39 +29,32 @@ describe("Client tests", () => {
             server.register(fastifyStatic, {
                 root: path.join(__dirname, "./data/mock-ldes"),
             });
-            server.addHook(
-                "onSend",
-                async (request, reply, payload: RequestPayload) => {
-                    const st = await streamToString(payload);
+            server.addHook("onSend", async (request, reply, payload: RequestPayload) => {
+                const st = await streamToString(payload);
 
-                    if (st.startsWith("# delay ")) {
-                        const reg = /# delay (?<delay>[0-9]+)/;
-                        const found = st.match(reg);
-                        const delay = found?.groups && found?.groups["delay"];
-                        console.log("found delay", delay);
-                        if (delay) {
-                            try {
-                                const delayInt = parseInt(delay);
-                                await new Promise((res) =>
-                                    setTimeout(res, delayInt),
-                                );
-                                /* eslint no-empty: ["error", { "allowEmptyCatch": true }] */
-                            } catch (ex: unknown) {
-                                /* empty */
-                            }
+                if (st.startsWith("# delay ")) {
+                    const reg = /# delay (?<delay>[0-9]+)/;
+                    const found = st.match(reg);
+                    const delay = found?.groups && found?.groups["delay"];
+                    console.log("found delay", delay);
+                    if (delay) {
+                        try {
+                            const delayInt = parseInt(delay);
+                            await new Promise((res) => setTimeout(res, delayInt));
+                            /* eslint no-empty: ["error", { "allowEmptyCatch": true }] */
+                        } catch (ex: unknown) {
+                            /* empty */
                         }
                     }
-                    if (st.startsWith("# immutable")) {
-                        reply.header("Cache-Control", "immutable");
-                    }
-                    return st;
-                },
-            );
+                }
+                if (st.startsWith("# immutable")) {
+                    reply.header("Cache-Control", "immutable");
+                }
+                return st;
+            });
 
             await server.listen({ port: 3001 });
-            console.log(
-                `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
-            );
+            console.log(`Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`);
         } catch (err) {
             console.error(err);
             process.exit(1);
@@ -125,9 +110,7 @@ describe("Client tests", () => {
             mem.quads.forEach((q) => store.addQuad(q));
 
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         }
 
         expect(client.memberCount).toBe(3);
@@ -176,9 +159,7 @@ describe("Client tests", () => {
             mem.quads.forEach((q) => store.addQuad(q));
 
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         }
 
         expect(client.memberCount).toBe(12);
@@ -241,9 +222,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes1.done) {
@@ -309,9 +288,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -333,10 +310,11 @@ describe("Client tests", () => {
 
     test("Client interruption and resuming in ordered replication (ascending)", async () => {
         // Setup client 1
-        const client1 = replicateLDES({
-            url: LDES,
-            statePath: "client-state-main",
-        },
+        const client1 = replicateLDES(
+            {
+                url: LDES,
+                statePath: "client-state-main",
+            },
             "ascending",
         );
 
@@ -388,9 +366,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes1.done) {
@@ -408,9 +384,7 @@ describe("Client tests", () => {
         expect(gotFragmentEvent1).toBe(true);
         expect(gotDescEvent1).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps1.every((v, i) => i === 0 || v >= timestamps1[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps1.every((v, i) => i === 0 || v >= timestamps1[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state-main")).toBeTruthy();
 
@@ -419,10 +393,11 @@ describe("Client tests", () => {
          */
 
         // Setup client 2
-        const client2 = replicateLDES({
-            url: LDES,
-            statePath: "client-state-main",
-        },
+        const client2 = replicateLDES(
+            {
+                url: LDES,
+                statePath: "client-state-main",
+            },
             "ascending",
         );
 
@@ -464,9 +439,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -483,19 +456,18 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state-main")).toBeTruthy();
     });
 
     test("Client interruption and resuming in ordered replication (descending)", async () => {
         // Setup client 1
-        const client1 = replicateLDES({
-            url: LDES,
-            statePath: "client-state-main",
-        },
+        const client1 = replicateLDES(
+            {
+                url: LDES,
+                statePath: "client-state-main",
+            },
             "descending",
         );
 
@@ -559,10 +531,11 @@ describe("Client tests", () => {
          */
 
         // Setup client 2
-        const client2 = replicateLDES({
-            url: LDES,
-            statePath: "client-state-main",
-        },
+        const client2 = replicateLDES(
+            {
+                url: LDES,
+                statePath: "client-state-main",
+            },
             "descending",
         );
 
@@ -604,9 +577,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -623,19 +594,18 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state-main")).toBeTruthy();
     });
 
     test("Client interruption and resuming in ordered replication (ascending) of Linked List LDES", async () => {
         // Setup client 1
-        const client1 = replicateLDES({
-            url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
-        },
+        const client1 = replicateLDES(
+            {
+                url: LINKED_LIST_LDES,
+                statePath: "client-state-main",
+            },
             "ascending",
         );
 
@@ -698,10 +668,11 @@ describe("Client tests", () => {
          */
 
         // Setup client 2
-        const client2 = replicateLDES({
-            url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
-        },
+        const client2 = replicateLDES(
+            {
+                url: LINKED_LIST_LDES,
+                statePath: "client-state-main",
+            },
             "ascending",
         );
 
@@ -743,9 +714,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -762,19 +731,18 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v >= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state-main")).toBeTruthy();
     });
 
     test("Client interruption and resuming in ordered replication (descending) of Linked List LDES", async () => {
         // Setup client 1
-        const client1 = replicateLDES({
-            url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
-        },
+        const client1 = replicateLDES(
+            {
+                url: LINKED_LIST_LDES,
+                statePath: "client-state-main",
+            },
             "descending",
         );
 
@@ -826,10 +794,11 @@ describe("Client tests", () => {
          */
 
         // Setup client 2
-        const client2 = replicateLDES({
-            url: LINKED_LIST_LDES,
-            statePath: "client-state-main",
-        },
+        const client2 = replicateLDES(
+            {
+                url: LINKED_LIST_LDES,
+                statePath: "client-state-main",
+            },
             "descending",
         );
 
@@ -871,9 +840,7 @@ describe("Client tests", () => {
                 mem.quads.forEach((q) => store.addQuad(q));
 
                 // Check that all member data is present
-                expect(
-                    store.getQuads(null, EX.terms.subprop).length,
-                ).toBeGreaterThan(0);
+                expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
             }
 
             if (memRes2.done) {
@@ -890,9 +857,7 @@ describe("Client tests", () => {
         expect(gotFragmentEvent2).toBe(true);
         expect(gotDescEvent2).toBe(true);
         // Check that the timestamps are in ascending order
-        expect(
-            timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1]),
-        ).toBeTruthy();
+        expect(timestamps2.every((v, i) => i === 0 || v <= timestamps2[i - 1])).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state-main")).toBeTruthy();
     });
@@ -904,8 +869,7 @@ describe("Client tests", () => {
             url: CALENDAR_LDES,
             urlIsView: true,
             after: new Date("2025-01-02T00:00:00.000Z"),
-        },
-        );
+        });
 
         let memCount = 0;
 
@@ -946,8 +910,7 @@ describe("Client tests", () => {
             url: CALENDAR_LDES,
             urlIsView: true,
             after: new Date("2025-01-02T00:00:00.000Z"),
-        },
-        );
+        });
 
         // Member stream object
         const members2 = client2.stream({ highWaterMark: 10 }).getReader();
@@ -1004,8 +967,7 @@ describe("Client tests", () => {
             statePath: "client-state-main",
             url: REVERSE_LDES,
             lastVersionOnly: true,
-        },
-        );
+        });
 
         let memCount = 0;
 
@@ -1046,8 +1008,7 @@ describe("Client tests", () => {
             statePath: "client-state-main",
             url: REVERSE_LDES,
             lastVersionOnly: true,
-        },
-        );
+        });
 
         // Member stream object
         const members2 = client2.stream({ highWaterMark: 10 }).getReader();
@@ -1143,8 +1104,7 @@ describe("Client tests", () => {
             url: REVERSE_LDES,
             after: new Date("2024-07-12T00:00:00.000Z"),
             lastVersionOnly: true,
-        },
-        );
+        });
 
         // Member stream object
         const members2 = client2.stream({ highWaterMark: 10 }).getReader();

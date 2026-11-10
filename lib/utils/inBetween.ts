@@ -7,11 +7,7 @@ export type Between = {
     max: Date;
 };
 
-export function parseInBetweenRelation(
-    value: string,
-    dataType: string | undefined,
-    defaultTimezone: string,
-): Between | undefined {
+export function parseInBetweenRelation(value: string, dataType: string | undefined, defaultTimezone: string): Between | undefined {
     if (dataType === XSD.custom("gYear")) {
         const result = gYearToMinMax(value, defaultTimezone);
         if (!result) return;
@@ -36,12 +32,8 @@ export function parseInBetweenRelation(
     }
 }
 
-function gYearToMinMax(
-    value: string,
-    defaultTimezone: string,
-): [Date, Date] | undefined {
-    const regex =
-        /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
+function gYearToMinMax(value: string, defaultTimezone: string): [Date, Date] | undefined {
+    const regex = /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
     const match = value.match(regex);
     if (!match) {
         logger.warn(`Invalid gYear format: ${value}`);
@@ -63,18 +55,11 @@ function gYearToMinMax(
         minOffset = offset;
         maxOffset = offset;
     }
-    return [
-        new Date(Date.UTC(year, 0, 1) + minOffset * 60 * 1000),
-        new Date(Date.UTC(year + 1, 0, 1) + maxOffset * 60 * 1000),
-    ];
+    return [new Date(Date.UTC(year, 0, 1) + minOffset * 60 * 1000), new Date(Date.UTC(year + 1, 0, 1) + maxOffset * 60 * 1000)];
 }
 
-function gYearMonthToMinMax(
-    value: string,
-    defaultTimezone: string,
-): [Date, Date] | undefined {
-    const regex =
-        /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
+function gYearMonthToMinMax(value: string, defaultTimezone: string): [Date, Date] | undefined {
+    const regex = /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
     const match = value.match(regex);
     if (!match) {
         logger.warn(`Invalid gYearMonth format: ${value}`);
@@ -97,18 +82,11 @@ function gYearMonthToMinMax(
         minOffset = offset;
         maxOffset = offset;
     }
-    return [
-        new Date(Date.UTC(y, m - 1, 1) + minOffset * 60 * 1000),
-        new Date(Date.UTC(y, m, 1) + maxOffset * 60 * 1000),
-    ];
+    return [new Date(Date.UTC(y, m - 1, 1) + minOffset * 60 * 1000), new Date(Date.UTC(y, m, 1) + maxOffset * 60 * 1000)];
 }
 
-function dateToMinMax(
-    value: string,
-    defaultTimezone: string,
-): [Date, Date] | undefined {
-    const regex =
-        /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
+function dateToMinMax(value: string, defaultTimezone: string): [Date, Date] | undefined {
+    const regex = /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
     const match = value.match(regex);
     if (!match) {
         logger.warn(`Invalid date format: ${value}`);
@@ -132,16 +110,10 @@ function dateToMinMax(
         minOffset = offset;
         maxOffset = offset;
     }
-    return [
-        new Date(Date.UTC(y, m - 1, d) + minOffset * 60 * 1000),
-        new Date(Date.UTC(y, m - 1, d + 1) + maxOffset * 60 * 1000),
-    ];
+    return [new Date(Date.UTC(y, m - 1, d) + minOffset * 60 * 1000), new Date(Date.UTC(y, m - 1, d + 1) + maxOffset * 60 * 1000)];
 }
 
-function partialDateTimeToMinMax(
-    value: string,
-    defaultTimezone: string,
-): [Date, Date] | undefined {
+function partialDateTimeToMinMax(value: string, defaultTimezone: string): [Date, Date] | undefined {
     const dateHourMinSecRegex =
         /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
     const matchDHMS = value.match(dateHourMinSecRegex);
@@ -169,9 +141,7 @@ function partialDateTimeToMinMax(
         }
         return [
             new Date(Date.UTC(y, m - 1, d, h, min, s) + minOffset * 60 * 1000),
-            new Date(
-                Date.UTC(y, m - 1, d, h, min, s + 1) + maxOffset * 60 * 1000,
-            ),
+            new Date(Date.UTC(y, m - 1, d, h, min, s + 1) + maxOffset * 60 * 1000),
         ];
     }
     const dateHourMinRegex =
@@ -198,10 +168,7 @@ function partialDateTimeToMinMax(
             minOffset = offset;
             maxOffset = offset;
         }
-        return [
-            new Date(Date.UTC(y, m - 1, d, h, min) + minOffset * 60 * 1000),
-            new Date(Date.UTC(y, m - 1, d, h, min + 1) + maxOffset * 60 * 1000),
-        ];
+        return [new Date(Date.UTC(y, m - 1, d, h, min) + minOffset * 60 * 1000), new Date(Date.UTC(y, m - 1, d, h, min + 1) + maxOffset * 60 * 1000)];
     }
     const dateHourRegex =
         /^(-?[1-9][0-9]{3,}|-?0[0-9]{3})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])(Z|(\+|-)((0[0-9]|1[0-3]):([0-5][0-9])|14:00))?$/;
@@ -226,9 +193,6 @@ function partialDateTimeToMinMax(
             minOffset = offset;
             maxOffset = offset;
         }
-        return [
-            new Date(Date.UTC(y, m - 1, d, h) + minOffset * 60 * 1000),
-            new Date(Date.UTC(y, m - 1, d, h + 1) + maxOffset * 60 * 1000),
-        ];
+        return [new Date(Date.UTC(y, m - 1, d, h) + minOffset * 60 * 1000), new Date(Date.UTC(y, m - 1, d, h + 1) + maxOffset * 60 * 1000)];
     }
 }
