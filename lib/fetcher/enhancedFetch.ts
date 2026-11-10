@@ -1,4 +1,4 @@
-import { urlToUrl, getLoggerFor } from "../utils";
+import { errorMessage, urlToUrl, getLoggerFor } from "../utils";
 
 const logger = getLoggerFor("EnhancedFetch");
 
@@ -29,7 +29,7 @@ export function enhanced_fetch(config: FetchConfig, start?: typeof fetch): typeo
                   try {
                       return await start_f(a, b);
                   } catch (ex) {
-                      logger.debug(`This should not happen, it will not happen this is safe. ${JSON.stringify(ex)}`);
+                      logger.debug(`This should not happen, it will not happen this is safe. ${errorMessage(ex)}`);
                   }
               }
           }) as typeof fetch)

@@ -8,6 +8,7 @@
 import http from "node:http";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { replicateLDES } from "../lib/client";
+import { LdfetchDereferencer } from "../lib/fetcher/ldfetchDereferencer";
 import { PREFIXES } from "./ldes2/server";
 
 import type { Member } from "../lib/types";
@@ -68,8 +69,8 @@ class InterruptingServer {
     }
 }
 
-async function collect(url: string): Promise<Member[]> {
-    const client = replicateLDES({ url, noShape: true });
+async function collect(url: string, transferRetry = { base: 10 }): Promise<Member[]> {
+    const client = replicateLDES({ url, noShape: true, transferRetry });
     const members: Member[] = [];
     for await (const member of client.stream({ highWaterMark: 10 })) {
         members.push(member);
@@ -135,6 +136,16 @@ describe("A transfer that is interrupted", () => {
 
             expect(new Set(members.map((member) => member.id.value)).size).toBe(PAGES * PER_PAGE);
         });
+
+        test("that keeps being interrupted fails after the retries, and says which page", async () => {
+            server.interrupt.set("/page/1", 100);
+
+            await expect(collect(`${server.base}/ldes`, { base: 5, maxRetries: 2 } as { base: number })).rejects.toThrow(
+                `Reading ${server.base}/page/1 failed after 2 new requests`,
+            );
+
+            expect(server.requests.filter((path) => path === "/page/1")).toHaveLength(3);
+        });
     });
 
     describe("in an LDES 2.0", () => {
@@ -197,6 +208,97 @@ describe("A transfer that is interrupted", () => {
             const members = await collect(`${server.base}/root`);
 
             expect(ids(members)).toEqual(["a1", "b1", "a2", "b2", "a3", "a4", "a5"]);
+        });
+
+        test("that keeps being interrupted fails after the retries, and says which page", async () => {
+            server.interrupt.set("/a", 100);
+
+            await expect(collect(`${server.base}/root`, { base: 5, maxRetries: 2 } as { base: number })).rejects.toThrow(
+                `Reading ${server.base}/a failed after 2 new requests`,
+            );
+
+            expect(server.requests.filter((path) => path === "/a")).toHaveLength(3);
+        });
+    });
+
+    describe("of a message log that is read", () => {
+        const URL = "http://example.org/log";
+        const HEAD = `VERSION "1.2-messages"\nPREFIX ex: <http://example.org/>\n`;
+        const MESSAGES = ["ex:a ex:p 1 .", "ex:b ex:p 1 . ex:b ex:q 2 .", "ex:c ex:p 1 ."];
+        const complete = HEAD + MESSAGES.join("\nMESSAGE\n");
+
+        /**
+         * Serves the given transfers in turn, each as chunks. A transfer that is not the last one is cut off after its chunks:
+         * the connection is lost then, when the parser has read the chunks (an error discards what is queued only).
+         */
+        function serving(...transfers: string[][]) {
+            const requests: number[] = [];
+            const fetch_f = (async () => {
+                const attempt = requests.push(requests.length);
+                const chunks = transfers[Math.min(attempt, transfers.length) - 1].map((chunk) => new TextEncoder().encode(chunk));
+                const cut = attempt < transfers.length;
+                let next = 0;
+                const stream = new ReadableStream<Uint8Array>({
+                    pull(controller) {
+                        if (next < chunks.length) {
+                            controller.enqueue(chunks[next++]);
+                        } else if (cut) {
+                            controller.error(
+                                new TypeError("terminated", { cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }) }),
+                            );
+                        } else {
+                            controller.close();
+                        }
+                    },
+                });
+                return new Response(stream, { status: 200, headers: { "content-type": "application/trig" } });
+            }) as typeof fetch;
+            return { fetch: fetch_f, requests };
+        }
+        /** The first two messages, of which the connection is lost after the delimiter of the second: the first one is complete */
+        const interrupted = [HEAD + MESSAGES[0] + "\nMESSAGE\n", MESSAGES[1] + "\nMESSAGE\n"];
+
+        const readAll = async (dereferencer: LdfetchDereferencer, fetch_f: typeof fetch) => {
+            const log = await dereferencer.dereferenceMessages(URL, { fetch: fetch_f });
+            const sizes: number[] = [];
+            for await (const message of log) sizes.push(message.length);
+            return sizes;
+        };
+        const dereferencer = () => new LdfetchDereferencer(undefined, { maxRetries: 3, base: 1 });
+
+        test("continues after the messages that were read, without repeating them", async () => {
+            // The first transfer has two messages (the second ends where the connection is lost, so only the first is complete)
+            const { fetch: f, requests } = serving(interrupted, [complete]);
+
+            expect(await readAll(dereferencer(), f)).toEqual([1, 2, 1]);
+            expect(requests).toHaveLength(2);
+        });
+
+        test("fails when the messages that were read are not the same any more", async () => {
+            const changed = HEAD + ["ex:a ex:p 1 . ex:a ex:q 2 .", ...MESSAGES.slice(1)].join("\nMESSAGE\n");
+            const { fetch: f } = serving(interrupted, [changed]);
+
+            await expect(readAll(dereferencer(), f)).rejects.toThrow("is not the same any more");
+        });
+
+        test("fails when the log has fewer messages than were read", async () => {
+            const { fetch: f } = serving(interrupted, [HEAD]);
+
+            await expect(readAll(dereferencer(), f)).rejects.toThrow("fewer messages");
+        });
+
+        test("reports a content type that is not supported as an error of the log, not as an uncaught exception", async () => {
+            // The parser of such a document reports the error right after it is created: the log has to be listening by then
+            const zip = (async () => new Response("PK", { status: 200, headers: { "content-type": "application/zip" } })) as typeof fetch;
+
+            await expect(readAll(dereferencer(), zip)).rejects.toThrow("Unsupported content type");
+        });
+
+        test("does not request a document again that cannot be parsed", async () => {
+            const { fetch: f, requests } = serving([HEAD + "ex:a ex:p .\nMESSAGE\n"]);
+
+            await expect(readAll(dereferencer(), f)).rejects.toThrow();
+            expect(requests).toHaveLength(1);
         });
     });
 });

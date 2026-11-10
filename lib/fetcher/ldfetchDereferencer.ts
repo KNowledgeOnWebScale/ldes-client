@@ -3,6 +3,7 @@ import RdfParsers from "ldfetch/lib/RdfParsers.js";
 import { FetchDocumentLoader } from "jsonld-context-parser";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
+import { errorMessage } from "../utils/general";
 
 import type { Quad, Stream } from "@rdfjs/types";
 import type { EventEmitter } from "events";
@@ -84,6 +85,82 @@ export interface MessageDereferencer extends Dereferencer {
     dereferenceMessages(url: string, options?: DereferenceOptions): Promise<MessageLog>;
 }
 
+/**
+ * What to do when the transfer of a document is interrupted: the server drops the connection after it sent a successful
+ * response and a part of the body, for example because it is overloaded.
+ * A request is not retried for that by the HTTP layer, as its status was fine.
+ */
+export type TransferRetry = {
+    /** How many times a document is requested again before the client gives up. 0 is unlimited, as for the HTTP codes. */
+    maxRetries: number;
+    /** The time (in milliseconds) before the first new request. It doubles every time, up to 30 seconds. */
+    base: number;
+};
+
+/** The same schedule as the retries of HTTP codes: 500 ms, 1 s, 2 s, 4 s, 8 s */
+export const DEFAULT_TRANSFER_RETRY: TransferRetry = { maxRetries: 5, base: 500 };
+
+const MAX_RETRY_DELAY = 30_000;
+
+const INTERRUPTED_CODES = new Set([
+    "ECONNRESET",
+    "EPIPE",
+    "ETIMEDOUT",
+    "ERR_STREAM_PREMATURE_CLOSE",
+    "UND_ERR_SOCKET",
+    "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/** The messages of the errors that fetch implementations give for a connection that is lost (Node.js, Chrome, Firefox, Safari) */
+const INTERRUPTED_MESSAGES =
+    /^(terminated|network error|failed to fetch|load failed|networkerror)|other side closed|socket hang up|premature close|network connection was lost/i;
+
+/**
+ * Tells whether an error is that of a transfer that was interrupted: a temporary failure, of which a new request can succeed.
+ * A document that cannot be parsed, or a server that is not there, is not.
+ */
+export function isInterruptedTransfer(error: unknown): boolean {
+    for (let cause = error, depth = 0; cause instanceof Error && depth < 5; cause = cause.cause, depth++) {
+        if (cause.name === "AbortError") return false;
+        if (INTERRUPTED_CODES.has((cause as { code?: string }).code ?? "")) return true;
+        if (INTERRUPTED_MESSAGES.test(cause.message)) return true;
+    }
+    return false;
+}
+
+/** Whether a transfer that failed `failures` times (this one included) is requested again, and the time to wait before that */
+function nextAttempt(retry: TransferRetry, failures: number, error: unknown): { delay: number } | undefined {
+    if (!isInterruptedTransfer(error) || (retry.maxRetries !== 0 && failures > retry.maxRetries)) return undefined;
+    return { delay: Math.min(retry.base * 2 ** (failures - 1), MAX_RETRY_DELAY) };
+}
+
+function giveUp(url: string, failures: number, error: unknown): unknown {
+    if (failures <= 1 || !isInterruptedTransfer(error)) return error;
+    return new Error(`Reading ${url} failed after ${failures - 1} new requests: ${errorMessage(error)}`, { cause: error });
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** A rolling checksum of the sizes of the messages of a log, to see that a new request gives the same messages again */
+const mix = (checksum: number, message: Quad[]) => (Math.imul(checksum, 31) + message.length + 1) | 0;
+
+/** One transfer of a document: the parser, and the stream it reads from */
+type Transfer = { parser: EventEmitter; stream: Readable };
+
+/** What is known of a document when its parser is created */
+type TransferInfo = { url: string; status: number; headers: Headers; contentType: string };
+
+/**
+ * Receives the parser of a transfer. It is called in the same tick as the parser is created, as the parser can emit events
+ * (an error, for example) right away: a listener that comes later misses them.
+ */
+type Accept = (info: TransferInfo, transfer: Transfer) => void;
+
+/** What a request for a document gave: a log without messages (not modified, gone), or a transfer that is being read */
+type Opened = { kind: "empty"; log: MessageLog } | { kind: "parsed" };
+
 const CONTEXT_TTL = 10 * 60 * 1000;
 const MAX_CACHED_CONTEXTS = 100;
 
@@ -115,6 +192,16 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     private wake?: () => void;
     private source?: Readable;
     private paused = false;
+    private closed = false;
+
+    /** Present when a transfer that is interrupted is requested again, see {@link resumable} */
+    private retry?: TransferRetry;
+    private reopen?: () => Promise<void>;
+    /** The messages that have been read from the transfers, and a checksum of them, to continue after them in a new transfer */
+    private read = 0;
+    private checksum = 0;
+    /** The number of failed transfers in a row, without any message in between */
+    private failures = 0;
 
     constructor(url: string, status: number, headers: Headers, contentType: string) {
         this.url = url;
@@ -130,10 +217,41 @@ export class MessageLog implements AsyncIterable<Quad[]> {
         return log;
     }
 
+    /**
+     * When the transfer is interrupted, the document is requested again, and the log continues after the messages that
+     * it had read. Pages of an LDES are append-only logs, so these messages are the same again: if they are not, the log fails.
+     * `reopen` requests the document again, and attaches the new transfer to this log.
+     * @internal
+     */
+    resumable(retry: TransferRetry, reopen: () => Promise<void>): this {
+        this.retry = retry;
+        this.reopen = reopen;
+        return this;
+    }
+
     /** @internal wires the parser output of ldfetch to this log */
     attach(parser: EventEmitter, source: Readable) {
+        if (this.closed) {
+            source.destroy();
+            return;
+        }
         this.source = source;
+        this.paused = false;
+        // A transfer that comes after an interrupted one starts with the messages that have been read already
+        const skip = this.read;
+        let seen = 0;
+        let checksum = 0;
+        let live = true;
         const unframed: Quad[] = [];
+        const stop = () => {
+            live = false;
+            source.destroy();
+        };
+        const failed = (error: unknown) => {
+            if (!live) return;
+            stop();
+            void this.recover(error);
+        };
         parser
             .on("data", (quad: Quad, messageCounter?: number) => {
                 if (messageCounter === undefined) {
@@ -141,22 +259,65 @@ export class MessageLog implements AsyncIterable<Quad[]> {
                 }
             })
             .on("message", (quads: Quad[]) => {
+                if (!live) return;
                 this.framed = true;
+                if (seen < skip) {
+                    checksum = mix(checksum, quads);
+                    if (++seen === skip && checksum !== this.checksum) {
+                        stop();
+                        this.failure = new Error(
+                            `${this.url} is not the same any more: the messages that were read before the interruption have changed`,
+                        );
+                        this.finish();
+                    }
+                    return;
+                }
                 this.push(quads);
             })
-            .on("error", (error: unknown) => {
-                this.failure = error;
-                this.finish();
-            })
+            .on("error", failed)
             .on("end", () => {
+                if (!live) return;
+                if (seen < skip) {
+                    this.failure = new Error(`${this.url} is not the same any more: it has fewer messages than were read before the interruption`);
+                    this.finish();
+                    return;
+                }
                 if (!this.framed && unframed.length > 0) {
                     this.push(unframed);
                 }
                 this.finish();
             });
+        // The connection can be lost without the parser noticing
+        source.on("error", failed);
+    }
+
+    /** Called when a transfer failed: a new request continues the log, or else the log fails */
+    private async recover(error: unknown) {
+        let cause = error;
+        while (!this.closed) {
+            this.failures++;
+            const next = this.retry && this.reopen ? nextAttempt(this.retry, this.failures, cause) : undefined;
+            if (!next) {
+                this.failure = giveUp(this.url, this.failures, cause);
+                this.finish();
+                return;
+            }
+            logger.warn(`Reading ${this.url} was interrupted (${errorMessage(cause)}), requesting it again in ${next.delay} ms`);
+            await sleep(next.delay);
+            if (this.closed) return;
+            try {
+                await this.reopen!();
+                return;
+            } catch (ex) {
+                cause = ex;
+            }
+        }
     }
 
     private push(message: Quad[]) {
+        this.read++;
+        this.checksum = mix(this.checksum, message);
+        this.failures = 0;
         this.queue.push(message);
         if (this.queue.length >= this.maxBuffered && !this.paused) {
             this.paused = true;
@@ -199,6 +360,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
 
     /** Stop reading, and release the connection */
     close() {
+        this.closed = true;
         this.queue = [];
         this.ended = true;
         this.source?.destroy();
@@ -232,7 +394,10 @@ export class LdfetchDereferencer implements MessageDereferencer {
      */
     private contexts = new Map<string, { loaded: ReturnType<FetchDocumentLoader["load"]>; expires: number }>();
 
-    constructor(private readonly accept: string = DEFAULT_ACCEPT) {}
+    constructor(
+        private readonly accept: string = DEFAULT_ACCEPT,
+        private readonly transferRetry: TransferRetry = DEFAULT_TRANSFER_RETRY,
+    ) {}
 
     private cachedDocumentLoader(fetch_f: typeof fetch) {
         const loader = new FetchDocumentLoader(fetch_f);
@@ -277,12 +442,45 @@ export class LdfetchDereferencer implements MessageDereferencer {
         };
     }
 
-    /** Dereferences an IRI to an RDF Message log */
+    /**
+     * Dereferences an IRI to an RDF Message log.
+     * A transfer that is interrupted is requested again, see {@link TransferRetry}: that is up to the log, which continues
+     * after the messages that were read.
+     */
     async dereferenceMessages(url: string, options: DereferenceOptions = {}): Promise<MessageLog> {
         if (!/^https?:\/\//i.test(url)) {
             return this.dereferenceFile(url, options);
         }
 
+        let log: MessageLog | undefined;
+        const reopen = async () => {
+            const again = await this.transfer(url, options, (_info, transfer) => log!.attach(transfer.parser, transfer.stream));
+            if (again.kind === "empty") {
+                throw new Error(`${url} is not the same any more: it answered HTTP ${again.log.status} when it was requested again`);
+            }
+        };
+        let failures = 0;
+        while (true) {
+            try {
+                const opened = await this.transfer(url, options, (info, transfer) => {
+                    log = new MessageLog(info.url, info.status, info.headers, info.contentType).resumable(this.transferRetry, reopen);
+                    log.attach(transfer.parser, transfer.stream);
+                });
+                if (opened.kind === "empty") return opened.log;
+                break;
+            } catch (error) {
+                const next = nextAttempt(this.transferRetry, ++failures, error);
+                if (!next) throw giveUp(url, failures, error);
+                logger.warn(`Requesting ${url} was interrupted (${errorMessage(error)}), requesting it again in ${next.delay} ms`);
+                await sleep(next.delay);
+            }
+        }
+        if (options.bufferedMessages !== undefined) log!.maxBuffered = options.bufferedMessages;
+        return log!;
+    }
+
+    /** One request for a document, up to the point where it is being parsed */
+    private async transfer(url: string, options: DereferenceOptions, accept: Accept): Promise<Opened> {
         const headers = new Headers(options.headers);
         if (!headers.has("accept")) {
             headers.set("accept", this.accept);
@@ -297,23 +495,21 @@ export class LdfetchDereferencer implements MessageDereferencer {
         if (originalStatus === 304 || originalStatus === 410 || !response.body) {
             // The client's fetch hides these statuses behind an empty 200 response
             await response.body?.cancel().catch(() => undefined);
-            return MessageLog.empty(response.url || url, originalStatus, response.headers);
+            return { kind: "empty", log: MessageLog.empty(response.url || url, originalStatus, response.headers) };
         }
 
         const finalUrl = response.url || url;
         const source = toReadable(response.body);
-        const log = await this.parse(
+        await this.parse(
             source,
             finalUrl,
             url,
-            response.status,
-            response.headers,
             response.headers.get("content-type") ?? "",
             response.headers.get("content-disposition"),
             options.fetch ?? fetch,
+            (contentType, transfer) => accept({ url: finalUrl, status: response.status, headers: response.headers, contentType }, transfer),
         );
-        if (options.bufferedMessages !== undefined) log.maxBuffered = options.bufferedMessages;
-        return log;
+        return { kind: "parsed" };
     }
 
     private async dereferenceFile(location: string, options: DereferenceOptions): Promise<MessageLog> {
@@ -326,21 +522,24 @@ export class LdfetchDereferencer implements MessageDereferencer {
         const path = location.startsWith("file://") ? fileURLToPath(location) : resolve(location);
         const source = createReadStream(path);
         const url = pathToFileURL(path).href;
-        const log = await this.parse(source, url, url, 200, new Headers(), "", null, options.fetch ?? fetch);
-        if (options.bufferedMessages !== undefined) log.maxBuffered = options.bufferedMessages;
-        return log;
+        let log: MessageLog | undefined;
+        await this.parse(source, url, url, "", null, options.fetch ?? fetch, (contentType, transfer) => {
+            log = new MessageLog(url, 200, new Headers(), contentType);
+            log.attach(transfer.parser, transfer.stream);
+        });
+        if (options.bufferedMessages !== undefined) log!.maxBuffered = options.bufferedMessages;
+        return log!;
     }
 
     private async parse(
         source: Readable,
         url: string,
         requestUrl: string,
-        status: number,
-        headers: Headers,
         declaredType: string,
         contentDisposition: string | null,
         fetch_f: typeof fetch,
-    ): Promise<MessageLog> {
+        accept: (contentType: string, transfer: Transfer) => void,
+    ): Promise<void> {
         const base = declaredType.split(";")[0].trim();
         const prepared = await RdfParsers.prepareStream(source, {
             contentType: base || "application/octet-stream",
@@ -351,7 +550,6 @@ export class LdfetchDereferencer implements MessageDereferencer {
         const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
 
-        const log = new MessageLog(url, status, headers, contentType);
         let parser: EventEmitter;
         if (RdfParsers.isStreamable(contentType)) {
             parser = RdfParsers.parseStream(prepared.stream, {
@@ -391,8 +589,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
                 requestUrl,
             });
         }
-        log.attach(parser, prepared.stream);
-        return log;
+        accept(contentType, { parser, stream: prepared.stream });
     }
 }
 

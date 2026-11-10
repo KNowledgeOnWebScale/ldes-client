@@ -1,5 +1,5 @@
 import { Fetcher, ModulatorFactory, Manager } from "../fetcher";
-import { deserializeMember, getLoggerFor, serializeMember } from "../../utils";
+import { deserializeMember, errorMessage, getLoggerFor, serializeMember } from "../../utils";
 import { Condition } from "../../condition";
 
 import type { FetchEvent, Node, Modulator, MemberEvents, Ranker } from "../fetcher";
@@ -52,7 +52,7 @@ export class UnorderedStrategy {
          */
         this.fetchNotifier = {
             error: (error: unknown) => {
-                this.logger.error(`[fetchNotifier] Error: ${JSON.stringify(error)}`);
+                this.logger.error(`[fetchNotifier] Error: ${errorMessage(error)}`);
                 this.notifier.error(error, {});
             },
             scheduleFetch: async (node: Node) => {

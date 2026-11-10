@@ -80,13 +80,15 @@ LDES 2.0 members contain all quads of their message; SHACL/CBD extraction option
 | --- | --- |
 | `--concurrent <number>` | Maximum concurrent HTTP requests per domain and LDES 2.0 prefetch window; default `10`. |
 | `--basic-auth <username>:<password>` | HTTP Basic authentication. |
-| `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. |
+| `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. It also applies to a page of which the transfer is interrupted. |
 | `--http-codes <codes...>` | HTTP status codes to retry. |
 | `--safe` | Retry thrown fetch errors. |
 | `--url-is-view` | Treat the input URL as a TREE view without discovering one. |
 | `-l, --loose` | Follow LDES 1.0 relations even when the page URL differs from the `tree:Node` IRI. |
 
 HTTP statuses `408`, `425`, `429`, `500`, `502`, `503` and `504` are retried with exponential backoff by default. Library callers can customize fetching with `enhanced_fetch`.
+
+A page of which the server drops the connection after it sent a successful response and a part of the body (for example, because it is overloaded) is requested again too, and the client continues after the members that it read already. Library callers can set this with `transferRetry: { maxRetries, base }` (default: 5 new requests, the first after 500 ms, doubling every time; `maxRetries: 0` is unlimited). When the page keeps being interrupted, the client fails with an error that names the page.
 
 ### Logging
 

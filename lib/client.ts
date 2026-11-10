@@ -3,7 +3,7 @@ import { CBDShapeExtractor } from "extract-cbd-shape";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
-import { ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
+import { DEFAULT_TRANSFER_RETRY, LdfetchDereferencer, ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
 import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
 import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
@@ -95,7 +95,9 @@ export class Client {
         this.memberCount = 0;
         this.fragmentCount = 0;
         this.config = config;
-        this.dereferencer = dereferencer ?? ldfetchDereferencer;
+        this.dereferencer =
+            dereferencer ??
+            (config.transferRetry ? new LdfetchDereferencer(undefined, { ...DEFAULT_TRANSFER_RETRY, ...config.transferRetry }) : ldfetchDereferencer);
         this.streamId = stream;
         this.ordered = ordered;
         this.clientStateManager = new ClientStateManager(this.config.statePath, this.config.startFresh);

@@ -156,6 +156,8 @@ async function main() {
             includeMetadata,
             concurrentFetches: fetch_config.concurrent,
             startFresh,
+            // A page of which the transfer is interrupted is requested again as often as a request that fails with an HTTP code
+            transferRetry: { maxRetries: fetch_config.retry!.maxRetries },
             fetch: enhanced_fetch(fetch_config),
         }),
         ordered,
