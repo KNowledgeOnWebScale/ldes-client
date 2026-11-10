@@ -1,4 +1,3 @@
-
 import { TREE, XSD } from "@treecg/types";
 import { getLoggerFor, parseInBetweenRelation } from "../utils";
 
@@ -21,19 +20,12 @@ export class Range {
 
     private defaultTimezone: string;
 
-    constructor(
-        value: RelationValue,
-        type: string,
-        defaultTimezone: string,
-        dataType?: string,
-    ) {
+    constructor(value: RelationValue, type: string, defaultTimezone: string, dataType?: string) {
         value = this.parseValue(value, dataType);
 
         const tzRegex = /^(AoE|Z|[+-]((0[0-9]|1[0-3]):([0-5][0-9])|14:00))$/;
         if (!tzRegex.test(defaultTimezone)) {
-            this.logger.warn(
-                `Invalid timezone: '${defaultTimezone}'. Using default Anywhere on Earth (AoE) instead.`,
-            );
+            this.logger.warn(`Invalid timezone: '${defaultTimezone}'. Using default Anywhere on Earth (AoE) instead.`);
             this.defaultTimezone = "AoE";
         } else {
             this.defaultTimezone = defaultTimezone;
@@ -59,16 +51,9 @@ export class Range {
                 return;
             case TREE.custom("InBetweenRelation"): {
                 if (typeof value !== "string") {
-                    throw (
-                        "InBetweenRelation can only handle string values, not" +
-                        typeof value
-                    );
+                    throw "InBetweenRelation can only handle string values, not" + typeof value;
                 }
-                const between = parseInBetweenRelation(
-                    value,
-                    dataType,
-                    this.defaultTimezone,
-                );
+                const between = parseInBetweenRelation(value, dataType, this.defaultTimezone);
                 if (between) {
                     this.min = between.min;
                     this.eqMin = true;
@@ -116,16 +101,9 @@ export class Range {
                 return;
             case TREE.custom("InBetweenRelation"): {
                 if (typeof value !== "string") {
-                    throw (
-                        "InBetweenRelation can only handle string values, not" +
-                        typeof value
-                    );
+                    throw "InBetweenRelation can only handle string values, not" + typeof value;
                 }
-                const between = parseInBetweenRelation(
-                    value,
-                    dataType,
-                    this.defaultTimezone,
-                );
+                const between = parseInBetweenRelation(value, dataType, this.defaultTimezone);
                 if (between) {
                     if (this.min === undefined || between.min < this.min) {
                         this.min = between.min;

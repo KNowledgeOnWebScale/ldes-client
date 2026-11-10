@@ -10,7 +10,9 @@ import { read, Tree } from "./helper";
 const TIMESTAMP = "http://example.org/time";
 const SEQUENCE = "http://example.org/sequence";
 const originalFetch = global.fetch;
-afterEach(() => { global.fetch = originalFetch; });
+afterEach(() => {
+    global.fetch = originalFetch;
+});
 
 type SavedFragment = { chain: RelationChain; expected: Set<string> };
 
@@ -25,11 +27,16 @@ function codecs(sequence: boolean) {
         },
     } as unknown as ModulatorFactory;
     new OrderedStrategy(
-        {} as Manager, {} as Fetcher, {} as Notifier<StrategyEvents, unknown>,
-        factory, {
+        {} as Manager,
+        {} as Fetcher,
+        {} as Notifier<StrategyEvents, unknown>,
+        factory,
+        {
             timestampPath: sequence ? undefined : DataFactory.namedNode(TIMESTAMP),
             sequencePath: sequence ? DataFactory.namedNode(SEQUENCE) : undefined,
-        } as LDESInfo, "ascending", false,
+        } as LDESInfo,
+        "ascending",
+        false,
     );
     return { encode, decode };
 }
@@ -66,31 +73,49 @@ describe("ordered state restoration", () => {
 });
 
 test.each(["ascending", "descending"] as const)("%s traversal keeps timestamp order when sequence values conflict", async (order) => {
-    const tree = new Tree<{ time: string; sequence: string }>((id, member) => new Parser().parse(
-        `<${id}> <${TIMESTAMP}> "${member.time}"^^<http://www.w3.org/2001/XMLSchema#dateTime>; <${SEQUENCE}> "${member.sequence}".`,
-    ), TIMESTAMP, SEQUENCE);
+    const tree = new Tree<{ time: string; sequence: string }>(
+        (id, member) =>
+            new Parser().parse(
+                `<${id}> <${TIMESTAMP}> "${member.time}"^^<http://www.w3.org/2001/XMLSchema#dateTime>; <${SEQUENCE}> "${member.sequence}".`,
+            ),
+        TIMESTAMP,
+        SEQUENCE,
+    );
     const page = tree.newFragment(30);
     const ascending = order === "ascending";
-    tree.fragment(tree.root()).addMember("root-member", { time: ascending ? "2020-01-01T00:00:00Z" : "2022-01-01T00:00:00Z", sequence: ascending ? "z" : "a" });
+    tree.fragment(tree.root()).addMember("root-member", {
+        time: ascending ? "2020-01-01T00:00:00Z" : "2022-01-01T00:00:00Z",
+        sequence: ascending ? "z" : "a",
+    });
     tree.fragment(page).addMember("page-member", { time: "2021-01-01T00:00:00Z", sequence: ascending ? "a" : "z" });
-    tree.fragment(tree.root()).relation(page, `https://w3id.org/tree#${ascending ? "GreaterThanRelation" : "LessThanRelation"}`, TIMESTAMP, ascending ? "2020-12-31T00:00:00Z" : "2021-12-31T00:00:00Z");
+    tree.fragment(tree.root()).relation(
+        page,
+        `https://w3id.org/tree#${ascending ? "GreaterThanRelation" : "LessThanRelation"}`,
+        TIMESTAMP,
+        ascending ? "2020-12-31T00:00:00Z" : "2021-12-31T00:00:00Z",
+    );
     global.fetch = tree.mock();
     const members = await read(replicateLDES({ url: tree.base() + tree.root() }, order).stream());
-    expect(members.map(member => member.sequence)).toEqual(ascending ? ["z", "a"] : ["a", "z"]);
+    expect(members.map((member) => member.sequence)).toEqual(ascending ? ["z", "a"] : ["a", "z"]);
 });
 
 test.each(["ascending", "descending"] as const)("%s order uses sequence only to break timestamp ties", async (order) => {
-    const tree = new Tree<{ time: string; sequence: string }>((id, member) => new Parser().parse(
-        `<${id}> <${TIMESTAMP}> "${member.time}"^^<http://www.w3.org/2001/XMLSchema#dateTime>; <${SEQUENCE}> "${member.sequence}".`,
-    ), TIMESTAMP, SEQUENCE);
+    const tree = new Tree<{ time: string; sequence: string }>(
+        (id, member) =>
+            new Parser().parse(
+                `<${id}> <${TIMESTAMP}> "${member.time}"^^<http://www.w3.org/2001/XMLSchema#dateTime>; <${SEQUENCE}> "${member.sequence}".`,
+            ),
+        TIMESTAMP,
+        SEQUENCE,
+    );
     tree.fragment(tree.root())
         .addMember("newest", { time: "2022-01-01T00:00:00Z", sequence: "a" })
         .addMember("older-high-sequence", { time: "2020-01-01T00:00:00Z", sequence: "z" })
         .addMember("older-low-sequence", { time: "2020-01-01T00:00:00Z", sequence: "b" });
     global.fetch = tree.mock();
     const members = await read(replicateLDES({ url: tree.base() + tree.root() }, order).stream());
-    const ascending = ["older-low-sequence", "older-high-sequence", "newest"].map(id => tree.base() + id);
-    expect(members.map(member => member.id.value)).toEqual(order === "ascending" ? ascending : ascending.reverse());
+    const ascending = ["older-low-sequence", "older-high-sequence", "newest"].map((id) => tree.base() + id);
+    expect(members.map((member) => member.id.value)).toEqual(order === "ascending" ? ascending : ascending.reverse());
 });
 
 test("sequence-only traversal emits a safe member while a later page is blocked", async () => {
@@ -100,7 +125,9 @@ test("sequence-only traversal emits a safe member while a later page is blocked"
     tree.fragment(page).addMember("last", "c");
     tree.fragment(tree.root()).relation(page, "https://w3id.org/tree#GreaterThanRelation", SEQUENCE, "b");
     let release!: () => void;
-    const blocked = new Promise<void>((resolve) => { release = resolve; });
+    const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+    });
     const mock = tree.mock();
     let laterPageReturned = false;
     global.fetch = async (input, init) => {
@@ -110,12 +137,16 @@ test("sequence-only traversal emits a safe member while a later page is blocked"
         }
         return mock(input, init);
     };
-    const reader = replicateLDES({ url: tree.base() + tree.root() }, "ascending").stream().getReader();
+    const reader = replicateLDES({ url: tree.base() + tree.root() }, "ascending")
+        .stream()
+        .getReader();
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
         const first = await Promise.race([
             reader.read(),
-            new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error("safe emission blocked")), 1000); }),
+            new Promise<never>((_, reject) => {
+                timeout = setTimeout(() => reject(new Error("safe emission blocked")), 1000);
+            }),
         ]);
         expect(first.value?.sequence).toBe("a");
         expect(laterPageReturned).toBe(false);

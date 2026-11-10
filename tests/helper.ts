@@ -62,10 +62,7 @@ export class Fragment<T> {
         this.delay = delay;
     }
 
-    toQuads(
-        ldesId: string,
-        memberToQuads: (id: string, member: T) => Quad[],
-    ): Quad[] {
+    toQuads(ldesId: string, memberToQuads: (id: string, member: T) => Quad[]): Quad[] {
         if (this.failCount > 0) {
             this.failCount -= 1;
             throw "I'm failing, oh no";
@@ -77,9 +74,7 @@ export class Fragment<T> {
         }
 
         for (const { id, member } of this.members) {
-            out.push(
-                ...parseQuads(`<${ldesId}> <${TREE.member}> <${id}>.`),
-            );
+            out.push(...parseQuads(`<${ldesId}> <${TREE.member}> <${id}>.`));
             out.push(...memberToQuads(id, member));
         }
 
@@ -114,11 +109,7 @@ export class Tree<T> {
 
     fetched: Set<string> = new Set();
 
-    constructor(
-        memberToQuads: (id: string, member: T) => Quad[],
-        timestampPath?: string,
-        sequencePath?: string,
-    ) {
+    constructor(memberToQuads: (id: string, member: T) => Quad[], timestampPath?: string, sequencePath?: string) {
         this.timestampPath = timestampPath;
         this.sequencePath = sequencePath;
         this.memberToQuads = memberToQuads;
@@ -143,10 +134,7 @@ export class Tree<T> {
     }
 
     mock(): typeof fetch {
-        const fetch_f: typeof fetch = async (
-            req: Parameters<typeof fetch>[0],
-            _opts: Parameters<typeof fetch>[1],
-        ) => {
+        const fetch_f: typeof fetch = async (req: Parameters<typeof fetch>[0], _opts: Parameters<typeof fetch>[1]) => {
             if (!req.toString().startsWith(BASE)) {
                 return new Response("", { status: 404 });
             }
@@ -156,13 +144,9 @@ export class Tree<T> {
             const quads: Quad[] = [];
 
             if (req.toString() === BASE + this.root()) {
-                const path = this.timestampPath
-                    ? ` <https://w3id.org/ldes#timestampPath> <${this.timestampPath}>;`
-                    : "";
+                const path = this.timestampPath ? ` <https://w3id.org/ldes#timestampPath> <${this.timestampPath}>;` : "";
 
-                const sequencePath = this.sequencePath
-                    ? ` <https://w3id.org/ldes#sequencePath> <${this.sequencePath}>;`
-                    : "";
+                const sequencePath = this.sequencePath ? ` <https://w3id.org/ldes#sequencePath> <${this.sequencePath}>;` : "";
                 quads.push(
                     ...parseQuads(`
 <> ${path} ${sequencePath}
@@ -177,9 +161,7 @@ export class Tree<T> {
                 await new Promise((res) => setTimeout(res, fragment.delay));
             }
             try {
-                quads.push(
-                    ...fragment.toQuads(BASE + this.root(), this.memberToQuads),
-                );
+                quads.push(...fragment.toQuads(BASE + this.root(), this.memberToQuads));
 
                 const respText = new Writer().quadsToString(quads);
 

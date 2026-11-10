@@ -17,11 +17,7 @@ const trigPrefixes =
     Object.entries(PREFIXES)
         .map(([k, v]) => `PREFIX ${k}: <${v}>`)
         .join("\n") + "\n";
-const ranges = (members, size) =>
-    Array.from({ length: Math.ceil(members / size) }, (_, p) => [
-        p * size,
-        Math.min(members, (p + 1) * size),
-    ]);
+const ranges = (members, size) => Array.from({ length: Math.ceil(members / size) }, (_, p) => [p * size, Math.min(members, (p + 1) * size)]);
 
 export async function createFixtures(BASE) {
     const pages = new Map();
@@ -31,16 +27,11 @@ export async function createFixtures(BASE) {
         const collection = `${BASE}/${name}/collection`;
         const list = (from, to) =>
             `<${collection}> tree:member ${Array.from({ length: to - from }, (_, k) => `ex:m${from + k}`).join(", ")} .\n` +
-            Array.from({ length: to - from }, (_, k) => member(from + k)).join(
-                "\n",
-            ) +
+            Array.from({ length: to - from }, (_, k) => member(from + k)).join("\n") +
             "\n";
         const head = `<${collection}> a ldes:EventStream ; ldes:timestampPath dcterms:created ; tree:view <${root}> .\n<${root}> a tree:Node .\n`;
         if (size >= members) {
-            pages.set(
-                `/${name}/root`,
-                turtlePrefixes + head + list(0, members),
-            );
+            pages.set(`/${name}/root`, turtlePrefixes + head + list(0, members));
         } else {
             const parts = ranges(members, size);
             pages.set(
@@ -56,12 +47,7 @@ export async function createFixtures(BASE) {
                     "\n",
             );
             parts.forEach(([from, to], p) =>
-                pages.set(
-                    `/${name}/page${p}`,
-                    turtlePrefixes +
-                        `<${BASE}/${name}/page${p}> a tree:Node .\n` +
-                        list(from, to),
-                ),
+                pages.set(`/${name}/page${p}`, turtlePrefixes + `<${BASE}/${name}/page${p}> a tree:Node .\n` + list(from, to)),
             );
         }
         return root;
@@ -70,11 +56,7 @@ export async function createFixtures(BASE) {
     /** LDES 2.0: the same members, one message per member */
     function ldes2(name, members, size) {
         const root = `${BASE}/${name}/root`;
-        const messages = (from, to) =>
-            Array.from(
-                { length: to - from },
-                (_, k) => "MESSAGE\n" + member(from + k),
-            ).join("\n") + "\n";
+        const messages = (from, to) => Array.from({ length: to - from }, (_, k) => "MESSAGE\n" + member(from + k)).join("\n") + "\n";
         const description = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .\n`;
         const body = (text) => `VERSION "1.2-messages"\n${trigPrefixes}${text}`;
         if (size >= members) {
@@ -114,13 +96,8 @@ export async function createFixtures(BASE) {
         for (const [key, page] of pages) {
             if (!key.startsWith(`/${name}/`)) continue;
             const writer = new Writer({ packMessages: false });
-            for (const message of parseMessages(page.body))
-                writer.addMessage(message);
-            const body = await new Promise((resolve, reject) =>
-                writer.end((error, bytes) =>
-                    error ? reject(error) : resolve(Buffer.from(bytes)),
-                ),
-            );
+            for (const message of parseMessages(page.body)) writer.addMessage(message);
+            const body = await new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes)))));
             pages.set(key, { type: "application/x-jelly-rdf", body });
         }
         return url;

@@ -22,7 +22,8 @@ import type { Key } from "./key";
 import type { FetchedPage, LDESInfo, Member } from "../types";
 import type { MessageDereferencer, MessageLog } from "../fetcher/ldfetchDereferencer";
 import type { Gate } from "./gate";
-import type { Bookmark, StreamContext, Traversal } from "./traversal";
+import type { Bookmark, SavedBookmark, StreamContext, Traversal } from "./traversal";
+import { loadBookmark, saveBookmark } from "./traversal";
 import type { Description, OrderMode } from "./description";
 
 const logger = getLoggerFor("Ldes2Client");
@@ -43,7 +44,7 @@ export type Ldes2Hooks = {
 export type Ldes2Start = {
     config: Config;
     dereferencer: MessageDereferencer;
-    bookmarks?: KVStore<string, Bookmark>;
+    bookmarks?: KVStore<string, SavedBookmark>;
     root: { log: MessageLog; first: Quad[] | undefined };
     hooks: Ldes2Hooks;
     /** Called as soon as the context information is read, before any member is emitted */
@@ -62,21 +63,17 @@ function onlyOne(store: ReturnType<typeof toStore>, stream: Term, predicate: Ter
 function describe(store: ReturnType<typeof toStore>, resource: Term, seen = new Set<string>()): Quad[] {
     if (seen.has(resource.value)) return [];
     seen.add(resource.value);
-    return store.getQuads(resource, null, null, null).flatMap((quad) => [
-        quad,
-        ...(quad.object.termType === "BlankNode" ? describe(store, quad.object, seen) : []),
-    ]);
+    return store
+        .getQuads(resource, null, null, null)
+        .flatMap((quad) => [quad, ...(quad.object.termType === "BlankNode" ? describe(store, quad.object, seen) : [])]);
 }
 
 /** Reads the context information from the description message of the root page */
-export function readContext(
-    first: Quad[] | undefined,
-    configuredTimezone?: string,
-): { context: StreamContext; info: LDESInfo } {
+export function readContext(first: Quad[] | undefined, configuredTimezone?: string): { context: StreamContext; info: LDESInfo } {
     if (!first || !isEventStreamDescription(first)) {
         throw new Error(
             "The first message of the root page does not describe an ldes:EventStream: " +
-            "a page without a description of the LDES is not a root page",
+                "a page without a description of the LDES is not a root page",
         );
     }
     const streams = [
@@ -95,9 +92,7 @@ export function readContext(
 
     const timestampPath = get(V.timestampPath, "ldes:timestampPath");
     const sequencePath = get(V.sequencePath, "ldes:sequencePath");
-    const mode: OrderMode = timestampPath
-        ? sequencePath ? "timestamp-sequence" : "timestamp"
-        : sequencePath ? "sequence" : "implicit";
+    const mode: OrderMode = timestampPath ? (sequencePath ? "timestamp-sequence" : "timestamp") : sequencePath ? "sequence" : "implicit";
 
     // The timezone of timestamps without timezone: the configured one, otherwise that of the LDES, otherwise unknown
     const ldesTimezone = get(V.defaultTimezone, "ldes:defaultTimezone")?.value;
@@ -140,9 +135,7 @@ export function readContext(
         versionSequencePath: get(V.versionSequencePath, "ldes:versionSequencePath"),
         pollingInterval: Number.isNaN(pollingInterval) ? undefined : pollingInterval,
         retentionPolicies,
-        emptyRetentionPolicies: retentionPolicies.filter(
-            (policy) => store.getQuads(policy, null, null, null).length === 0,
-        ),
+        emptyRetentionPolicies: retentionPolicies.filter((policy) => store.getQuads(policy, null, null, null).length === 0),
     } as unknown as LDESInfo;
     return { context, info };
 }
@@ -159,12 +152,13 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
     const rootUrl = start.root.log.url;
     const bookmarkKey = config.url;
 
-    let bookmark: Bookmark = { members: [] };
+    let bookmark: Bookmark = { members: new Set() };
     if (start.bookmarks) {
-        bookmark = (await start.bookmarks.get(bookmarkKey).catch(() => undefined)) ?? bookmark;
+        const saved = await start.bookmarks.get(bookmarkKey).catch(() => undefined);
+        if (saved) bookmark = loadBookmark(saved);
     }
     const persist = async () => {
-        await start.bookmarks?.put(bookmarkKey, bookmark).catch((ex) => {
+        await start.bookmarks?.put(bookmarkKey, saveBookmark(bookmark)).catch((ex) => {
             logger.error(`Could not save the bookmark: ${ex}`);
         });
     };
@@ -173,9 +167,7 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
     const condition = config.condition;
     const relevant = relevance(condition, context, config.defaultTimezone);
 
-    const pollInterval = info.pollingInterval === undefined
-        ? config.pollInterval
-        : info.pollingInterval * 1000;
+    const pollInterval = info.pollingInterval === undefined ? config.pollInterval : info.pollingInterval * 1000;
 
     const run = async () => {
         let root = start.root;
@@ -197,8 +189,7 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
                 root,
                 // As many pages as the client may request at the same time
                 prefetch: config.concurrentFetches,
-                open: (url, options) =>
-                    dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true, ...options }),
+                open: (url, options) => dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true, ...options }),
                 relevant,
                 emit: async (member) => {
                     await hooks.gate.wait();
@@ -252,16 +243,12 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
  * which is compared with the conditions on that path in the same way as the range of a tree:relation is in an LDES 1.0.
  * Returns undefined when there is nothing to prune on.
  */
-export function relevance(
-    condition: Condition,
-    context: StreamContext,
-    defaultTimezone: string,
-): Traversal["relevant"] {
+export function relevance(condition: Condition, context: StreamContext, defaultTimezone: string): Traversal["relevant"] {
     if (condition instanceof EmptyCondition) return undefined;
     const path = context.timestampPath
         ? { id: context.timestampPath, store: context.pathStore }
-        // Without a timestamp, no range can be given: only conditions that do not depend on a path can prune
-        : { id: df.blankNode(), store: RdfStore.createDefault() };
+        : // Without a timestamp, no range can be given: only conditions that do not depend on a path can prune
+          { id: df.blankNode(), store: RdfStore.createDefault() };
     return (lower?: Key, upper?: Key) => {
         const range = Range.empty(defaultTimezone);
         if (context.timestampPath) {

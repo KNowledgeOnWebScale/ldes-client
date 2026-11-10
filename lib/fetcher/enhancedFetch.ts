@@ -21,41 +21,26 @@ export type FetchConfig = {
     safe?: boolean;
 };
 
-export function enhanced_fetch(
-    config: FetchConfig,
-    start?: typeof fetch,
-): typeof fetch {
+export function enhanced_fetch(config: FetchConfig, start?: typeof fetch): typeof fetch {
     const start_f = start || fetch;
     const safe_f = config.safe
         ? ((async (a, b) => {
-            while (true) {
-                try {
-                    return await start_f(a, b);
-                } catch (ex) {
-                    logger.debug(
-                        `This should not happen, it will not happen this is safe. ${JSON.stringify(
-                            ex,
-                        )}`,
-                    );
-                }
-            }
-        }) as typeof fetch)
+              while (true) {
+                  try {
+                      return await start_f(a, b);
+                  } catch (ex) {
+                      logger.debug(`This should not happen, it will not happen this is safe. ${JSON.stringify(ex)}`);
+                  }
+              }
+          }) as typeof fetch)
         : start_f;
 
-    const fetch_f = config.auth
-        ? handle_basic_auth(safe_f, config.auth)
-        : safe_f;
+    const fetch_f = config.auth ? handle_basic_auth(safe_f, config.auth) : safe_f;
 
-    return limit_fetch_per_domain(
-        empty_special_status_fetch(retry_fetch(fetch_f, config.retry || {})),
-        config.concurrent,
-    );
+    return limit_fetch_per_domain(empty_special_status_fetch(retry_fetch(fetch_f, config.retry || {})), config.concurrent);
 }
 
-export function limit_fetch_per_domain(
-    fetch_f: typeof fetch,
-    concurrent: number = 10,
-): typeof fetch {
+export function limit_fetch_per_domain(fetch_f: typeof fetch, concurrent: number = 10): typeof fetch {
     const domain_dict: { [domain: string]: Array<(value: void) => void> } = {};
 
     const out: typeof fetch = async (input, init) => {
@@ -68,9 +53,7 @@ export function limit_fetch_per_domain(
 
         const requests = domain_dict[domain];
         await new Promise((res) => {
-            logger.debug(
-                `[limit] request ${input} for domain [${domain}] capacity: (${requests.length}/${concurrent})`,
-            );
+            logger.debug(`[limit] request ${input} for domain [${domain}] capacity: (${requests.length}/${concurrent})`);
             if (requests.length < concurrent) {
                 requests.push(res);
                 res({});
@@ -93,10 +76,7 @@ export function limit_fetch_per_domain(
     return out;
 }
 
-export function handle_basic_auth(
-    fetch_f: typeof fetch,
-    config: AuthConfig,
-): typeof fetch {
+export function handle_basic_auth(fetch_f: typeof fetch, config: AuthConfig): typeof fetch {
     let authRequired = false;
 
     const basicAuthValue = `Basic ${Buffer.from(config.auth).toString("base64")}`;
@@ -150,10 +130,7 @@ export function empty_special_status_fetch(fetch_f: typeof fetch): typeof fetch 
     return status_f;
 }
 
-export function retry_fetch(
-    fetch_f: typeof fetch,
-    partial_config: Partial<RetryConfig>,
-): typeof fetch {
+export function retry_fetch(fetch_f: typeof fetch, partial_config: Partial<RetryConfig>): typeof fetch {
     const config: RetryConfig = Object.assign(
         {
             codes: [408, 425, 429, 500, 502, 503, 504],
@@ -170,9 +147,7 @@ export function retry_fetch(
             const resp = await fetch_f(input, init);
             if (!resp.ok) {
                 if (config.codes.some((x) => x == resp.status)) {
-                    logger.debug(
-                        `[retry_fetch] Got ${resp.status} ${resp.statusText}, retrying ${input} ${tryCount}/${config.maxRetries}`,
-                    );
+                    logger.debug(`[retry_fetch] Got ${resp.status} ${resp.statusText}, retrying ${input} ${tryCount}/${config.maxRetries}`);
                     // Wait 500ms, 1 second, 2 seconds, 4 seconds, 8 seconds, fail
                     tryCount += 1;
                     await new Promise((res) => setTimeout(res, retryTime));

@@ -41,38 +41,25 @@ class DOSqliteKVStore<K extends string | number, V> implements KVStore<K, V> {
     }
 
     async get(key: K): Promise<V | undefined> {
-        const rows = this.sql.exec<{ value: string }>(
-            `SELECT value FROM "${this.table}" WHERE store = ? AND key = ?`,
-            this.name,
-            String(key),
-        ).toArray();
+        const rows = this.sql
+            .exec<{ value: string }>(`SELECT value FROM "${this.table}" WHERE store = ? AND key = ?`, this.name, String(key))
+            .toArray();
         if (rows.length === 0) return undefined;
         return JSON.parse(rows[0].value) as V;
     }
 
     async put(key: K, value: V): Promise<void> {
-        this.sql.exec(
-            `INSERT OR REPLACE INTO "${this.table}" (store, key, value) VALUES (?, ?, ?)`,
-            this.name,
-            String(key),
-            JSON.stringify(value),
-        );
+        this.sql.exec(`INSERT OR REPLACE INTO "${this.table}" (store, key, value) VALUES (?, ?, ?)`, this.name, String(key), JSON.stringify(value));
     }
 
     async del(key: K): Promise<void> {
-        this.sql.exec(
-            `DELETE FROM "${this.table}" WHERE store = ? AND key = ?`,
-            this.name,
-            String(key),
-        );
+        this.sql.exec(`DELETE FROM "${this.table}" WHERE store = ? AND key = ?`, this.name, String(key));
     }
 
     async has(key: K): Promise<boolean> {
-        const rows = this.sql.exec<{ c: number }>(
-            `SELECT COUNT(*) as c FROM "${this.table}" WHERE store = ? AND key = ?`,
-            this.name,
-            String(key),
-        ).toArray();
+        const rows = this.sql
+            .exec<{ c: number }>(`SELECT COUNT(*) as c FROM "${this.table}" WHERE store = ? AND key = ?`, this.name, String(key))
+            .toArray();
         return rows[0].c > 0;
     }
 
@@ -83,10 +70,7 @@ class DOSqliteKVStore<K extends string | number, V> implements KVStore<K, V> {
     values(): { all(): Promise<V[]> } {
         return {
             all: async (): Promise<V[]> => {
-                const rows = this.sql.exec<{ value: string }>(
-                    `SELECT value FROM "${this.table}" WHERE store = ? ORDER BY key`,
-                    this.name,
-                ).toArray();
+                const rows = this.sql.exec<{ value: string }>(`SELECT value FROM "${this.table}" WHERE store = ? ORDER BY key`, this.name).toArray();
                 return rows.map((row) => JSON.parse(row.value) as V);
             },
         };
@@ -99,9 +83,9 @@ export class DOSqliteStorage implements Storage {
 
     constructor(storage: DOStorage, table = "ldes_client_storage") {
         this.sql = storage.sql;
-        this.table = table.replace(/"/g, "\"\"");
+        this.table = table.replace(/"/g, '""');
         this.sql.exec(
-            `CREATE TABLE IF NOT EXISTS "${this.table}" (store TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (store, key))`
+            `CREATE TABLE IF NOT EXISTS "${this.table}" (store TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (store, key))`,
         );
     }
 

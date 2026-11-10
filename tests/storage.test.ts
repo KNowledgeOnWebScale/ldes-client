@@ -98,7 +98,9 @@ test("SQLite fresh start clears shared state and preserves other tables", async 
 test("the state manager waits for asynchronous storage initialization", async () => {
     const memory = new MemoryStorage();
     let release!: () => void;
-    const ready = new Promise<void>((resolve) => { release = resolve; });
+    const ready = new Promise<void>((resolve) => {
+        release = resolve;
+    });
     const storage: Storage = {
         store: memory.store.bind(memory),
         close: memory.close.bind(memory),
@@ -106,7 +108,9 @@ test("the state manager waits for asynchronous storage initialization", async ()
     };
     const manager = new ClientStateManager(storage);
     let initialized = false;
-    const initializing = manager.init().then(() => { initialized = true; });
+    const initializing = manager.init().then(() => {
+        initialized = true;
+    });
     try {
         await Promise.resolve();
         expect(initialized).toBe(false);
@@ -118,7 +122,9 @@ test("the state manager waits for asynchronous storage initialization", async ()
 
 test("the state manager reports asynchronous initialization failures", async () => {
     const storage = new MemoryStorage();
-    storage.init = async () => { throw new Error("initialization failed"); };
+    storage.init = async () => {
+        throw new Error("initialization failed");
+    };
     await expect(new ClientStateManager(storage).init()).rejects.toThrow("initialization failed");
 });
 

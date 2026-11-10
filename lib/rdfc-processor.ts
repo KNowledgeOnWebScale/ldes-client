@@ -66,9 +66,7 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
                 loose: this.loose,
                 urlIsView: this.urlIsView,
                 fetch: this.fetchConfig ? enhanced_fetch(this.fetchConfig) : fetch,
-                condition: await processConditionFile(
-                    this.conditionFile && toPath(this.conditionFile),
-                ),
+                condition: await processConditionFile(this.conditionFile && toPath(this.conditionFile)),
                 materialize: this.materialize,
                 lastVersionOnly: this.lastVersionOnly,
                 startFresh: this.startFresh,
@@ -107,7 +105,6 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
 
         while (member) {
             if (member.value) {
-
                 if (this.client.memberCount % 100 === 0) {
                     this.logger.verbose(
                         `Got member number ${this.client.memberCount} with ID ${member.value.id.value} and ${member.value.quads.length} quads`,
@@ -119,18 +116,8 @@ export class LDESClientProcessor extends Processor<LDESClientArgs> {
                 if (this.sdsify) {
                     const blank = df.blankNode();
                     quads.push(
-                        df.quad(
-                            blank,
-                            SDS.terms.stream,
-                            <Quad_Object>this.client.streamId!,
-                            SDS.terms.custom("DataDescription"),
-                        ),
-                        df.quad(
-                            blank,
-                            SDS.terms.payload,
-                            <Quad_Object>member.value.id!,
-                            SDS.terms.custom("DataDescription"),
-                        ),
+                        df.quad(blank, SDS.terms.stream, <Quad_Object>this.client.streamId!, SDS.terms.custom("DataDescription")),
+                        df.quad(blank, SDS.terms.payload, <Quad_Object>member.value.id!, SDS.terms.custom("DataDescription")),
                     );
                 }
 

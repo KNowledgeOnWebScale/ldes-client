@@ -21,11 +21,7 @@ function orderValue(value: OrderValue, written: string | undefined): string {
  * Everything that is not known is left out. Each line starts with `# `, which is a comment in TriG, N-Quads and Turtle.
  * @param number the number of the member in the output, starting from 1
  */
-export function memberComment(
-    member: Member,
-    number: number,
-    info?: Pick<LDESInfo, "timestampPath" | "sequencePath">,
-): string {
+export function memberComment(member: Member, number: number, info?: Pick<LDESInfo, "timestampPath" | "sequencePath">): string {
     const lines = [`member ${number}: ${term(member.id)}`];
     if (member.timestamp !== undefined) {
         lines.push(`timestamp: ${orderValue(member.timestamp, lexical(member, info?.timestampPath))}`);

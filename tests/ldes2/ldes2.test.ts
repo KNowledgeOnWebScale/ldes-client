@@ -39,8 +39,7 @@ async function collect(url = ROOT, config: Record<string, unknown> = {}): Promis
 const ids = (members: Member[]) => members.map((m) => m.id.value.replace("http://example.org/", ""));
 
 /** A member message: a record with a timestamp */
-const record = (name: string, time: string, extra = "") =>
-    `ex:${name} a ex:Record ; dcterms:created "${time}"^^xsd:dateTime ${extra}.`;
+const record = (name: string, time: string, extra = "") => `ex:${name} a ex:Record ; dcterms:created "${time}"^^xsd:dateTime ${extra}.`;
 
 describe("Timestamp ordered LDES", () => {
     const description = `ex:ES a ldes:EventStream ;
@@ -49,19 +48,15 @@ describe("Timestamp ordered LDES", () => {
 
     test("a client emits the members of all pages in ascending order, as a merge of the logs", async () => {
         // The relations of the root overlap in time, the members have to be interleaved
-        server.trig("/root", `${description}
+        server.trig(
+            "/root",
+            `${description}
 <> ldes:relation
    [ ldes:page <${server.base}/a> ; ldes:timeFrom "2026-01-01T00:00:00Z"^^xsd:dateTime ; ldes:timeUntil "2026-01-10T00:00:00Z"^^xsd:dateTime ] ,
-   [ ldes:page <${server.base}/b> ; ldes:timeFrom "2026-01-02T00:00:00Z"^^xsd:dateTime ; ldes:timeUntil "2026-01-10T00:00:00Z"^^xsd:dateTime ] .`);
-        server.trig("/a",
-            record("a1", "2026-01-01T00:00:00Z"),
-            record("a2", "2026-01-03T00:00:00Z"),
-            record("a3", "2026-01-05T00:00:00Z"),
+   [ ldes:page <${server.base}/b> ; ldes:timeFrom "2026-01-02T00:00:00Z"^^xsd:dateTime ; ldes:timeUntil "2026-01-10T00:00:00Z"^^xsd:dateTime ] .`,
         );
-        server.trig("/b",
-            record("b1", "2026-01-02T00:00:00Z"),
-            record("b2", "2026-01-04T00:00:00Z"),
-        );
+        server.trig("/a", record("a1", "2026-01-01T00:00:00Z"), record("a2", "2026-01-03T00:00:00Z"), record("a3", "2026-01-05T00:00:00Z"));
+        server.trig("/b", record("b1", "2026-01-02T00:00:00Z"), record("b2", "2026-01-04T00:00:00Z"));
 
         const members = await collect();
         expect(ids(members)).toEqual(["a1", "b1", "a2", "b2", "a3"]);
@@ -70,9 +65,12 @@ describe("Timestamp ordered LDES", () => {
     });
 
     test("the description event gives the context information of the LDES", async () => {
-        server.trig("/root", `${description}
+        server.trig(
+            "/root",
+            `${description}
 ex:ES ldes:pollingInterval 60 ; ldes:retentionPolicy [ ldes:fullLogDuration "P1Y"^^xsd:duration ] .
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
+        );
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"));
 
         const client = replicateLDES({ url: ROOT });
@@ -97,31 +95,37 @@ ex:ES ldes:pollingInterval 60 ; ldes:retentionPolicy [ ldes:fullLogDuration "P1Y
     });
 
     test("members with the same timestamp are ordered by the sequence path", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:sequencePath ex:seq ; ldes:memberType ex:Record .
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
-        const t = "2026-01-01T00:00:00Z";
-        server.trig("/a",
-            record("a1", t, "; ex:seq 2 "),
-            record("a2", t, "; ex:seq 10 "),
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:sequencePath ex:seq ; ldes:memberType ex:Record .
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
         );
+        const t = "2026-01-01T00:00:00Z";
+        server.trig("/a", record("a1", t, "; ex:seq 2 "), record("a2", t, "; ex:seq 10 "));
         const members = await collect();
         expect(ids(members)).toEqual(["a1", "a2"]);
         expect(members[1].sequence).toEqual({ type: "numeric", value: "10" });
     });
 
     test("a relation with only a lower bound and a relation with an unknown type are followed", async () => {
-        server.trig("/root", `${description}
+        server.trig(
+            "/root",
+            `${description}
 <> ldes:relation
    [ a tree:PrefixRelation ; tree:path ex:name ; tree:value "a" ; ldes:page <${server.base}/a> ] ,
-   [ ldes:page <${server.base}/b> ; ldes:timeFrom "2026-02-01T00:00:00Z"^^xsd:dateTime ] .`);
+   [ ldes:page <${server.base}/b> ; ldes:timeFrom "2026-02-01T00:00:00Z"^^xsd:dateTime ] .`,
+        );
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"));
         server.trig("/b", record("b1", "2026-02-02T00:00:00Z"));
         expect(ids(await collect())).toEqual(["a1", "b1"]);
     });
 
     test("a page can be a member-less page that only links to other pages", async () => {
-        server.trig("/root", `${description}
-<> ldes:relation [ ldes:page <${server.base}/index> ] .`);
+        server.trig(
+            "/root",
+            `${description}
+<> ldes:relation [ ldes:page <${server.base}/index> ] .`,
+        );
         server.trig("/index", `<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"));
         expect(ids(await collect())).toEqual(["a1"]);
@@ -139,8 +143,11 @@ ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType 
     });
 
     test("a 410 Gone is a page without members and relations", async () => {
-        server.trig("/root", `${description}
-<> ldes:relation [ ldes:page <${server.base}/gone> ] , [ ldes:page <${server.base}/a> ] .`);
+        server.trig(
+            "/root",
+            `${description}
+<> ldes:relation [ ldes:page <${server.base}/gone> ] , [ ldes:page <${server.base}/a> ] .`,
+        );
         server.set("/gone", { status: 410, body: "gone" });
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"));
         expect(ids(await collect())).toEqual(["a1"]);
@@ -149,31 +156,40 @@ ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType 
 
 describe("LDES ordered by only a sequence", () => {
     test("members are ordered by an xsd:dateTime sequence, also without timezone and with microseconds", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true ; ldes:sequencePath ex:at .
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true ; ldes:sequencePath ex:at .
 <> ldes:relation [ ldes:page <${server.base}/a> ;
-    ldes:sequenceFrom "2023-01-01T00:00:00.000001"^^xsd:dateTime ; ldes:sequenceUntil "2023-01-02T00:00:00"^^xsd:dateTime ] .`);
-        server.trig("/a",
-            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
-            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
+    ldes:sequenceFrom "2023-01-01T00:00:00.000001"^^xsd:dateTime ; ldes:sequenceUntil "2023-01-02T00:00:00"^^xsd:dateTime ] .`,
+        );
+        server.trig(
+            "/a",
+            'ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }',
+            'ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }',
         );
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["g1", "g2"]);
 
         // The relation is skipped when its upper bound is before the bookmark: a growing page is fetched again
         server.requests = [];
-        server.trig("/a",
-            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
-            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
-            "ex:g3 ex:at \"2023-01-01T00:00:00.000003\"^^xsd:dateTime . ex:g3 { ex:x ex:p 3 . }",
+        server.trig(
+            "/a",
+            'ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }',
+            'ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }',
+            'ex:g3 ex:at "2023-01-01T00:00:00.000003"^^xsd:dateTime . ex:g3 { ex:x ex:p 3 . }',
         );
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["g3"]);
     });
 
     test("members that are not in ascending order of their sequence is an error", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true ; ldes:sequencePath ex:at .
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
-        server.trig("/a",
-            "ex:g2 ex:at \"2023-01-01T00:00:00.000002\"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }",
-            "ex:g1 ex:at \"2023-01-01T00:00:00.000001\"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }",
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true ; ldes:sequencePath ex:at .
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
+        );
+        server.trig(
+            "/a",
+            'ex:g2 ex:at "2023-01-01T00:00:00.000002"^^xsd:dateTime . ex:g2 { ex:x ex:p 2 . }',
+            'ex:g1 ex:at "2023-01-01T00:00:00.000001"^^xsd:dateTime . ex:g1 { ex:x ex:p 1 . }',
         );
         await expect(collect()).rejects.toThrow(/ordering/);
     });
@@ -181,14 +197,14 @@ describe("LDES ordered by only a sequence", () => {
 
 describe("LDES in implicit order", () => {
     test("pages are ordered by their page number, and the members by their index in the page", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
 <> ldes:relation
    [ ldes:page <${server.base}/p1> ; ldes:pageNumber 1 ] ,
-   [ ldes:page <${server.base}/p0> ; ldes:pageNumber 0 ] .`);
-        server.trig("/p0",
-            "ex:m0 { ex:m0 ex:value 0 . }",
-            "ex:m1 { ex:m1 ex:value 1 . }",
+   [ ldes:page <${server.base}/p0> ; ldes:pageNumber 0 ] .`,
         );
+        server.trig("/p0", "ex:m0 { ex:m0 ex:value 0 . }", "ex:m1 { ex:m1 ex:value 1 . }");
         server.trig("/p1", "ex:m2 { ex:m2 ex:value 2 . }");
 
         const members = await collect();
@@ -198,8 +214,11 @@ describe("LDES in implicit order", () => {
     });
 
     test("a page of which the number cannot be determined is an error", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/p0> ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/p0> ] .`,
+        );
         server.trig("/p0", "ex:m0 { ex:m0 ex:value 0 . }");
         await expect(collect()).rejects.toThrow(/page number/);
     });
@@ -219,7 +238,10 @@ describe("LDES in implicit order", () => {
 
         // The latest page grows, a new page is added
         server.requests = [];
-        server.trig("/root", root.replace("p2> ; ldes:pageNumber 2 ]", "p2> ; ldes:pageNumber 2 ] , [ ldes:page <" + server.base + "/p3> ; ldes:pageNumber 3 ]"));
+        server.trig(
+            "/root",
+            root.replace("p2> ; ldes:pageNumber 2 ]", "p2> ; ldes:pageNumber 2 ] , [ ldes:page <" + server.base + "/p3> ; ldes:pageNumber 3 ]"),
+        );
         server.trig("/p2", "ex:m2 { ex:m2 ex:value 2 . }", "ex:m2b { ex:m2b ex:value 2 . }");
         server.trig("/p3", "ex:m3 { ex:m3 ex:value 3 . }");
 
@@ -233,9 +255,7 @@ describe("Membership", () => {
 
     test("direct membership: <ES> ldes:member ?m", async () => {
         server.trig("/root", `ex:ES a ldes:EventStream . ${relation}`);
-        server.trig("/a",
-            "ex:ES ldes:member ex:m0 . ex:m0 ex:value 0 ; ex:detail [ ex:deeper 1 ] .",
-        );
+        server.trig("/a", "ex:ES ldes:member ex:m0 . ex:m0 ex:value 0 ; ex:detail [ ex:deeper 1 ] .");
         const members = await collect();
         expect(ids(members)).toEqual(["m0"]);
         // The member is the full message, including the triple that identifies the member
@@ -244,9 +264,12 @@ describe("Membership", () => {
 
     test("indirect membership by ldes:memberType, with the member data in blank nodes and other graphs", async () => {
         server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberType ex:Record . ${relation}`);
-        server.trig("/a", `ex:m0 a ex:Record ; ex:detail _:b .
+        server.trig(
+            "/a",
+            `ex:m0 a ex:Record ; ex:detail _:b .
 _:b ex:value 5 .
-ex:graph { _:c ex:value 6 . }`);
+ex:graph { _:c ex:value 6 . }`,
+        );
         const members = await collect();
         expect(ids(members)).toEqual(["m0"]);
         expect(members[0].quads).toHaveLength(4);
@@ -295,15 +318,21 @@ describe("Errors", () => {
     });
 
     test("a relation with a sequence bound without a timestamp bound is an error", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:sequencePath ex:seq ; ldes:memberType ex:Record .
-<> ldes:relation [ ldes:page <${server.base}/a> ; ldes:sequenceFrom 1 ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:sequencePath ex:seq ; ldes:memberType ex:Record .
+<> ldes:relation [ ldes:page <${server.base}/a> ; ldes:sequenceFrom 1 ] .`,
+        );
         server.trig("/a", record1);
         await expect(collect()).rejects.toThrow(/sequenceFrom/);
     });
 
     test("a relation must have exactly one ldes:page", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
-<> ldes:relation [ ldes:timeFrom "2026-01-01T00:00:00Z"^^xsd:dateTime ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
+<> ldes:relation [ ldes:timeFrom "2026-01-01T00:00:00Z"^^xsd:dateTime ] .`,
+        );
         await expect(collect()).rejects.toThrow(/exactly one ldes:page/);
     });
 
@@ -331,29 +360,28 @@ describe("Jelly-RDF", () => {
         for (const message of messages) {
             writer.addMessage(
                 message.map(([s, p, o, g]) =>
-                    quad(
-                        namedNode(s),
-                        namedNode(p),
-                        o.startsWith("http") ? namedNode(o) : literal(o),
-                        g ? namedNode(g) : undefined,
-                    ),
+                    quad(namedNode(s), namedNode(p), o.startsWith("http") ? namedNode(o) : literal(o), g ? namedNode(g) : undefined),
                 ),
             );
         }
-        return new Promise((resolve, reject) =>
-            writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes!)))),
-        );
+        return new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes!)))));
     }
 
     const ex = (name: string) => "http://example.org/" + name;
 
     test("a client reads a page in Jelly-RDF, in which every frame is a member message", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/page.jelly> ; ldes:pageNumber 0 ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/page.jelly> ; ldes:pageNumber 0 ] .`,
+        );
         server.set("/page.jelly", {
             type: "application/x-jelly-rdf",
             body: await jelly([
-                [[ex("m0"), ex("value"), "0", ex("m0")], [ex("m0"), ex("other"), "x", ex("m0")]],
+                [
+                    [ex("m0"), ex("value"), "0", ex("m0")],
+                    [ex("m0"), ex("other"), "x", ex("m0")],
+                ],
                 [[ex("m1"), ex("value"), "1", ex("m1")]],
             ]),
         });
@@ -364,8 +392,11 @@ describe("Jelly-RDF", () => {
 
     test("a client reads a gzipped Jelly-RDF page of which the media type is not helpful", async () => {
         const { gzipSync } = await import("zlib");
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/page.jelly.gz> ; ldes:pageNumber 0 ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/page.jelly.gz> ; ldes:pageNumber 0 ] .`,
+        );
         server.set("/page.jelly.gz", {
             type: "application/octet-stream",
             body: gzipSync(await jelly([[[ex("m0"), ex("value"), "0", ex("m0")]]])),
@@ -374,8 +405,11 @@ describe("Jelly-RDF", () => {
     });
 
     test("an empty frame is an empty message, which is an error", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/page.jelly> ; ldes:pageNumber 0 ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/page.jelly> ; ldes:pageNumber 0 ] .`,
+        );
         server.set("/page.jelly", {
             type: "application/x-jelly-rdf",
             body: await jelly([[[ex("m0"), ex("value"), "0", ex("m0")]], [], [[ex("m1"), ex("value"), "1", ex("m1")]]]),
@@ -386,8 +420,11 @@ describe("Jelly-RDF", () => {
 
 describe("Other serializations", () => {
     test("a client reads pages in N-Quads with message delimiters", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/p0.nq> ; ldes:pageNumber 0 ] .`);
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/p0.nq> ; ldes:pageNumber 0 ] .`,
+        );
         server.set("/p0.nq", {
             type: "application/n-quads",
             body: `VERSION "1.2-messages"
@@ -424,14 +461,13 @@ describe("State management", () => {
 <> ldes:relation [ ldes:page <${server.base}/a> ] .`;
 
     test.each(["Level", "Memory"])("%s bookmarks emit members sharing a timestamp exactly once", async (backend) => {
-        const state = backend === "Level"
-            ? { statePath: "client-state-ldes2" }
-            : { storage: new MemoryStorage() };
+        const state = backend === "Level" ? { statePath: "client-state-ldes2" } : { storage: new MemoryStorage() };
         server.trig("/root", description);
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"), record("a2", "2026-01-02T00:00:00Z"));
         expect(ids(await collect(ROOT, state))).toEqual(["a1", "a2"]);
 
-        server.trig("/a",
+        server.trig(
+            "/a",
             record("a1", "2026-01-01T00:00:00Z"),
             record("a2", "2026-01-02T00:00:00Z"),
             record("a3", "2026-01-02T00:00:00Z"),
@@ -439,6 +475,32 @@ describe("State management", () => {
         );
         expect(ids(await collect(ROOT, state))).toEqual(["a3", "a4"]);
         expect(ids(await collect(ROOT, state))).toEqual([]);
+    });
+
+    test("the members of a bookmark are a set, which is saved as an array of JSON", async () => {
+        const { loadBookmark, saveBookmark } = await import("../../lib/ldes2/traversal");
+        const bookmark = { key: { time: 0 }, members: new Set(["a", "b"]), immutable: ["p"] };
+        const json = JSON.stringify(saveBookmark(bookmark));
+        expect(JSON.parse(json).members).toEqual(["a", "b"]);
+        expect(loadBookmark(JSON.parse(json))).toEqual(bookmark);
+        // The state saved by earlier versions, which kept the members as an array, is read the same way
+        expect(loadBookmark({ members: ["a"] }).members).toEqual(new Set(["a"]));
+    });
+
+    test("many members that share the timestamp of the bookmark are emitted once, and skipped after a restart", async () => {
+        // Sensor data often has one timestamp for a whole batch (Telraam: about 30 000 members per hour).
+        // The bookmark then holds the identifiers of all of them, and is looked up for every member.
+        const n = 20_000;
+        const batch = Array.from({ length: n }, (_, i) => record(`b${i}`, "2026-01-01T00:00:00Z"));
+        server.trig("/root", description);
+        server.trig("/a", ...batch);
+        const first = ids(await collect(ROOT, { statePath: "client-state-ldes2" }));
+        expect(first).toHaveLength(n);
+        expect(new Set(first).size).toBe(n);
+
+        // After a restart, the whole batch is skipped by the bookmark: only the new members are emitted
+        server.trig("/a", ...batch, record("late", "2026-01-01T00:00:00Z"), record("next", "2026-01-02T00:00:00Z"));
+        expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["late", "next"]);
     });
 
     test("a polling client emits members that are published later", async () => {
@@ -465,10 +527,12 @@ describe("Ordering keys and version detection", () => {
         const xsd = (name: string) => "http://www.w3.org/2001/XMLSchema#" + name;
         expect(compareSequences({ value: "9", datatype: xsd("integer") }, { value: "10", datatype: xsd("integer") })).toBe(-1);
         expect(compareSequences({ value: "9", datatype: xsd("string") }, { value: "10", datatype: xsd("string") })).toBe(1);
-        expect(compareSequences(
-            { value: "2026-01-01T01:00:00+01:00", datatype: xsd("dateTime") },
-            { value: "2026-01-01T00:00:00Z", datatype: xsd("dateTime") },
-        )).toBe(0);
+        expect(
+            compareSequences(
+                { value: "2026-01-01T01:00:00+01:00", datatype: xsd("dateTime") },
+                { value: "2026-01-01T00:00:00Z", datatype: xsd("dateTime") },
+            ),
+        ).toBe(0);
     });
 
     test("timestamps without a timezone are local, or get the default timezone", async () => {
@@ -488,8 +552,7 @@ describe("Ordering keys and version detection", () => {
 
 describe("Sample LDES: RiverBench", () => {
     const sample = "examples/riverbench/root.trig";
-    const jellyUrl =
-        "https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev/files/jelly_10K.jelly.gz";
+    const jellyUrl = "https://w3id.org/riverbench/datasets/assist-iot-weather-graphs/dev/files/jelly_10K.jelly.gz";
 
     test("the sample root page describes a RiverBench dataset as an LDES, and is read with a local copy of the Jelly page", async () => {
         const { gzipSync } = await import("zlib");
@@ -502,7 +565,12 @@ describe("Sample LDES: RiverBench", () => {
             const graph = namedNode(`https://assist-iot.eu/pilot2_rdf/graph/ws/ibs_1/${time}`);
             writer.addMessage([
                 quad(graph, atTime, literal(time, dateTime)),
-                quad(namedNode("https://assist-iot.eu/pilot2_rdf/obs/humidity"), namedNode("http://www.w3.org/ns/sosa/hasSimpleResult"), literal("71"), graph),
+                quad(
+                    namedNode("https://assist-iot.eu/pilot2_rdf/obs/humidity"),
+                    namedNode("http://www.w3.org/ns/sosa/hasSimpleResult"),
+                    literal("71"),
+                    graph,
+                ),
             ]);
         }
         const bytes = await new Promise<Buffer>((resolve, reject) =>
@@ -544,11 +612,15 @@ describe("Sample LDES: RiverBench", () => {
     });
 
     // The real dataset: 10 000 graphs of 116 quads, over the network. Run with: RIVERBENCH=1 npx vitest run
-    test.skipIf(!process.env.RIVERBENCH)("the real RiverBench dataset is replicated from its Jelly file", async () => {
-        const members = await collect(sample);
-        expect(members).toHaveLength(10000);
-        expect(members[0].quads).toHaveLength(116);
-    }, 120000);
+    test.skipIf(!process.env.RIVERBENCH)(
+        "the real RiverBench dataset is replicated from its Jelly file",
+        async () => {
+            const members = await collect(sample);
+            expect(members).toHaveLength(10000);
+            expect(members[0].quads).toHaveLength(116);
+        },
+        120000,
+    );
 });
 
 describe("Timestamps without a timezone", () => {
@@ -593,8 +665,11 @@ describe("Timestamps without a timezone", () => {
     });
 
     test("relation bounds without a timezone are read in the same way", async () => {
-        server.trig("/root", `${description} .
-<> ldes:relation [ ldes:page <${server.base}/a> ; ldes:timeFrom "2026-01-01T00:00:00"^^xsd:dateTime ; ldes:timeUntil "2026-02-01T00:00:00"^^xsd:dateTime ] .`);
+        server.trig(
+            "/root",
+            `${description} .
+<> ldes:relation [ ldes:page <${server.base}/a> ; ldes:timeFrom "2026-01-01T00:00:00"^^xsd:dateTime ; ldes:timeUntil "2026-02-01T00:00:00"^^xsd:dateTime ] .`,
+        );
         server.trig("/a", record("a1", "2026-01-05T00:00:00"));
         expect(first(await collect())).toEqual(["a1"]);
     });
@@ -616,7 +691,8 @@ describe("Timestamps without a timezone", () => {
         const state = { statePath: "client-state-ldes2" };
         expect(first(await collect(ROOT, state))).toEqual(["m0", "m1"]);
 
-        server.trig("/a",
+        server.trig(
+            "/a",
             record("m0", "2025-12-30T00:00:00"),
             record("m1", "2026-01-01T12:00:00Z"),
             // Could be before or after the bookmark, depending on the timezone: emitted
@@ -634,11 +710,14 @@ describe("Timestamps without a timezone", () => {
         expect(first(await collect(ROOT, state))).toEqual(["c1"]);
 
         server.requests = [];
-        server.trig("/root", `${description} .
+        server.trig(
+            "/root",
+            `${description} .
 <> ldes:relation
    [ ldes:page <${server.base}/c> ] ,
    [ ldes:page <${server.base}/old> ; ldes:timeUntil "2026-01-01T00:00:00"^^xsd:dateTime ] ,
-   [ ldes:page <${server.base}/maybe> ; ldes:timeUntil "2026-03-01T05:00:00"^^xsd:dateTime ] .`);
+   [ ldes:page <${server.base}/maybe> ; ldes:timeUntil "2026-03-01T05:00:00"^^xsd:dateTime ] .`,
+        );
         server.trig("/old", record("o1", "2025-12-01T00:00:00"));
         server.trig("/maybe", record("m1", "2026-03-01T03:00:00"));
         expect(first(await collect(ROOT, state))).toEqual(["m1"]);
@@ -666,9 +745,12 @@ describe("Immutable pages", () => {
 
     test("a page that is marked immutable, but links to other pages, is read again", async () => {
         const state = { statePath: "client-state-ldes2" };
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
 <> ldes:relation [ ldes:page <${server.base}/p1> ] .
-<${server.base}/p1> ldes:immutable true .`);
+<${server.base}/p1> ldes:immutable true .`,
+        );
         server.trig("/p1", `<> ldes:relation [ ldes:page <${server.base}/p2> ] .`, record("a1", "2026-01-01T00:00:00Z"));
         server.trig("/p2", record("b1", "2026-01-02T00:00:00Z"));
         expect(ids(await collect(ROOT, state))).toEqual(["a1", "b1"]);
@@ -681,16 +763,15 @@ describe("Immutable pages", () => {
     });
 });
 
-
 describe("Output as an RDF Message log", () => {
     // The default output of the command line client: one TriG message per member
     test("the members, written as a TriG message log, are read back as the same messages", async () => {
-        server.trig("/root", `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
-<> ldes:relation [ ldes:page <${server.base}/p1> ] .`);
-        server.trig("/p1",
-            record("a1", "2026-01-01T00:00:00Z", "; ex:label \"first\" "),
-            record("b1", "2026-01-02T00:00:00Z"),
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
+<> ldes:relation [ ldes:page <${server.base}/p1> ] .`,
         );
+        server.trig("/p1", record("a1", "2026-01-01T00:00:00Z", '; ex:label "first" '), record("b1", "2026-01-02T00:00:00Z"));
 
         const members = await collect();
         const writer = new MessageWriter({ format: "TriG" });
@@ -699,7 +780,7 @@ describe("Output as an RDF Message log", () => {
         }
         const log = (await writer.end()) as string;
 
-        expect(log.startsWith("@version \"1.2-messages\"")).toBe(true);
+        expect(log.startsWith('@version "1.2-messages"')).toBe(true);
         const messages = parseMessages(log);
         expect(messages).toHaveLength(members.length);
         messages.forEach((message, i) => {

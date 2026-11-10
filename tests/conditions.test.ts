@@ -96,10 +96,7 @@ describe("contains", () => {
 
 describe("range", () => {
     describe("things 4 or less)", () => {
-        const tests = [
-            new Range(4, TREE.EqualToRelation, "AoE"),
-            new Range(4, TREE.LessThanOrEqualToRelation, "AoE"),
-        ];
+        const tests = [new Range(4, TREE.EqualToRelation, "AoE"), new Range(4, TREE.LessThanOrEqualToRelation, "AoE")];
 
         describe("overlaps", () => {
             lessers.forEach((x) => {
@@ -128,10 +125,7 @@ describe("range", () => {
     });
 
     describe("things 6 or more)", () => {
-        const tests = [
-            new Range(6, TREE.EqualToRelation, "AoE"),
-            new Range(6, TREE.GreaterThanOrEqualToRelation, "AoE"),
-        ];
+        const tests = [new Range(6, TREE.EqualToRelation, "AoE"), new Range(6, TREE.GreaterThanOrEqualToRelation, "AoE")];
 
         describe("overlaps", () => {
             greaters.forEach((x) => {

@@ -49,9 +49,7 @@ describe("memberComment", () => {
     });
 
     test("without a plain timestamp path, the timestamp is the instant of the member", () => {
-        expect(memberComment(member({ timestamp: new Date("2026-01-01T10:00:00Z") }), 2)).toContain(
-            "# timestamp: 2026-01-01T10:00:00.000Z\n",
-        );
+        expect(memberComment(member({ timestamp: new Date("2026-01-01T10:00:00Z") }), 2)).toContain("# timestamp: 2026-01-01T10:00:00.000Z\n");
     });
 
     test("a value cannot break out of the comment", () => {

@@ -2,11 +2,11 @@ import { getLoggerFor } from "./logUtil";
 
 const logger = getLoggerFor("ExitHandler");
 
-function noOp() { }
+function noOp() {}
 
 const listeners: {
     event: string;
-    listener: (error: Error) => void
+    listener: (error: Error) => void;
 }[] = [];
 
 /**
@@ -15,11 +15,7 @@ const listeners: {
  * signal handling, so we check for `process.once` specifically.
  */
 function hasProcessSignals(): boolean {
-    return (
-        typeof process !== "undefined" &&
-        typeof process.once === "function" &&
-        typeof process.removeListener === "function"
-    );
+    return typeof process !== "undefined" && typeof process.once === "function" && typeof process.removeListener === "function";
 }
 
 /**
@@ -50,20 +46,14 @@ export function handleExit(callback: () => void | Promise<void>) {
     const fn = async function (event: string, code?: number, message?: Error) {
         if (!callbackCalled) {
             callbackCalled = true;
-            logger.debug(
-                `[handleExit] Exiting on '${event}' event with code '${code}'.`,
-            );
+            logger.debug(`[handleExit] Exiting on '${event}' event with code '${code}'.`);
             if (message) {
-                logger.error(
-                    `[handleExit] Uncaught Exception: ${message.name} - ${message.message}\n${message.stack}`,
-                );
+                logger.error(`[handleExit] Uncaught Exception: ${message.name} - ${message.message}\n${message.stack}`);
             }
             cleanUpHandlers();
             await callback();
         } else {
-            logger.debug(
-                `[handleExit] Exit handler function has already been called. Ignoring '${event}' with code '${code}'.`,
-            );
+            logger.debug(`[handleExit] Exit handler function has already been called. Ignoring '${event}' with code '${code}'.`);
         }
 
         if (code && process.listeners(<NodeJS.Signals>event).length <= 0) {

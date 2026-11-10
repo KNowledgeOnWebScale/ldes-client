@@ -34,13 +34,25 @@ const PREFETCH_BUFFERED_MESSAGES = 64;
 /** The state that is needed to continue a synchronization: it stays small, no matter how long the stream becomes */
 export type Bookmark = {
     key?: Key;
-    members: string[];
+    /** The identifiers of the emitted members that share the key: a set, because many members can share a key */
+    members: Set<string>;
     /**
      * Pages that are marked immutable by the page that links to them, that have been read completely, and that have no
      * relations: they do not need to be fetched again as long as a relation links to them.
      */
     immutable?: string[];
 };
+
+/** A bookmark as it is saved in the state of the client, which is JSON: the members are an array */
+export type SavedBookmark = Omit<Bookmark, "members"> & { members: string[] };
+
+export function saveBookmark(bookmark: Bookmark): SavedBookmark {
+    return { ...bookmark, members: [...bookmark.members] };
+}
+
+export function loadBookmark(saved: SavedBookmark): Bookmark {
+    return { ...saved, members: new Set(saved.members) };
+}
 
 /** The paths and rules of the `ldes:EventStream` that are needed to read members */
 export type StreamContext = {
@@ -118,9 +130,7 @@ class OpenPage {
         // Only when the order is certain, the page does not respect the specification
         const order = this.last ? compareKeysCertain(key, this.last) : undefined;
         if (order && order.certain && order.order < 0) {
-            throw new Error(
-                `Page ${this.url} does not respect the ordering of the LDES: ${id.value} comes after a member with a larger key`,
-            );
+            throw new Error(`Page ${this.url} does not respect the ordering of the LDES: ${id.value} comes after a member with a larger key`);
         }
         if (!this.last || compareKeysCertain(key, this.last).order >= 0) this.last = key;
         this.index++;
@@ -130,51 +140,30 @@ class OpenPage {
 
 function singleLiteral(terms: Term[], what: string, id: Term): Term & { termType: "Literal" } {
     if (terms.length !== 1 || terms[0].termType !== "Literal") {
-        throw new Error(
-            `Expected exactly one literal for ${what} of member ${id.value}, found ${terms.length}`,
-        );
+        throw new Error(`Expected exactly one literal for ${what} of member ${id.value}, found ${terms.length}`);
     }
     return terms[0];
 }
 
 /** Determines the ordering key of a member, see https://w3id.org/ldes/specification#ordering-keys */
-export function orderingKey(
-    context: StreamContext,
-    id: Term,
-    quads: Quad[],
-    pageNumber: number | undefined,
-    index: number,
-    pageUrl: string,
-): Key {
+export function orderingKey(context: StreamContext, id: Term, quads: Quad[], pageNumber: number | undefined, index: number, pageUrl: string): Key {
     const key: Key = {};
     if (context.mode === "implicit") {
         if (pageNumber === undefined) {
-            throw new Error(
-                `Cannot determine the page number of ${pageUrl}: its relation has no ldes:pageNumber`,
-            );
+            throw new Error(`Cannot determine the page number of ${pageUrl}: its relation has no ldes:pageNumber`);
         }
         return { page: pageNumber, index };
     }
     if (context.timestampPath) {
-        const literal = singleLiteral(
-            evaluatePath(context.timestampPath, context.pathStore, id, quads),
-            "ldes:timestampPath",
-            id,
-        );
+        const literal = singleLiteral(evaluatePath(context.timestampPath, context.pathStore, id, quads), "ldes:timestampPath", id);
         const instant = parseTimestamp(literal.value, context.defaultOffset);
         if (!literal.datatype.value.startsWith(XSD_NS + "dateTime") || instant === undefined) {
-            throw new Error(
-                `The timestamp of member ${id.value} is not an xsd:dateTime: ${literal.value}`,
-            );
+            throw new Error(`The timestamp of member ${id.value} is not an xsd:dateTime: ${literal.value}`);
         }
         Object.assign(key, instant);
     }
     if (context.sequencePath) {
-        const literal = singleLiteral(
-            evaluatePath(context.sequencePath, context.pathStore, id, quads),
-            "ldes:sequencePath",
-            id,
-        );
+        const literal = singleLiteral(evaluatePath(context.sequencePath, context.pathStore, id, quads), "ldes:sequencePath", id);
         if (!literal.datatype.value.startsWith(XSD_NS)) {
             throw new Error(`The sequence of member ${id.value} is not an xsd literal: ${literal.value}`);
         }
@@ -231,9 +220,7 @@ async function openPage(
     return { page, description };
 }
 
-type Source =
-    | { kind: "page"; page: OpenPage }
-    | { kind: "relation"; relation: Relation };
+type Source = { kind: "page"; page: OpenPage } | { kind: "relation"; relation: Relation };
 
 /**
  * Executes one synchronization run. Returns the number of members that were emitted.
@@ -283,9 +270,7 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     /** Requests the pages of the relations that are followed next, until the window is full */
     const prefetchAhead = () => {
         if (finishedRun || prefetched.size >= prefetchWindow) return;
-        const upcoming = relations.filter(
-            (relation) => !prefetched.has(relation) && relevant(relation.lower, relation.upper),
-        );
+        const upcoming = relations.filter((relation) => !prefetched.has(relation) && relevant(relation.lower, relation.upper));
         upcoming.sort((a, b) => compareLower(a.lower, b.lower));
         for (const relation of upcoming.slice(0, prefetchWindow - prefetched.size)) {
             logger.debug(`Requesting ${relation.page} ahead`);
@@ -383,15 +368,11 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     continue;
                 }
                 // Only a member that is certainly before the bookmark, or that is a member of the bookmark, is skipped
-                const comparison = bookmark.key
-                    ? compareKeysCertain(next.key, bookmark.key)
-                    : { order: 1, certain: true };
+                const comparison = bookmark.key ? compareKeysCertain(next.key, bookmark.key) : { order: 1, certain: true };
                 const skip =
                     (comparison.certain && comparison.order < 0) ||
-                    (comparison.certain &&
-                        comparison.order === 0 &&
-                        (context.mode === "implicit" || bookmark.members.includes(next.id.value))) ||
-                    (!comparison.certain && bookmark.members.includes(next.id.value));
+                    (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.has(next.id.value))) ||
+                    (!comparison.certain && bookmark.members.has(next.id.value));
                 if (!skip) {
                     if (!(await traversal.emit(toMember(context, next)))) {
                         return emitted;
@@ -400,12 +381,12 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     if (!comparison.certain) {
                         // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
                         bookmark.key = latestEarliest(bookmark.key!, next.key);
-                        bookmark.members.push(next.id.value);
+                        bookmark.members.add(next.id.value);
                     } else if (comparison.order > 0) {
                         bookmark.key = next.key;
-                        bookmark.members = [next.id.value];
+                        bookmark.members = new Set([next.id.value]);
                     } else {
-                        bookmark.members.push(next.id.value);
+                        bookmark.members.add(next.id.value);
                     }
                 }
                 await page.advance();
@@ -420,7 +401,10 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                 // The conditions may have changed since the relation was found, for example by reaching a maximum
                 if (!relevant(relation.lower, relation.upper)) {
                     logger.debug(`Skipping ${relation.page}: not wanted by the conditions`);
-                    prefetched.get(relation)?.then(({ log }) => log.close(), () => undefined);
+                    prefetched.get(relation)?.then(
+                        ({ log }) => log.close(),
+                        () => undefined,
+                    );
                     prefetched.delete(relation);
                     continue;
                 }
@@ -456,7 +440,10 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         // Pages that were requested ahead, and are not needed any more
         finishedRun = true;
         prefetched.forEach((pending) => {
-            void pending.then(({ log }) => log.close(), () => undefined);
+            void pending.then(
+                ({ log }) => log.close(),
+                () => undefined,
+            );
         });
         prefetched.clear();
     }

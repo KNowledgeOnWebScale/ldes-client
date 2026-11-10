@@ -83,6 +83,8 @@ LDES 2.0 members contain all quads of their message; SHACL/CBD extraction option
 | `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. |
 | `--http-codes <codes...>` | HTTP status codes to retry. |
 | `--safe` | Retry thrown fetch errors. |
+| `--context-min-ttl <seconds>` | Keep external JSON-LD contexts for at least this long, whatever their cache headers say; default `600`. |
+| `--no-context-cache` | Do not cache external JSON-LD contexts. |
 | `--url-is-view` | Treat the input URL as a TREE view without discovering one. |
 | `-l, --loose` | Follow LDES 1.0 relations even when the page URL differs from the `tree:Node` IRI. |
 
@@ -150,6 +152,18 @@ const client = replicateLDES({
     concurrent: 4,
     retry: { codes: [408, 425, 429, 500, 502, 503, 504], maxRetries: 5 },
   }),
+});
+```
+
+### Caching of JSON-LD contexts
+
+Pages are never cached, as an LDES page is not requested twice in a run (use `statePath` to have the client revalidate pages with their `ETag` on a next run). The external JSON-LD contexts that pages refer to (for example `https://schema.org`) are cached, as all pages share them. The cache follows [HTTP caching semantics](https://www.rfc-editor.org/rfc/rfc9111) (`Cache-Control`, `Expires`, `Vary`, revalidation with `ETag`/`Last-Modified`) through [ldfetch](https://github.com/pietercolpaert/ldfetch#http-caching), but keeps a context for at least 10 minutes (`minTTL`) because contexts are often served without useful cache headers. `Cache-Control: no-store` is always honoured.
+
+```js
+replicateLDES({
+  url: "https://example.org/ldes",
+  // seconds; also `maxTTL` and `store` (anything with get/set/delete, e.g. a disk-backed store), or `false` to disable
+  contextCache: { minTTL: 3600 },
 });
 ```
 

@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
+const root = fileURLToPath(new URL("../", import.meta.url));
 const packageName = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).name as string;
 
 test.each([
@@ -19,8 +21,10 @@ test.each([
         for (const suffix of ["", "/storage", "/storage/level", "/storage/memory", "/storage/do-sqlite"]) {
             await load(name + suffix);
         }
-        const { replicateLDES } = await load(name);
-        await replicateLDES({ url: "https://example.invalid" }).close();
+        const { replicateLDES, intoConfig } = await load(name);
+        const config = intoConfig({ url: "https://example.invalid" });
+        assert.equal(config.url, "https://example.invalid");
+        await replicateLDES(config).close();
         const { LevelStorage } = await load(name + "/storage/level");
         const storage = new LevelStorage();
         try {
@@ -34,6 +38,7 @@ test.each([
         console.log("package consumer passed");
     `;
     const output = execFileSync(process.execPath, [`--conditions=${condition}`, "--input-type=module", "-e", script], {
+        cwd: root,
         encoding: "utf8",
         timeout: 10_000,
         env: { ...process.env, LOG_LEVEL: "error" },

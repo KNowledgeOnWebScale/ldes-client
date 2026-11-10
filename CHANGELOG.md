@@ -6,6 +6,14 @@ All notable changes of the `ldes-client` package. The support for LDES 1.0 is st
 and changes with them. Such changes can be made in any release, also when they are not backwards compatible,
 and they are listed under *LDES 2.0 (experimental)* in every release. Pin the version of this package if you depend on it.
 
+## Unreleased
+
+- External JSON-LD contexts are cached following HTTP caching semantics (using the HTTP cache and the context loader of ldfetch 1.3.10) with a
+  minimum TTL of 10 minutes, instead of a fixed TTL that ignored the cache headers. Stale contexts are revalidated with
+  `ETag`/`Last-Modified`, and `Cache-Control: no-store` is honoured. Configure it with the new `contextCache` option
+  (`minTTL`, `maxTTL`, `store`, or `false`). Pages are still not cached
+  ([#32](https://github.com/KNowledgeOnWebScale/ldes-client/issues/32)).
+
 ## 0.4.0
 
 ### LDES 2.0 (experimental)

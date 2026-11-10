@@ -3,7 +3,7 @@ import { CBDShapeExtractor } from "extract-cbd-shape";
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
-import { ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
+import { LdfetchDereferencer, ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
 import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
 import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
@@ -27,7 +27,7 @@ import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
 import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
-import type { Bookmark } from "./ldes2";
+import type { SavedBookmark } from "./ldes2";
 import type { LDESInfo, Notifier, FetchedPage, Member, Ordered, StrategyEvents } from "./types";
 
 type CachedRoot = {
@@ -96,23 +96,15 @@ export class Client {
 
     private logger = getLoggerFor(this);
 
-    constructor(
-        config: Config,
-        ordered: Ordered = "none",
-        dereferencer?: MessageDereferencer,
-        stream?: Term,
-    ) {
+    constructor(config: Config, ordered: Ordered = "none", dereferencer?: MessageDereferencer, stream?: Term) {
         this.memberCount = 0;
         this.fragmentCount = 0;
         this.config = config;
-        this.dereferencer = dereferencer ?? ldfetchDereferencer;
+        this.dereferencer =
+            dereferencer ?? (config.contextCache !== undefined ? new LdfetchDereferencer(undefined, config.contextCache) : ldfetchDereferencer);
         this.streamId = stream;
         this.ordered = ordered;
-        this.clientStateManager = new ClientStateManager(
-            this.config.storage,
-            this.config.statePath,
-            this.config.startFresh,
-        );
+        this.clientStateManager = new ClientStateManager(this.config.storage, this.config.statePath, this.config.startFresh);
         this.persistState = this.config.statePath !== undefined || this.config.storage !== undefined;
         this.modulatorFactory = new ModulatorFactory(
             this.clientStateManager,
@@ -128,20 +120,14 @@ export class Client {
         });
     }
 
-    on<K extends EventKey<ClientEvents>>(
-        key: K,
-        fn: EventReceiver<ClientEvents[K]>,
-    ) {
+    on<K extends EventKey<ClientEvents>>(key: K, fn: EventReceiver<ClientEvents[K]>) {
         if (!this.listeners[key]) {
             this.listeners[key] = [];
         }
         this.listeners[key].push(fn);
     }
 
-    async init(
-        streamOut: (member: Member) => boolean,
-        close: () => void,
-    ): Promise<void> {
+    async init(streamOut: (member: Member) => boolean, close: () => void): Promise<void> {
         // Initialize the client state manager
         await this.clientStateManager.init();
 
@@ -163,23 +149,17 @@ export class Client {
             }
         }
         if (!root) {
-            const headers = cached?.etag
-                ? { "If-None-Match": cached.etag }
-                : undefined;
-            const log = await this.dereferencer.dereferenceMessages(
-                this.config.url,
-                { fetch: this.config.fetch, headers, localFiles: true },
-            );
+            const headers = cached?.etag ? { "If-None-Match": cached.etag } : undefined;
+            const log = await this.dereferencer.dereferenceMessages(this.config.url, { fetch: this.config.fetch, headers, localFiles: true });
             const first = await log.next();
 
             // Is this an LDES 1.0 or an LDES 2.0? The first message tells.
-            const version = detectVersion(log, first) ??
-                (first && isEventStreamDescription(first) ? 2 : 1);
+            const version = detectVersion(log, first) ?? (first && isEventStreamDescription(first) ? 2 : 1);
             if (version === 2) {
                 this.logger.debug(`Found an LDES 2.0 at ${log.url}`);
                 this.logger.warn(
                     "LDES 2.0 support is experimental: it follows the evolving proposals for the LDES 2.0 " +
-                    "specification, and can change in any release of this client",
+                        "specification, and can change in any release of this client",
                 );
                 await this.initLdes2(log, first, streamOut, close);
                 return;
@@ -200,12 +180,7 @@ export class Client {
                 parseQuads(cached.quads).forEach((quad) => root!.data.addQuad(quad));
             }
             root.immutable = root.data
-                .getQuads(
-                    df.namedNode(root.url),
-                    LDES.terms.custom("immutable"),
-                    null,
-                    null,
-                )
+                .getQuads(df.namedNode(root.url), LDES.terms.custom("immutable"), null, null)
                 .some((quad) => quad.object.value === "true" || quad.object.value === "1");
             if (this.persistState) {
                 await rootState.put(this.config.url, {
@@ -223,24 +198,12 @@ export class Client {
         const isLocalDump = !this.config.url.startsWith("http");
 
         // Set the LDES ID accordingly
-        const ldesId: Term = isLocalDump
-            ? df.namedNode("file://" + this.config.url)
-            : df.namedNode(this.config.url);
+        const ldesId: Term = isLocalDump ? df.namedNode("file://" + this.config.url) : df.namedNode(this.config.url);
 
         const allViewQuads = root.data.getQuads(null, TREE.terms.view, null, null);
         const fetchedUrl = df.namedNode(root.url);
-        const currentViewQuads = root.data.getQuads(
-            null,
-            TREE.terms.view,
-            fetchedUrl,
-            null,
-        );
-        const suppliedIriViewQuads = root.data.getQuads(
-            ldesId,
-            TREE.terms.view,
-            null,
-            null,
-        );
+        const currentViewQuads = root.data.getQuads(null, TREE.terms.view, fetchedUrl, null);
+        const suppliedIriViewQuads = root.data.getQuads(ldesId, TREE.terms.view, null, null);
         let viewId: Term;
         let ldesUri: Term | undefined;
 
@@ -250,29 +213,28 @@ export class Client {
                 ldesUri = currentViewQuads[0].subject;
             }
         } else {
-            const candidates = currentViewQuads.length > 0
-                ? currentViewQuads
-                : suppliedIriViewQuads.length > 0
-                    ? suppliedIriViewQuads
-                    : isLocalDump
+            const candidates =
+                currentViewQuads.length > 0
+                    ? currentViewQuads
+                    : suppliedIriViewQuads.length > 0
+                      ? suppliedIriViewQuads
+                      : isLocalDump
                         ? allViewQuads
                         : [];
             if (candidates.length === 0) {
                 this.logger.error(
                     "Did not find exactly one applicable tree:view predicate, which is required to interpret the LDES. " +
-                    "If you are targeting a tree:view directly, use the '--url-is-view' option.",
+                        "If you are targeting a tree:view directly, use the '--url-is-view' option.",
                 );
                 throw new Error("No applicable tree:view found");
             }
             if (candidates.length > 1 && !this.config.allowUnsafeAmbiguousView) {
-                throw new Error(
-                    `Ambiguous tree:view discovery: found ${candidates.length} applicable statements`,
-                );
+                throw new Error(`Ambiguous tree:view discovery: found ${candidates.length} applicable statements`);
             }
             if (candidates.length > 1) {
                 this.logger.warn(
                     `Found ${candidates.length} applicable tree:view statements; ` +
-                    "the command-line client is taking the first one. This fallback is not specification compliant.",
+                        "the command-line client is taking the first one. This fallback is not specification compliant.",
                 );
             }
             const selected = candidates[0];
@@ -282,8 +244,7 @@ export class Client {
 
         // This is the actual LDES IRI found in the RDF data.
         // Might be different from the configured ldesId due to HTTP redirects
-        ldesUri = ldesUri ||
-            root.data.getQuads(null, RDF.terms.type, LDES.terms.EventStream)[0].subject;
+        ldesUri = ldesUri || root.data.getQuads(null, RDF.terms.type, LDES.terms.EventStream)[0].subject;
         if (!ldesUri) {
             this.logger.error("Could not find the LDES IRI in the fetched RDF data.");
             throw "No LDES IRI found";
@@ -294,14 +255,7 @@ export class Client {
         this.streamId = this.streamId || ldesUri;
 
         // Extract the main LDES information (e.g., timestampPath, versionOfPath, etc.)
-        const info: LDESInfo = await getInfo(
-            ldesUri,
-            viewId,
-            root.data,
-            root.url,
-            this.dereferencer,
-            this.config,
-        );
+        const info: LDESInfo = await getInfo(ldesUri, viewId, root.data, root.url, this.dereferencer, this.config);
         this.emit("description", info);
 
         // Handle and assemble condition object that dictates fragment fetching and member emission
@@ -331,13 +285,7 @@ export class Client {
         }
 
         // Component that manages the fetching of RDF data over HTTP
-        this.fetcher = new Fetcher(
-            this.dereferencer,
-            this.config.loose,
-            condition,
-            this.config.defaultTimezone,
-            this.config.fetch,
-        );
+        this.fetcher = new Fetcher(this.dereferencer, this.config.loose, condition, this.config.defaultTimezone, this.config.fetch);
 
         const notifier = this.buildNotifier(info, streamOut, close, condition);
 
@@ -347,40 +295,24 @@ export class Client {
 
         // Fetching strategy definition, i.e., whether to use ordered or unordered fetching;
         // keep on polling the LDES (mutable pages) for new data or finish when fully fetched.
-        const pollInterval = info.pollingInterval === undefined
-            ? this.config.pollInterval
-            : info.pollingInterval * 1000;
+        const pollInterval = info.pollingInterval === undefined ? this.config.pollInterval : info.pollingInterval * 1000;
         this.strategy =
             this.ordered !== "none"
                 ? new OrderedStrategy(
-                    this.memberManager,
-                    this.fetcher,
-                    notifier,
-                    this.modulatorFactory,
-                    info,
-                    this.ordered,
-                    this.config.polling,
-                    pollInterval,
-                )
-                : new UnorderedStrategy(
-                    this.memberManager,
-                    this.fetcher,
-                    notifier,
-                    this.modulatorFactory,
-                    this.config.polling,
-                    pollInterval,
-                );
+                      this.memberManager,
+                      this.fetcher,
+                      notifier,
+                      this.modulatorFactory,
+                      info,
+                      this.ordered,
+                      this.config.polling,
+                      pollInterval,
+                  )
+                : new UnorderedStrategy(this.memberManager, this.fetcher, notifier, this.modulatorFactory, this.config.polling, pollInterval);
 
-        if (!isLocalDump) this.logger.debug(
-            `Found ${allViewQuads.length} views, choosing ${viewId.value}`,
-        );
+        if (!isLocalDump) this.logger.debug(`Found ${allViewQuads.length} views, choosing ${viewId.value}`);
 
-        await this.strategy.start(
-            viewId.value,
-            condition,
-            isLocalDump || root.url === viewId.value ? root : undefined,
-            !isLocalDump,
-        );
+        await this.strategy.start(viewId.value, condition, isLocalDump || root.url === viewId.value ? root : undefined, !isLocalDump);
     }
 
     /**
@@ -401,11 +333,7 @@ export class Client {
             member: (m) => {
                 const streamed = streamOut(
                     // Check if member is to be materialized
-                    maybeVersionMaterialize(
-                        m,
-                        this.config.materialize === true,
-                        info,
-                    ),
+                    maybeVersionMaterialize(m, this.config.materialize === true, info),
                 );
                 if (streamed) {
                     this.memberCount++;
@@ -434,9 +362,7 @@ export class Client {
         streamOut: (member: Member) => boolean,
         close: () => void,
     ): Promise<void> {
-        const bookmarks = this.persistState
-            ? this.clientStateManager.build<string, Bookmark>("ldes2")
-            : undefined;
+        const bookmarks = this.persistState ? this.clientStateManager.build<string, SavedBookmark>("ldes2") : undefined;
         // The notifier needs the description of the LDES, which is only known when the root page was read.
         // The members are only emitted after that, so it is safe to complete this reference afterwards.
         let notifier!: Notifier<StrategyEvents, unknown>;
@@ -467,10 +393,7 @@ export class Client {
         });
     }
 
-    stream(strategy?: {
-        highWaterMark?: number;
-        size?: (chunk: Member) => number;
-    }): ReadableStream<Member> {
+    stream(strategy?: { highWaterMark?: number; size?: (chunk: Member) => number }): ReadableStream<Member> {
         const emitted = longPromise();
         const config: UnderlyingDefaultSource = {
             //
@@ -528,10 +451,7 @@ export class Client {
         return new ReadableStream(config, strategy);
     }
 
-    private emit<K extends EventKey<ClientEvents>>(
-        key: K,
-        data: ClientEvents[K],
-    ) {
+    private emit<K extends EventKey<ClientEvents>>(key: K, data: ClientEvents[K]) {
         (this.listeners[key] || []).forEach(function (fn) {
             fn(data);
         });
@@ -566,9 +486,7 @@ async function getInfo(
 
     if (config.shapeFile && config.shapeFile !== "") {
         // Shape file is given externally, so we need to fetch it
-        const shapeId = config.shapeFile.startsWith("http")
-            ? config.shapeFile
-            : "file://" + config.shapeFile;
+        const shapeId = config.shapeFile.startsWith("http") ? config.shapeFile : "file://" + config.shapeFile;
         try {
             const resp = await dereferencer.dereference(config.shapeFile, {
                 localFiles: true,
@@ -635,7 +553,22 @@ async function getInfo(
             tryAgainUrl = ldesId.value;
         }
         if (tryAgainUrl === fetchedRootUrl) {
-            return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
+            return buildInfo(
+                config,
+                store,
+                dereferencer,
+                shapeIds,
+                timestampPaths,
+                sequencePaths,
+                transactionFinalizedPaths,
+                versionOfPaths,
+                versionTimestampPaths,
+                versionSequencePaths,
+                pollingIntervals,
+                ldesId,
+                viewId,
+                contextShapeIds,
+            );
         }
         try {
             logger.debug(`Maybe find more info at ${tryAgainUrl}`);
@@ -715,7 +648,22 @@ async function getInfo(
         logger.error(`Expected at most one polling interval, found ${pollingIntervals.length}`);
     }
 
-    return buildInfo(config, store, dereferencer, shapeIds, timestampPaths, sequencePaths, transactionFinalizedPaths, versionOfPaths, versionTimestampPaths, versionSequencePaths, pollingIntervals, ldesId, viewId, contextShapeIds);
+    return buildInfo(
+        config,
+        store,
+        dereferencer,
+        shapeIds,
+        timestampPaths,
+        sequencePaths,
+        transactionFinalizedPaths,
+        versionOfPaths,
+        versionTimestampPaths,
+        versionSequencePaths,
+        pollingIntervals,
+        ldesId,
+        viewId,
+        contextShapeIds,
+    );
 }
 
 async function buildInfo(
@@ -746,16 +694,11 @@ async function buildInfo(
         }
     } else {
         const shapeId = shapeIds[0];
-        if (shapeId &&
-            shapeId.termType === "NamedNode" &&
-            store.getQuads(shapeId, null, null).length === 0
-        ) {
+        if (shapeId && shapeId.termType === "NamedNode" && store.getQuads(shapeId, null, null).length === 0) {
             // Dereference out-of-band shape
             const respShape = await dereferencer.dereference(shapeId.value, { fetch: config.fetch });
             await new Promise((resolve, reject) => {
-                shapeConfigStore.import(respShape.data)
-                    .on("end", resolve)
-                    .on("error", reject);
+                shapeConfigStore.import(respShape.data).on("end", resolve).on("error", reject);
             });
         }
     }
@@ -764,15 +707,9 @@ async function buildInfo(
     const viewDescriptions = getObjects(store, viewId, TREE.terms.custom("viewDescription"));
     const retentionPolicies = [
         ...getObjects(store, viewId, LDES.terms.retentionPolicy),
-        ...viewDescriptions.flatMap((description) =>
-            getObjects(store, description, LDES.terms.retentionPolicy)
-        ),
-    ].filter((policy, index, policies) =>
-        policies.findIndex((candidate) => candidate.equals(policy)) === index
-    );
-    const emptyRetentionPolicies = retentionPolicies.filter((policy) =>
-        store.getQuads(policy, null, null, null).length === 0
-    );
+        ...viewDescriptions.flatMap((description) => getObjects(store, description, LDES.terms.retentionPolicy)),
+    ].filter((policy, index, policies) => policies.findIndex((candidate) => candidate.equals(policy)) === index);
+    const emptyRetentionPolicies = retentionPolicies.filter((policy) => store.getQuads(policy, null, null, null).length === 0);
     const pollingInterval = Number(pollingIntervals[0]?.value);
 
     return {

@@ -7,7 +7,6 @@ import { toPath } from "@rdfc/utils-js";
 
 import type { FullProc } from "@rdfc/js-runner";
 
-
 describe("Tests for rdfc:LdesClient processor", () => {
     afterAll(() => {
         rmSync("state-path", { recursive: true, force: true });
@@ -63,7 +62,6 @@ describe("Tests for rdfc:LdesClient processor", () => {
 
         // Instantiate processor from declared instance
         const proc: FullProc<LDESClientProcessor> = await procHelper.getProcessor("http://example.com/ns#processor");
-
 
         expect(proc).toBeDefined();
         expect(proc.url).toBe("https://era.ilabt.imec.be/rinf/ldes");

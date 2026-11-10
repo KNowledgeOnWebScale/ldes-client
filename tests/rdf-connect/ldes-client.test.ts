@@ -1,12 +1,5 @@
 import type { AddressInfo } from "node:net";
-import {
-    afterAll,
-    beforeAll,
-    afterEach,
-    describe,
-    expect,
-    test,
-} from "vitest";
+import { afterAll, beforeAll, afterEach, describe, expect, test } from "vitest";
 import fs from "fs";
 import path from "path";
 import { createUriAndTermNamespace, RDF, SDS, DC } from "@treecg/types";
@@ -38,17 +31,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
     const INBETWEEN_LDES = "http://localhost:3000/mock-ldes-inbetween.ttl";
     const LINKED_LIST_LDES = "http://localhost:3000/mock-ldes-linked-list.ttl";
     const LOCAL_DUMP_LDES = "./tests/data/ldes-dump.ttl";
-    const LDES_MINIMAL_VIEW =
-        "http://localhost:3000/mock-ldes-minimal-view-0.ttl";
-    const EX = createUriAndTermNamespace(
-        "http://example.org/",
-        "Clazz1",
-        "Clazz2",
-        "modified",
-        "isVersionOf",
-        "prop1",
-        "subprop",
-    );
+    const LDES_MINIMAL_VIEW = "http://localhost:3000/mock-ldes-minimal-view-0.ttl";
+    const EX = createUriAndTermNamespace("http://example.org/", "Clazz1", "Clazz2", "modified", "isVersionOf", "prop1", "subprop");
     let server: FastifyInstance;
 
     beforeAll(async () => {
@@ -63,23 +47,18 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
                 root: path.join(__dirname, "../data/mock-ldes"),
             });
 
-            server.addHook(
-                "onSend",
-                async (_, reply, payload: RequestPayload) => {
-                    const st = await streamToString(payload);
+            server.addHook("onSend", async (_, reply, payload: RequestPayload) => {
+                const st = await streamToString(payload);
 
-                    // Add cache control headers for immutable files
-                    if (st.startsWith("# immutable")) {
-                        reply.header("Cache-Control", "immutable");
-                    }
-                    return st;
-                },
-            );
+                // Add cache control headers for immutable files
+                if (st.startsWith("# immutable")) {
+                    reply.header("Cache-Control", "immutable");
+                }
+                return st;
+            });
 
             await server.listen({ port: 3000 });
-            console.log(
-                `Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`,
-            );
+            console.log(`Mock server listening on ${(server.addresses()[0] as AddressInfo).port}`);
         } catch (err) {
             if (err instanceof Error) {
                 console.error(err.name, err.message);
@@ -117,22 +96,20 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
@@ -154,22 +131,20 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
@@ -191,24 +166,22 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // Expect all members
         expect(count).toBe(15);
@@ -225,25 +198,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            after: new Date("3024-03-09T15:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                after: new Date("3024-03-09T15:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // No members were expected
         expect(count).toBe(0);
@@ -260,25 +231,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            after: new Date("3024-03-09T15:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                after: new Date("3024-03-09T15:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // No members were expected
         expect(count).toBe(0);
@@ -295,25 +264,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            after: new Date("3024-03-09T15:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                after: new Date("3024-03-09T15:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // No members were expected
         expect(count).toBe(0);
@@ -330,25 +297,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("1325-03-09T15:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("1325-03-09T15:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // No members were expected
         expect(count).toBe(0);
@@ -365,25 +330,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("1325-03-09T15:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("1325-03-09T15:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing functions
-        await Promise.all([
-            processor.produce(),
-            processor.transform()
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // No members were expected
         expect(count).toBe(0);
@@ -406,38 +369,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T08:30:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T09:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T08:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T09:30:00.000Z").getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T09:30:00.000Z"),
-            after: new Date("2024-07-14T08:30:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T09:30:00.000Z"),
+                after: new Date("2024-07-14T08:30:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(3);
@@ -460,38 +415,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(10);
@@ -514,34 +461,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
@@ -565,43 +508,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
-        // Actually test the stream output  
+        // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(3);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -623,43 +560,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(10);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -681,43 +612,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value)
-                .getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -738,43 +663,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "descending",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "descending",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(3);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -795,47 +714,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "descending",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "descending",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(10);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -856,47 +765,37 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "descending",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "descending",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -920,14 +819,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -939,24 +832,22 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
@@ -964,9 +855,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an atypical LDES unordered, with before and after filter and LDES original shape", async () => {
@@ -989,14 +878,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1008,24 +891,22 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
@@ -1033,9 +914,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching a tree:InBetweenRelation LDES unordered, with before and after filter and LDES original shape", async () => {
@@ -1058,14 +937,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1077,33 +950,29 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actually test the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an LDES unordered, with before and after filter and overridden local shape", async () => {
@@ -1123,14 +992,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1140,36 +1003,28 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1177,9 +1032,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an atypical LDES unordered, with before and after filter and overridden local shape", async () => {
@@ -1199,14 +1052,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1216,36 +1063,28 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1253,9 +1092,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching a tree:InBetweenRelation LDES unordered, with before and after filter and overridden local shape", async () => {
@@ -1275,14 +1112,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1292,36 +1123,28 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1329,9 +1152,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an LDES unordered, with before and after filter and overridden remote shape", async () => {
@@ -1355,14 +1176,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1374,25 +1189,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1400,9 +1213,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an atypical LDES unordered, with before and after filter and overridden remote shape", async () => {
@@ -1426,14 +1237,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1445,25 +1250,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1471,9 +1274,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching a tree:InBetweenRelation LDES unordered, with before and after filter and overridden remote shape", async () => {
@@ -1497,14 +1298,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1516,34 +1311,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an LDES unordered, with before and after filters and no shape (defaults to CBD member extraction)", async () => {
@@ -1564,14 +1355,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1581,45 +1366,35 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            noShape: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                noShape: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an atypical LDES unordered, with before and after filters and no shape (defaults to CBD member extraction)", async () => {
@@ -1640,14 +1415,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1657,45 +1426,35 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            noShape: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                noShape: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching a tree:InBetweenRelation LDES unordered, with before and after filters and no shape (defaults to CBD member extraction)", async () => {
@@ -1716,14 +1475,8 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract timestamp property (ex:modified in this LDES)
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
 
             // Check which classes we got
             for (const classSuffix of observedClasses.keys()) {
@@ -1733,45 +1486,35 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             }
 
             // Check ex:Clazz2 instance was not extracted
-            expect(
-                store.getQuads(
-                    null,
-                    RDF.terms.type,
-                    df.namedNode(EX.Clazz2),
-                ).length,
-            ).toBe(0);
+            expect(store.getQuads(null, RDF.terms.type, df.namedNode(EX.Clazz2)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            noShape: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                noShape: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an LDES in ascending order, with before and after filter and overridden remote shape", async () => {
@@ -1804,52 +1547,40 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -1883,39 +1614,31 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1923,13 +1646,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -1963,35 +1682,31 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
-            expect(new Date(timestampQ.object.value).getTime())
-                .toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -1999,13 +1714,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -2025,36 +1736,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
 
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2081,36 +1786,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
 
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2137,36 +1836,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             new Parser().parse(member).forEach((q) => store.addQuad(q));
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
 
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2205,50 +1898,38 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2256,13 +1937,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we got all unique members
         expect(memberIds.size).toBe(3);
@@ -2296,50 +1973,38 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2347,13 +2012,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(10);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we got all unique members
         expect(memberIds.size).toBe(6);
@@ -2387,50 +2048,38 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
 
             // Keep track of member IDs
-            memberIds.add(
-                store.getQuads(null, SDS.terms.payload)[0].object.value,
-            );
+            memberIds.add(store.getQuads(null, SDS.terms.payload)[0].object.value);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
 
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
-            materialize: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                shapeFile: "./tests/data/mock-ldes/partial-shape.ttl",
+                materialize: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2438,13 +2087,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(7);
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we got all unique members
         expect(memberIds.size).toBe(3);
@@ -2465,10 +2110,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract canonical member ID and timestamp
             const store = RdfStore.createDefault();
             new Parser().parse(member).forEach((q) => store.addQuad(q));
-            const canonicalId = store.getQuads(
-                null,
-                EX.terms.isVersionOf,
-            )[0].object.value;
+            const canonicalId = store.getQuads(null, EX.terms.isVersionOf)[0].object.value;
             // Check that member hasn't been seen before
             expect(memberIds.has(canonicalId)).toBeFalsy();
 
@@ -2477,23 +2119,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            lastVersionOnly: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                lastVersionOnly: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2517,10 +2157,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract canonical member ID and timestamp
             const store = RdfStore.createDefault();
             new Parser().parse(member).forEach((q) => store.addQuad(q));
-            const canonicalId = store.getQuads(
-                null,
-                EX.terms.isVersionOf,
-            )[0].object.value;
+            const canonicalId = store.getQuads(null, EX.terms.isVersionOf)[0].object.value;
             // Check that member hasn't been seen before
             expect(memberIds.has(canonicalId)).toBeFalsy();
 
@@ -2529,23 +2166,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            lastVersionOnly: true,
-            sdsify: false,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                lastVersionOnly: true,
+                sdsify: false,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2569,10 +2204,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             // Extract canonical member ID and timestamp
             const store = RdfStore.createDefault();
             new Parser().parse(member).forEach((q) => store.addQuad(q));
-            const canonicalId = store.getQuads(
-                null,
-                EX.terms.isVersionOf,
-            )[0].object.value;
+            const canonicalId = store.getQuads(null, EX.terms.isVersionOf)[0].object.value;
             // Check that member hasn't been seen before
             expect(memberIds.has(canonicalId)).toBeFalsy();
 
@@ -2581,23 +2213,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            lastVersionOnly: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                lastVersionOnly: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2637,50 +2267,39 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(
-                new Date("2024-07-14T09:00:00.000Z").getTime(),
-            );
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-07-14T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-07-14T10:30:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             // Keep track of member IDs
-            const memberId = store.getQuads(null, SDS.terms.payload)[0]
-                .object.value;
+            const memberId = store.getQuads(null, SDS.terms.payload)[0].object.value;
             expect(memberIds.has(memberId)).toBeFalsy();
             memberIds.add(memberId);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-07-14T10:30:00.000Z"),
-            after: new Date("2024-07-14T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            materialize: true,
-            lastVersionOnly: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-07-14T10:30:00.000Z"),
+                after: new Date("2024-07-14T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                materialize: true,
+                lastVersionOnly: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2688,14 +2307,10 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check result was ordered (in descending order due to last version only)
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an atypical LDES with before and after filter, overriden remote shape, asking for only the last version of every member and versioned materialized", async () => {
@@ -2729,48 +2344,39 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(
-                new Date("2024-09-18T09:00:00.000Z").getTime(),
-            );
-            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(
-                new Date("2024-09-18T10:53:00.000Z").getTime(),
-            );
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-18T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-18T10:53:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             // Keep track of member IDs
-            const memberId = store.getQuads(null, SDS.terms.payload)[0]
-                .object.value;
+            const memberId = store.getQuads(null, SDS.terms.payload)[0].object.value;
             expect(memberIds.has(memberId)).toBeFalsy();
             memberIds.add(memberId);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: ATYPICAL_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-18T10:53:00.000Z"),
-            after: new Date("2024-09-18T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            materialize: true,
-            lastVersionOnly: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: ATYPICAL_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-18T10:53:00.000Z"),
+                after: new Date("2024-09-18T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                materialize: true,
+                lastVersionOnly: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2778,14 +2384,10 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(6);
         // Check result was ordered (in descending order due to last version only)
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching a tree:InBetweenRelation LDES with before and after filter, overriden remote shape, asking for only the last version of every member and versioned materialized", async () => {
@@ -2820,48 +2422,39 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, EX.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(
-                new Date("2024-09-26T09:00:00.000Z").getTime(),
-            );
-            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(
-                new Date("2024-09-26T10:25:00.000Z").getTime(),
-            );
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-09-26T09:00:00.000Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-09-26T10:25:00.000Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             // Keep track of member IDs
-            const memberId = store.getQuads(null, SDS.terms.payload)[0]
-                .object.value;
+            const memberId = store.getQuads(null, SDS.terms.payload)[0].object.value;
             expect(memberIds.has(memberId)).toBeFalsy();
             memberIds.add(memberId);
             // Check the version property is not present
-            expect(
-                store.getQuads(null, df.namedNode(EX.isVersionOf)).length,
-            ).toBe(0);
+            expect(store.getQuads(null, df.namedNode(EX.isVersionOf)).length).toBe(0);
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: INBETWEEN_LDES,
-            output: writeStream,
-            ordered: "none",
-            before: new Date("2024-09-26T10:25:00.000Z"),
-            after: new Date("2024-09-26T09:00:00.000Z"),
-            shapeFile: "http://localhost:3000/full-shape.ttl",
-            materialize: true,
-            lastVersionOnly: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: INBETWEEN_LDES,
+                output: writeStream,
+                ordered: "none",
+                before: new Date("2024-09-26T10:25:00.000Z"),
+                after: new Date("2024-09-26T09:00:00.000Z"),
+                shapeFile: "http://localhost:3000/full-shape.ttl",
+                materialize: true,
+                lastVersionOnly: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2869,14 +2462,10 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(3);
         // Check result was ordered (in descending order due to last version only)
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check we saw all expected classes
-        expect(
-            Array.from(observedClasses.values()).every((v) => v === true),
-        ).toBeTruthy();
+        expect(Array.from(observedClasses.values()).every((v) => v === true)).toBeTruthy();
     });
 
     test("Fetching an Linked List LDES in ascending order and members with out-of-band data", async () => {
@@ -2904,25 +2493,23 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LINKED_LIST_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            fetchConfig: {
-                concurrent: 1,
+        const processor = new LDESClientProcessor(
+            {
+                url: LINKED_LIST_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                fetchConfig: {
+                    concurrent: 1,
+                },
+                sdsify: true,
             },
-            sdsify: true,
-        },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2930,9 +2517,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got all members
         expect(count).toBe(9);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -2950,22 +2535,20 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LOCAL_DUMP_LDES,
-            output: writeStream,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LOCAL_DUMP_LDES,
+                output: writeStream,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -2992,36 +2575,30 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const timestampQ = store.getQuads(null, DC.terms.modified)[0];
             expect(timestampQ).toBeDefined();
             // Check that member is within date constraints
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeGreaterThan(new Date("2024-08-22T05:56:57Z").getTime());
-            expect(
-                new Date(timestampQ.object.value).getTime(),
-            ).toBeLessThan(new Date("2024-08-22T07:56:57Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeGreaterThan(new Date("2024-08-22T05:56:57Z").getTime());
+            expect(new Date(timestampQ.object.value).getTime()).toBeLessThan(new Date("2024-08-22T07:56:57Z").getTime());
             // Keep track of timestamp for checking order
             timestamps.push(new Date(timestampQ.object.value).getTime());
             count++;
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LOCAL_DUMP_LDES,
-            output: writeStream,
-            ordered: "ascending",
-            before: new Date("2024-08-22T07:56:57Z"),
-            after: new Date("2024-08-22T05:56:57Z"),
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LOCAL_DUMP_LDES,
+                output: writeStream,
+                ordered: "ascending",
+                before: new Date("2024-08-22T07:56:57Z"),
+                after: new Date("2024-08-22T05:56:57Z"),
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -3029,9 +2606,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Check we got some members
         expect(count).toBe(2);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
     });
 
@@ -3049,23 +2624,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES_MINIMAL_VIEW,
-            output: writeStream,
-            ordered: "none",
-            urlIsView: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES_MINIMAL_VIEW,
+                output: writeStream,
+                ordered: "none",
+                urlIsView: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -3088,23 +2661,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor = new LDESClientProcessor({
-            url: LDES_MINIMAL_VIEW,
-            output: writeStream,
-            ordered: "ascending",
-            urlIsView: true,
-            sdsify: true,
-        },
+        const processor = new LDESClientProcessor(
+            {
+                url: LDES_MINIMAL_VIEW,
+                output: writeStream,
+                ordered: "ascending",
+                urlIsView: true,
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor.init();
         // Start the processing function
-        await Promise.all([
-            processor.produce(),
-            processor.transform(),
-        ]);
+        await Promise.all([processor.produce(), processor.transform()]);
 
         // Actual test of the stream output
         await testPromise;
@@ -3127,29 +2698,25 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const store = RdfStore.createDefault();
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream1,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream1,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3164,23 +2731,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         const [writeStream2] = channel(runner, "input2");
 
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream2,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream2,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);
@@ -3201,29 +2766,25 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
             const store = RdfStore.createDefault();
             new Parser().parse(member).forEach((q) => store.addQuad(q));
             // Check that all member data is present
-            expect(
-                store.getQuads(null, EX.terms.subprop).length,
-            ).toBeGreaterThan(0);
+            expect(store.getQuads(null, EX.terms.subprop).length).toBeGreaterThan(0);
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream1,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream1,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3236,23 +2797,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Run a second client with the saved state
         const [writeStream2] = channel(runner, "input2");
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream2,
-            ordered: "none",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream2,
+                ordered: "none",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the proces  sor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);
@@ -3282,23 +2841,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream1,
-            ordered: "ascending",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream1,
+                ordered: "ascending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3307,9 +2864,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         expect(processor1.client.memberCount).toBe(12);
         expect(processor1.client.fragmentCount).toBe(4);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state")).toBeTruthy();
@@ -3317,23 +2872,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Run a second client with the saved state
         const [writeStream2] = channel(runner, "input2");
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream2,
-            ordered: "ascending",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream2,
+                ordered: "ascending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);
@@ -3363,23 +2916,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream1,
-            ordered: "ascending",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream1,
+                ordered: "ascending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3388,9 +2939,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         expect(processor1.client.memberCount).toBe(9);
         expect(processor1.client.fragmentCount).toBe(4);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v >= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v >= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state")).toBeTruthy();
@@ -3398,23 +2947,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Run a second client with the saved state
         const [writeStream2] = channel(runner, "input2");
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream2,
-            ordered: "ascending",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream2,
+                ordered: "ascending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);
@@ -3444,23 +2991,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream1,
-            ordered: "descending",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream1,
+                ordered: "descending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3469,9 +3014,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         expect(processor1.client.memberCount).toBe(12);
         expect(processor1.client.fragmentCount).toBe(4);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state")).toBeTruthy();
@@ -3479,23 +3022,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Run a second client with the saved state
         const [writeStream2] = channel(runner, "input2");
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LDES,
-            output: writeStream2,
-            ordered: "descending",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LDES,
+                output: writeStream2,
+                ordered: "descending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);
@@ -3525,23 +3066,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         });
 
         // Setup client
-        const processor1 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream1,
-            ordered: "descending",
-            sdsify: true,
-        },
+        const processor1 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream1,
+                ordered: "descending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor1.init();
         // Start the processing function
-        await Promise.all([
-            processor1.produce(),
-            processor1.transform(),
-        ]);
+        await Promise.all([processor1.produce(), processor1.transform()]);
 
         // Actual test of the stream output
         await testPromise1;
@@ -3550,9 +3089,7 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         expect(processor1.client.memberCount).toBe(9);
         expect(processor1.client.fragmentCount).toBe(4);
         // Check result was ordered
-        const isSorted = timestamps.every(
-            (v, i) => i === 0 || v <= timestamps[i - 1],
-        );
+        const isSorted = timestamps.every((v, i) => i === 0 || v <= timestamps[i - 1]);
         expect(isSorted).toBeTruthy();
         // Check that state was saved
         expect(fs.existsSync("client-state")).toBeTruthy();
@@ -3560,23 +3097,21 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Run a second client with the saved state
         const [writeStream2] = channel(runner, "input2");
         // Setup client
-        const processor2 = new LDESClientProcessor({
-            savePath: "client-state",
-            url: LINKED_LIST_LDES,
-            output: writeStream2,
-            ordered: "descending",
-            sdsify: true,
-        },
+        const processor2 = new LDESClientProcessor(
+            {
+                savePath: "client-state",
+                url: LINKED_LIST_LDES,
+                output: writeStream2,
+                ordered: "descending",
+                sdsify: true,
+            },
             logger,
         ) as FullProc<LDESClientProcessor>;
 
         // Initialize and start the processor
         await processor2.init();
         // Start the processing function
-        await Promise.all([
-            processor2.produce(),
-            processor2.transform(),
-        ]);
+        await Promise.all([processor2.produce(), processor2.transform()]);
 
         // Check that we didn't get any members but we still fetched mutable fragments
         expect(processor2.client.memberCount).toBe(0);

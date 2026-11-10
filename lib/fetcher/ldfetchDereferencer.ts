@@ -1,11 +1,13 @@
 import { Readable } from "stream";
 import RdfParsers from "ldfetch/lib/RdfParsers.js";
-import { FetchDocumentLoader } from "jsonld-context-parser";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
+import { ContextCache, uncachedDocumentLoader } from "./contextCache";
 
 import type { Quad, Stream } from "@rdfjs/types";
 import type { EventEmitter } from "events";
+import type HttpCache from "ldfetch/lib/HttpCache.js";
+import type { ContextCacheOptions } from "./contextCache";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
@@ -29,7 +31,10 @@ function toReadable(body: ReadableStream<Uint8Array>): Readable {
             );
         },
         destroy(error, callback) {
-            reader.cancel(error ?? undefined).then(() => callback(error), () => callback(error));
+            reader.cancel(error ?? undefined).then(
+                () => callback(error),
+                () => callback(error),
+            );
         },
     });
 }
@@ -82,9 +87,6 @@ export interface MessageDereferencer extends Dereferencer {
     dereferenceMessages(url: string, options?: DereferenceOptions): Promise<MessageLog>;
 }
 
-const CONTEXT_TTL = 10 * 60 * 1000;
-const MAX_CACHED_CONTEXTS = 100;
-
 const JSON_TYPES = ["application/ld+json", "application/json"];
 
 export const MAX_BUFFERED_MESSAGES = 512;
@@ -114,12 +116,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     private source?: Readable;
     private paused = false;
 
-    constructor(
-        url: string,
-        status: number,
-        headers: Headers,
-        contentType: string,
-    ) {
+    constructor(url: string, status: number, headers: Headers, contentType: string) {
         this.url = url;
         this.status = status;
         this.headers = headers;
@@ -231,37 +228,31 @@ export class MessageLog implements AsyncIterable<Quad[]> {
 export class LdfetchDereferencer implements MessageDereferencer {
     /**
      * External JSON-LD contexts, which clients SHOULD cache: the pages of an LDES usually share them.
-     * ldfetch creates a new document loader for every document, which does not cache.
+     * They are cached following HTTP caching semantics, with a minimum TTL (see {@link ContextCacheOptions}).
+     * Pages themselves are never cached. Undefined when caching contexts is disabled.
      */
-    private contexts = new Map<string, { loaded: ReturnType<FetchDocumentLoader["load"]>; expires: number }>();
+    private contexts?: ContextCache;
 
-    constructor(private readonly accept: string = DEFAULT_ACCEPT) {}
+    /**
+     * @param accept the Accept header for IRIs that are dereferenced
+     * @param contextCache how external JSON-LD contexts are cached: options of the HTTP cache of ldfetch
+     * (`minTTL`, `maxTTL`, `store`, ...), an `HttpCache` to share, or `false` to not cache them.
+     * The default follows the cache headers, but keeps a context for at least 10 minutes.
+     */
+    constructor(
+        private readonly accept: string = DEFAULT_ACCEPT,
+        contextCache?: ContextCacheOptions | HttpCache | false,
+    ) {
+        if (contextCache !== false) this.contexts = new ContextCache(contextCache);
+    }
 
-    private cachedDocumentLoader(fetch_f: typeof fetch) {
-        const loader = new FetchDocumentLoader(fetch_f);
-        return {
-            load: (url: string) => {
-                const now = Date.now();
-                let entry = this.contexts.get(url);
-                if (!entry || entry.expires < now) {
-                    const loaded = loader.load(url);
-                    entry = { loaded, expires: now + CONTEXT_TTL };
-                    if (this.contexts.size >= MAX_CACHED_CONTEXTS) {
-                        this.contexts.delete(this.contexts.keys().next().value!);
-                    }
-                    this.contexts.set(url, entry);
-                    loaded.catch(() => this.contexts.delete(url));
-                }
-                return entry.loaded;
-            },
-        };
+    /** Statistics of the context cache (hits, misses, revalidations, stores), undefined when it is disabled */
+    getContextCacheStats() {
+        return this.contexts?.getStats();
     }
 
     /** Dereferences an IRI to a stream of quads, in which all messages (if any) are merged */
-    async dereference(
-        url: string,
-        options: DereferenceOptions = {},
-    ): Promise<DereferenceOutput> {
+    async dereference(url: string, options: DereferenceOptions = {}): Promise<DereferenceOutput> {
         const log = await this.dereferenceMessages(url, options);
         const data = new Readable({ objectMode: true, read() {} });
         // Nobody waits for this: a failure destroys the stream, which reports it
@@ -284,10 +275,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
     }
 
     /** Dereferences an IRI to an RDF Message log */
-    async dereferenceMessages(
-        url: string,
-        options: DereferenceOptions = {},
-    ): Promise<MessageLog> {
+    async dereferenceMessages(url: string, options: DereferenceOptions = {}): Promise<MessageLog> {
         if (!/^https?:\/\//i.test(url)) {
             return this.dereferenceFile(url, options);
         }
@@ -298,9 +286,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         }
         const response = await (options.fetch ?? fetch)(url, { headers });
 
-        const originalStatus = Number(
-            response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status,
-        );
+        const originalStatus = Number(response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status);
         if (response.status >= 400) {
             await response.body?.cancel().catch(() => undefined);
             throw new Error(`Could not dereference ${url}: HTTP ${response.status}`);
@@ -327,21 +313,14 @@ export class LdfetchDereferencer implements MessageDereferencer {
         return log;
     }
 
-    private async dereferenceFile(
-        location: string,
-        options: DereferenceOptions,
-    ): Promise<MessageLog> {
+    private async dereferenceFile(location: string, options: DereferenceOptions): Promise<MessageLog> {
         if (!options.localFiles) {
-            throw new Error(
-                `Tried to read local file ${location} without enabling localFiles`,
-            );
+            throw new Error(`Tried to read local file ${location} without enabling localFiles`);
         }
         const { createReadStream } = await import("fs");
         const { fileURLToPath, pathToFileURL } = await import("url");
         const { resolve } = await import("path");
-        const path = location.startsWith("file://")
-            ? fileURLToPath(location)
-            : resolve(location);
+        const path = location.startsWith("file://") ? fileURLToPath(location) : resolve(location);
         const source = createReadStream(path);
         const url = pathToFileURL(path).href;
         const log = await this.parse(source, url, url, 200, new Headers(), "", null, options.fetch ?? fetch);
@@ -366,11 +345,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             requestUrl,
             contentDisposition,
         });
-        const contentType = RdfParsers.resolveContentType(
-            prepared.contentType,
-            url,
-            requestUrl,
-        );
+        const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
 
         const log = new MessageLog(url, status, headers, contentType);
@@ -390,7 +365,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             });
             const jsonld = new JsonLdParser({
                 baseIRI: url,
-                documentLoader: this.cachedDocumentLoader(fetch_f),
+                documentLoader: this.contexts?.documentLoader(fetch_f) ?? uncachedDocumentLoader(fetch_f),
             });
             jsonld.write(Buffer.concat(chunks).toString("utf8"));
             jsonld.end();

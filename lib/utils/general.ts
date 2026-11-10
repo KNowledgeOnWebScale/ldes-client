@@ -6,16 +6,7 @@ import { getLoggerFor } from "./logUtil";
 
 import type { LDESInfo, Member, NumericOrderValue, OrderValue, SerializedMember } from "../types";
 import type { ParserOptions } from "n3";
-import type {
-    NamedNode,
-    Quad,
-    BaseQuad,
-    Quad_Predicate,
-    Quad_Subject,
-    Quad_Object,
-    Stream,
-    Term,
-} from "@rdfjs/types";
+import type { NamedNode, Quad, BaseQuad, Quad_Predicate, Quad_Subject, Quad_Object, Stream, Term } from "@rdfjs/types";
 
 const logger = getLoggerFor("Utils");
 
@@ -30,23 +21,13 @@ export function serializeQuads(quads: Quad[]): string {
     return new Writer().quadsToString(quads);
 }
 
-export function getSubjects(
-    store: RdfStore,
-    predicate: Term | null,
-    object: Term | null,
-    graph?: Term | null,
-): Quad_Subject[] {
+export function getSubjects(store: RdfStore, predicate: Term | null, object: Term | null, graph?: Term | null): Quad_Subject[] {
     return store.getQuads(null, predicate, object, graph).map((quad) => {
         return quad.subject;
     });
 }
 
-export function getObjects(
-    store: RdfStore,
-    subject: Term | null,
-    predicate: Term | null,
-    graph?: Term | null,
-): Quad_Object[] {
+export function getObjects(store: RdfStore, subject: Term | null, predicate: Term | null, graph?: Term | null): Quad_Object[] {
     return store.getQuads(subject, predicate, null, graph).map((quad) => {
         return quad.object;
     });
@@ -66,9 +47,7 @@ export async function readableToArray<T>(stream: ReadableStream<T>): Promise<T[]
  * Converts a stream to an array, pushing all elements to an array
  * Resolving the promise with the 'end' event
  */
-export function streamToArray<T extends BaseQuad>(
-    stream: Stream<T>,
-): Promise<T[]> {
+export function streamToArray<T extends BaseQuad>(stream: Stream<T>): Promise<T[]> {
     const out: T[] = [];
     return new Promise((res, rej) => {
         stream.on("end", () => res(out));
@@ -85,13 +64,9 @@ export function streamToArray<T extends BaseQuad>(
 export function streamToString(stream: Stream): Promise<string> {
     const chunks: Buffer[] = [];
     return new Promise((resolve, reject) => {
-        stream.on("data", (chunk: ArrayBuffer) =>
-            chunks.push(Buffer.from(chunk)),
-        );
+        stream.on("data", (chunk: ArrayBuffer) => chunks.push(Buffer.from(chunk)));
         stream.on("error", (err: unknown) => reject(err));
-        stream.on("end", () =>
-            resolve(Buffer.concat(chunks).toString("utf8")),
-        );
+        stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     });
 }
 
@@ -102,18 +77,12 @@ export function streamToString(stream: Stream): Promise<string> {
  * If more than one is found an exception is thrown.
  */
 export function extractMainNodeShape(store: RdfStore): NamedNode {
-    const nodeShapes = getSubjects(
-        store,
-        RDF.terms.type,
-        SHACL.terms.NodeShape,
-        null,
-    );
+    const nodeShapes = getSubjects(store, RDF.terms.type, SHACL.terms.NodeShape, null);
     let mainNodeShape = null;
 
     if (nodeShapes && nodeShapes.length > 0) {
         for (const ns of nodeShapes) {
-            const isNotReferenced =
-                getSubjects(store, null, ns, null).length === 0;
+            const isNotReferenced = getSubjects(store, null, ns, null).length === 0;
 
             if (isNotReferenced) {
                 if (!mainNodeShape) {
@@ -128,9 +97,7 @@ export function extractMainNodeShape(store: RdfStore): NamedNode {
         if (mainNodeShape) {
             return <NamedNode>mainNodeShape;
         } else {
-            throw new Error(
-                "No main SHACL Node Shapes found in given shape graph",
-            );
+            throw new Error("No main SHACL Node Shapes found in given shape graph");
         }
     } else {
         throw new Error("No SHACL Node Shapes found in given shape graph");
@@ -176,9 +143,7 @@ export function memberFromQuads(
     };
     const resolvePath = (path: Term): Term | undefined => {
         if (isPlainPredicate(path, quads, pathStore)) {
-            return quads.find(
-                (x) => x.subject.equals(member) && x.predicate.equals(path),
-            )?.object;
+            return quads.find((x) => x.subject.equals(member) && x.predicate.equals(path))?.object;
         }
         const store = getMemberStore();
         return resolveShaclPath(store, member, path, pathStore ?? store)[0];
@@ -190,35 +155,23 @@ export function memberFromQuads(
         const value = resolvePath(timestampPath);
         if (value) {
             const date = new Date(value.value);
-            timestamp = Number.isNaN(date.getTime())
-                ? termToOrderValue(value)
-                : date;
+            timestamp = Number.isNaN(date.getTime()) ? termToOrderValue(value) : date;
         }
     }
-    const sequence = extractSequenceValue(sequencePath, resolvePath) ??
-        (pageData && extractSequenceValue(sequencePath, (path) =>
-            resolveShaclPath(pageData, member, path, pathStore ?? pageData)[0],
-        ));
+    const sequence =
+        extractSequenceValue(sequencePath, resolvePath) ??
+        (pageData && extractSequenceValue(sequencePath, (path) => resolveShaclPath(pageData, member, path, pathStore ?? pageData)[0]));
     const order = timestamp ?? sequence;
-    const transactionFinalized = extractFinalizedValue(
-        transactionFinalizedPath,
-        transactionFinalizedObject,
-        resolvePath,
-    );
+    const transactionFinalized = extractFinalizedValue(transactionFinalizedPath, transactionFinalizedObject, resolvePath);
 
     // Get isVersionof
     let isVersionOf: string | undefined;
     if (isVersionOfPath) {
-        isVersionOf = quads.find(
-            (x) =>
-                x.subject.equals(member) && x.predicate.equals(isVersionOfPath),
-        )?.object.value;
+        isVersionOf = quads.find((x) => x.subject.equals(member) && x.predicate.equals(isVersionOfPath))?.object.value;
     }
 
     // Get type
-    const type: Term | undefined = quads.find(
-        (x) => x.subject.equals(member) && x.predicate.value === RDF.type,
-    )?.object;
+    const type: Term | undefined = quads.find((x) => x.subject.equals(member) && x.predicate.value === RDF.type)?.object;
     return { quads, id: member, isVersionOf, order, timestamp, sequence, transactionFinalized, type, created };
 }
 
@@ -226,11 +179,7 @@ export function memberFromQuads(
  * A path is a plain predicate when it is a named node that carries no SHACL
  * path description (sequence, alternative, inverse, ...) in the path store.
  */
-function isPlainPredicate(
-    path: Term,
-    quads: Quad[],
-    pathStore?: RdfStore,
-): boolean {
+function isPlainPredicate(path: Term, quads: Quad[], pathStore?: RdfStore): boolean {
     if (path.termType !== "NamedNode") {
         return false;
     }
@@ -240,10 +189,7 @@ function isPlainPredicate(
     return !quads.some((quad) => quad.subject.equals(path));
 }
 
-function extractSequenceValue(
-    sequencePath: Term | undefined,
-    resolvePath: (path: Term) => Term | undefined,
-): OrderValue | undefined {
+function extractSequenceValue(sequencePath: Term | undefined, resolvePath: (path: Term) => Term | undefined): OrderValue | undefined {
     if (!sequencePath) {
         return;
     }
@@ -266,8 +212,7 @@ function extractFinalizedValue(
     if (!value) {
         return;
     }
-    const expected = finalizedObject ??
-        df.literal("true", df.namedNode("http://www.w3.org/2001/XMLSchema#boolean"));
+    const expected = finalizedObject ?? df.literal("true", df.namedNode("http://www.w3.org/2001/XMLSchema#boolean"));
     return value.equals(expected);
 }
 
@@ -310,22 +255,11 @@ export function termToOrderValue(term: Term): OrderValue {
     return term.value;
 }
 
-export function resolveShaclPath(
-    data: RdfStore,
-    focus: Term,
-    path: Term,
-    pathStore = data,
-): Term[] {
+export function resolveShaclPath(data: RdfStore, focus: Term, path: Term, pathStore = data): Term[] {
     return resolveShaclPathInternal(data, focus, path, pathStore, new Set());
 }
 
-function resolveShaclPathInternal(
-    data: RdfStore,
-    focus: Term,
-    path: Term,
-    pathStore: RdfStore,
-    active: Set<string>,
-): Term[] {
+function resolveShaclPathInternal(data: RdfStore, focus: Term, path: Term, pathStore: RdfStore, active: Set<string>): Term[] {
     const key = `${termKey(focus)}|${termKey(path)}`;
     if (active.has(key)) return [];
     const nextActive = new Set(active).add(key);
@@ -333,96 +267,51 @@ function resolveShaclPathInternal(
     const sequence = rdfListToArray(pathStore, path);
     if (sequence) {
         return sequence.reduce<Term[]>(
-            (subjects, item) => subjects.flatMap((subject) =>
-                resolveShaclPathInternal(data, subject, item, pathStore, nextActive),
-            ),
+            (subjects, item) => subjects.flatMap((subject) => resolveShaclPathInternal(data, subject, item, pathStore, nextActive)),
             [focus],
         );
     }
 
-    const alternative = pathStore.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#alternativePath"),
-        null,
-        null,
-    )[0]?.object;
+    const alternative = pathStore.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#alternativePath"), null, null)[0]?.object;
     if (alternative) {
         return uniqueTerms(
-            (rdfListToArray(pathStore, alternative) ?? []).flatMap((item) =>
-                resolveShaclPathInternal(data, focus, item, pathStore, nextActive),
-            ),
+            (rdfListToArray(pathStore, alternative) ?? []).flatMap((item) => resolveShaclPathInternal(data, focus, item, pathStore, nextActive)),
         );
     }
 
-    const inverse = pathStore.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#inversePath"),
-        null,
-        null,
-    )[0]?.object;
+    const inverse = pathStore.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#inversePath"), null, null)[0]?.object;
     if (inverse) {
         if (inverse.termType === "NamedNode") {
             return data.getQuads(null, inverse, focus, null).map((quad) => quad.subject);
         }
         return uniqueTerms(
-            data.getQuads(null, null, null, null)
+            data
+                .getQuads(null, null, null, null)
                 .map((quad) => quad.subject)
-                .filter((subject, index, subjects) =>
-                    subjects.findIndex((candidate) => candidate.equals(subject)) === index
-                )
-                .filter((subject) =>
-                    resolveShaclPathInternal(data, subject, inverse, pathStore, nextActive)
-                        .some((value) => value.equals(focus))
-                ),
+                .filter((subject, index, subjects) => subjects.findIndex((candidate) => candidate.equals(subject)) === index)
+                .filter((subject) => resolveShaclPathInternal(data, subject, inverse, pathStore, nextActive).some((value) => value.equals(focus))),
         );
     }
 
-    const zeroOrMore = pathStore.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#zeroOrMorePath"),
-        null,
-        null,
-    )[0]?.object;
+    const zeroOrMore = pathStore.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#zeroOrMorePath"), null, null)[0]?.object;
     if (zeroOrMore) {
-        return uniqueTerms([
-            focus,
-            ...resolveTransitiveShaclPath(data, focus, zeroOrMore, pathStore, nextActive),
-        ]);
+        return uniqueTerms([focus, ...resolveTransitiveShaclPath(data, focus, zeroOrMore, pathStore, nextActive)]);
     }
 
-    const oneOrMore = pathStore.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#oneOrMorePath"),
-        null,
-        null,
-    )[0]?.object;
+    const oneOrMore = pathStore.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#oneOrMorePath"), null, null)[0]?.object;
     if (oneOrMore) {
         return resolveTransitiveShaclPath(data, focus, oneOrMore, pathStore, nextActive);
     }
 
-    const zeroOrOne = pathStore.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#zeroOrOnePath"),
-        null,
-        null,
-    )[0]?.object;
+    const zeroOrOne = pathStore.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#zeroOrOnePath"), null, null)[0]?.object;
     if (zeroOrOne) {
-        return uniqueTerms([
-            focus,
-            ...resolveShaclPathInternal(data, focus, zeroOrOne, pathStore, nextActive),
-        ]);
+        return uniqueTerms([focus, ...resolveShaclPathInternal(data, focus, zeroOrOne, pathStore, nextActive)]);
     }
 
     return data.getQuads(focus, path, null, null).map((quad) => quad.object);
 }
 
-function resolveTransitiveShaclPath(
-    data: RdfStore,
-    focus: Term,
-    path: Term,
-    pathStore: RdfStore,
-    active: Set<string>,
-): Term[] {
+function resolveTransitiveShaclPath(data: RdfStore, focus: Term, path: Term, pathStore: RdfStore, active: Set<string>): Term[] {
     const results: Term[] = [];
     const queue = resolveShaclPathInternal(data, focus, path, pathStore, active);
     const seen = new Set<string>();
@@ -442,9 +331,7 @@ function resolveTransitiveShaclPath(
 }
 
 function uniqueTerms(terms: Term[]): Term[] {
-    return terms.filter((term, index) =>
-        terms.findIndex((candidate) => candidate.equals(term)) === index
-    );
+    return terms.filter((term, index) => terms.findIndex((candidate) => candidate.equals(term)) === index);
 }
 
 function termKey(term: Term): string {
@@ -454,15 +341,9 @@ function termKey(term: Term): string {
     return `${term.termType}:${term.value}`;
 }
 
-export function resolveShaclPathTerms(
-    data: RdfStore,
-    focus: Term,
-    pathTerms: Term[],
-): Term[] {
+export function resolveShaclPathTerms(data: RdfStore, focus: Term, pathTerms: Term[]): Term[] {
     return pathTerms.reduce<Term[]>(
-        (subjects, predicate) => subjects.flatMap((subject) =>
-            data.getQuads(subject, predicate, null, null).map((quad) => quad.object),
-        ),
+        (subjects, predicate) => subjects.flatMap((subject) => data.getQuads(subject, predicate, null, null).map((quad) => quad.object)),
         [focus],
     );
 }
@@ -475,49 +356,24 @@ export function shaclPathKey(store: RdfStore, path: Term | undefined): string | 
     if (sequence) {
         return `sequence:${sequence.map((term) => shaclPathKey(store, term)).join("/")}`;
     }
-    const alternative = store.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#alternativePath"),
-        null,
-        null,
-    )[0]?.object;
+    const alternative = store.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#alternativePath"), null, null)[0]?.object;
     if (alternative) {
         const choices = rdfListToArray(store, alternative) ?? [];
         return `alternative:${choices.map((term) => shaclPathKey(store, term)).join("|")}`;
     }
-    const inverse = store.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#inversePath"),
-        null,
-        null,
-    )[0]?.object;
+    const inverse = store.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#inversePath"), null, null)[0]?.object;
     if (inverse) {
         return `inverse:${shaclPathKey(store, inverse)}`;
     }
-    const zeroOrMore = store.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#zeroOrMorePath"),
-        null,
-        null,
-    )[0]?.object;
+    const zeroOrMore = store.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#zeroOrMorePath"), null, null)[0]?.object;
     if (zeroOrMore) {
         return `zeroOrMore:${shaclPathKey(store, zeroOrMore)}`;
     }
-    const oneOrMore = store.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#oneOrMorePath"),
-        null,
-        null,
-    )[0]?.object;
+    const oneOrMore = store.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#oneOrMorePath"), null, null)[0]?.object;
     if (oneOrMore) {
         return `oneOrMore:${shaclPathKey(store, oneOrMore)}`;
     }
-    const zeroOrOne = store.getQuads(
-        path,
-        df.namedNode("http://www.w3.org/ns/shacl#zeroOrOnePath"),
-        null,
-        null,
-    )[0]?.object;
+    const zeroOrOne = store.getQuads(path, df.namedNode("http://www.w3.org/ns/shacl#zeroOrOnePath"), null, null)[0]?.object;
     if (zeroOrOne) {
         return `zeroOrOne:${shaclPathKey(store, zeroOrOne)}`;
     }
@@ -572,9 +428,7 @@ export function serializeMember(member: Member): SerializedMember {
 }
 
 export function deserializeMember(serialized: SerializedMember): Member {
-    const order = serialized.order === undefined
-        ? undefined
-        : deserializeOrderValue(serialized.order);
+    const order = serialized.order === undefined ? undefined : deserializeOrderValue(serialized.order);
     let timestamp: OrderValue | undefined;
     if (serialized.timestamp) {
         try {
@@ -633,39 +487,20 @@ export function isNumericOrderValue(value: OrderValue | undefined): value is Num
  * Version materialization function that sets the declared ldes:versionOfPath property value
  * as the member's subject IRI
  */
-export function maybeVersionMaterialize(
-    member: Member,
-    materialize: boolean,
-    ldesInfo: LDESInfo,
-): Member {
+export function maybeVersionMaterialize(member: Member, materialize: boolean, ldesInfo: LDESInfo): Member {
     if (materialize && ldesInfo.versionOfPath) {
         // Create RDF store with member quads
         const memberStore = RdfStore.createDefault();
         member.quads.forEach((q) => memberStore.addQuad(q));
         // Get materialized subject IRI
-        const newSubject = getObjects(
-            memberStore,
-            member.id,
-            ldesInfo.versionOfPath,
-        )[0];
+        const newSubject = getObjects(memberStore, member.id, ldesInfo.versionOfPath)[0];
         if (newSubject) {
             // Remove version property
-            memberStore.removeQuad(
-                df.quad(
-                    <Quad_Subject>member.id,
-                    <Quad_Predicate>ldesInfo.versionOfPath,
-                    newSubject,
-                ),
-            );
+            memberStore.removeQuad(df.quad(<Quad_Subject>member.id, <Quad_Predicate>ldesInfo.versionOfPath, newSubject));
             // Updated all quads with materialized subject
             for (const q of memberStore.getQuads(member.id)) {
                 //q.subject = <Quad_Subject>newSubject;
-                const newQ = df.quad(
-                    <Quad_Subject>newSubject,
-                    q.predicate,
-                    q.object,
-                    q.graph,
-                );
+                const newQ = df.quad(<Quad_Subject>newSubject, q.predicate, q.object, q.graph);
                 memberStore.removeQuad(q);
                 memberStore.addQuad(newQ);
             }
@@ -673,7 +508,9 @@ export function maybeVersionMaterialize(
             member.id = newSubject;
             member.quads = memberStore.getQuads();
         } else {
-            logger.warn(`No version property found in Member (${member.id.value}) as specified by ldes:isVersionOfPath ${ldesInfo.versionOfPath.value}`);
+            logger.warn(
+                `No version property found in Member (${member.id.value}) as specified by ldes:isVersionOfPath ${ldesInfo.versionOfPath.value}`,
+            );
         }
     }
 

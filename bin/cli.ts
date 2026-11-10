@@ -7,6 +7,7 @@ import { getLoggerFor, memberComment } from "../lib/utils";
 import { replicateLDES, enhanced_fetch, intoConfig, processConditionFile } from "../lib/client";
 
 import type { FetchConfig } from "../lib/fetcher";
+import type { ContextCacheOptions } from "../lib/fetcher/contextCache";
 import type { Ordered, LDESInfo } from "../lib/types";
 
 const program = new Command();
@@ -30,6 +31,7 @@ let defaultTimezone: string | undefined;
 let includeMetadata: boolean = false;
 let startFresh: boolean = false;
 let comment: boolean = false;
+let contextCache: ContextCacheOptions | false | undefined;
 let format: "trig-messages" | "n-quads" = "trig-messages";
 
 const fetch_config: FetchConfig = {
@@ -38,28 +40,15 @@ const fetch_config: FetchConfig = {
 
 program
     .arguments("<url>")
-    .option(
-        "--after <after>",
-        "follow only relations including members after a certain point in time",
-    )
+    .option("--after <after>", "follow only relations including members after a certain point in time")
     .option("--basic-auth <username>:<password>", "HTTP basic auth information")
-    .option(
-        "--before <before>",
-        "follow only relations including members before a certain point in time",
-    )
+    .option("--before <before>", "follow only relations including members before a certain point in time")
     .option(
         "-c, --comment",
         "print a comment before every member with what the LDES says about it: its number, IRI, timestamp, sequence, version, type and transaction",
     )
-    .option(
-        "--concurrent <requests>",
-        "Allowed amount of concurrent HTTP request to the same domain",
-        "10",
-    )
-    .option(
-        "--condition <condition_file>",
-        "turtle file including the conditions for extracting a member",
-    )
+    .option("--concurrent <requests>", "Allowed amount of concurrent HTTP request to the same domain", "10")
+    .option("--condition <condition_file>", "turtle file including the conditions for extracting a member")
     .option("-f, --follow", "follow the LDES, the client stays in sync")
     .addOption(
         new Option(
@@ -69,55 +58,25 @@ program
             .choices(["trig-messages", "n-quads"])
             .default("trig-messages"),
     )
+    .option("--context-min-ttl <seconds>", "keep external JSON-LD contexts for at least this long, whatever their cache headers say", "600")
+    .option("--no-context-cache", "don't cache external JSON-LD contexts")
     .option("--http-codes [codes...]", "What HTTP error codes to retry")
-    .option(
-        "--last-version-only",
-        "emit only the latest available version of every member"
-    )
-    .option(
-        "-l --loose",
-        "ignores if the page URL does not correspond to the tree:Node IRI when following tree:relation",
-    )
-    .option(
-        "--materialize",
-        "materialize versioned members based on the ldes:versionOfPath predicate"
-    )
+    .option("--last-version-only", "emit only the latest available version of every member")
+    .option("-l --loose", "ignores if the page URL does not correspond to the tree:Node IRI when following tree:relation")
+    .option("--materialize", "materialize versioned members based on the ldes:versionOfPath predicate")
     .option("-m, --metadata", "include metadata in the output members")
-    .option(
-        "--no-shape",
-        "don't extract members with a shape (only use cbd and named graphs)",
-    )
-    .option(
-        "--only-default-graph",
-        "extract members only from the default graph and the member graph",
-    )
-    .addOption(
-        new Option("-o --ordered <ordered>", "emit members in order")
-            .choices(["ascending", "descending", "none"])
-            .default("none"),
-    )
+    .option("--no-shape", "don't extract members with a shape (only use cbd and named graphs)")
+    .option("--only-default-graph", "extract members only from the default graph and the member graph")
+    .addOption(new Option("-o --ordered <ordered>", "emit members in order").choices(["ascending", "descending", "none"]).default("none"))
     .option("--poll-interval <number>", "specify poll interval in milliseconds (default: 1000)")
     .option("-q --quiet", "be quiet and don't print the members in the console (mainly for debugging purposes)")
-    .option(
-        "--retry-count <retry>",
-        "Retry count per failing request (0 is infinite)",
-        "3",
-    )
-    .option(
-        "--safe",
-        "Safe mode of fetching. The client won't crash on fetching errors",
-    )
-    .option(
-        "-s, --save <path>",
-        "folder path (or name if running in the browser) of where to store the state used both to resume and to update",
-    )
+    .option("--retry-count <retry>", "Retry count per failing request (0 is infinite)", "3")
+    .option("--safe", "Safe mode of fetching. The client won't crash on fetching errors")
+    .option("-s, --save <path>", "folder path (or name if running in the browser) of where to store the state used both to resume and to update")
     .option("--shape-file <shapeFile>", "specify the path of a (remote) file containing a SHACL shape for extracting members")
     .option("--start-fresh", "Clear any previous saved state and execute a fresh run")
     .option("-t --default-timezone <timezone>", "Default timezone for dates in tree:InBetweenRelation", "AoE")
-    .option(
-        "--url-is-view",
-        "the url is the view url, don't try to find the correct view",
-    )
+    .option("--url-is-view", "the url is the view url, don't try to find the correct view")
     .action((url: string, program) => {
         urlIsView = program.urlIsView;
         noShape = !program.shape;
@@ -136,6 +95,13 @@ program
         defaultTimezone = program.defaultTimezone;
         includeMetadata = program.metadata;
         startFresh = program.startFresh;
+        const minTTL = Number(program.contextMinTtl);
+        if (!(minTTL >= 0)) {
+            console.error(`--context-min-ttl ${program.contextMinTtl} is not a number of seconds`);
+            process.exit(1);
+        }
+        // --no-context-cache gives contextCache === false
+        contextCache = program.contextCache === false ? false : { minTTL };
         format = program.format;
         comment = program.comment;
 
@@ -178,10 +144,7 @@ async function main() {
     const writer = new Writer();
     const logger = getLoggerFor("cli");
     // One message per member. The log is not ended with stdout: that stays open for the process itself.
-    const messageLog =
-        !quiet && format === "trig-messages"
-            ? new MessageWriter(process.stdout, { format: "TriG", end: false })
-            : undefined;
+    const messageLog = !quiet && format === "trig-messages" ? new MessageWriter(process.stdout, { format: "TriG", end: false }) : undefined;
 
     const client = replicateLDES(
         intoConfig({
@@ -204,6 +167,7 @@ async function main() {
             includeMetadata,
             concurrentFetches: fetch_config.concurrent,
             startFresh,
+            contextCache,
             fetch: enhanced_fetch(fetch_config),
         }),
         ordered,
@@ -212,13 +176,19 @@ async function main() {
     let ldesInfo: LDESInfo | undefined;
     client.on("description", (info) => {
         ldesInfo = info;
-        logger.verbose(`LDES description found: ${JSON.stringify({
-            url: paramURL,
-            shape: info.shape,
-            timestampPath: info.timestampPath,
-            isVersionOfPath: info.versionOfPath,
-            shapeQuads: writer.quadsToString(info.shapeQuads),
-        }, null, 2)}`);
+        logger.verbose(
+            `LDES description found: ${JSON.stringify(
+                {
+                    url: paramURL,
+                    shape: info.shape,
+                    timestampPath: info.timestampPath,
+                    isVersionOfPath: info.versionOfPath,
+                    shapeQuads: writer.quadsToString(info.shapeQuads),
+                },
+                null,
+                2,
+            )}`,
+        );
     });
 
     client.on("fragment", (fragment) => {
@@ -228,7 +198,6 @@ async function main() {
     client.on("error", (error) => {
         console.error("Error", error);
     });
-
 
     const reader = client.stream({ highWaterMark: 10 }).getReader();
 
@@ -240,9 +209,7 @@ async function main() {
             memCount += 1;
 
             if (memCount % 100 == 1) {
-                logger.verbose(
-                    `Got member number ${memCount} with ID ${streamResult.value.id.value} and ${streamResult.value.quads.length} quads`,
-                );
+                logger.verbose(`Got member number ${memCount} with ID ${streamResult.value.id.value} and ${streamResult.value.quads.length} quads`);
             }
 
             const text = comment && !quiet ? memberComment(streamResult.value, memCount, ldesInfo) : "";
@@ -250,9 +217,7 @@ async function main() {
                 // The comment follows the delimiter of the previous message (or the version) and precedes the member
                 await messageLog.beginMessage();
                 if (text) {
-                    await new Promise<void>((resolve, reject) =>
-                        process.stdout.write(text, (error) => (error ? reject(error) : resolve())),
-                    );
+                    await new Promise<void>((resolve, reject) => process.stdout.write(text, (error) => (error ? reject(error) : resolve())));
                 }
                 for (const quad of streamResult.value.quads) {
                     await messageLog.addQuad(quad);

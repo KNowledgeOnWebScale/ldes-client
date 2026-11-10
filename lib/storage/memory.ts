@@ -37,7 +37,8 @@ class MemoryKVStore<K extends string | number, V> implements KVStore<K, V> {
             all: async (): Promise<V[]> => {
                 const entries = Array.from(this.store.entries());
                 entries.sort((a, b) => {
-                    const ka = String(a[0]), kb = String(b[0]);
+                    const ka = String(a[0]),
+                        kb = String(b[0]);
                     return ka < kb ? -1 : ka > kb ? 1 : 0;
                 });
                 return entries.map(([, v]) => JSON.parse(JSON.stringify(v)) as V);

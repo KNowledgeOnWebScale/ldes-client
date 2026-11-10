@@ -5,9 +5,7 @@ import { performance } from "node:perf_hooks";
 import { member, turtlePrefixes } from "./fixtures.mjs";
 
 const [, , dist, url, ordered, expected, verify] = process.argv;
-const { replicateLDES } = await import(
-    pathToFileURL(path.join(dist, "lib/client.js")).href
-);
+const { replicateLDES } = await import(pathToFileURL(path.join(dist, "lib/client.js")).href);
 
 const { Parser } = await import("n3");
 const canonical = (quads) =>
@@ -15,14 +13,7 @@ const canonical = (quads) =>
         .map((q) =>
             [q.subject, q.predicate, q.object, q.graph]
                 .map((t) =>
-                    t.termType === "BlankNode"
-                        ? "_:detail"
-                        : JSON.stringify([
-                              t.termType,
-                              t.value,
-                              t.language || "",
-                              t.datatype?.value || "",
-                          ]),
+                    t.termType === "BlankNode" ? "_:detail" : JSON.stringify([t.termType, t.value, t.language || "", t.datatype?.value || ""]),
                 )
                 .join(" "),
         )
@@ -42,30 +33,22 @@ const sampler = setInterval(() => {
 
 const started = performance.now();
 // Extra configuration of the client, as JSON (for example {"concurrentFetches": 2}), for experiments
-const extra = process.env.LDES_CLIENT_CONFIG
-    ? JSON.parse(process.env.LDES_CLIENT_CONFIG)
-    : {};
+const extra = process.env.LDES_CLIENT_CONFIG ? JSON.parse(process.env.LDES_CLIENT_CONFIG) : {};
 const client = replicateLDES({ url, ...extra }, ordered);
 let members = 0;
 for await (const item of client.stream({ highWaterMark: 100 })) {
     firstMemberSeconds ??= (performance.now() - started) / 1000;
     const id = Number(item.id.value.replace("http://example.org/m", ""));
-    if (!Number.isInteger(id) || id < 0 || id >= seen.length || seen[id])
-        throw new Error(`Invalid/duplicate member: ${item.id.value}`);
+    if (!Number.isInteger(id) || id < 0 || id >= seen.length || seen[id]) throw new Error(`Invalid/duplicate member: ${item.id.value}`);
     seen[id] = 1;
-    if (item.quads.length !== 8)
-        throw new Error(
-            `Member ${id}: expected 8 quads, got ${item.quads.length}`,
-        );
+    if (item.quads.length !== 8) throw new Error(`Member ${id}: expected 8 quads, got ${item.quads.length}`);
     if (verify === "verify") {
         const source = new Parser().parse(turtlePrefixes + member(id));
-        if (canonical(source) !== canonical(item.quads))
-            throw new Error(`Data mismatch for member ${id}`);
+        if (canonical(source) !== canonical(item.quads)) throw new Error(`Data mismatch for member ${id}`);
     }
     members++;
 }
-if (members !== Number(expected))
-    throw new Error(`Expected ${expected} members, got ${members}`);
+if (members !== Number(expected)) throw new Error(`Expected ${expected} members, got ${members}`);
 const seconds = (performance.now() - started) / 1000;
 clearInterval(sampler);
 console.log(

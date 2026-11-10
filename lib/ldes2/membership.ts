@@ -11,23 +11,15 @@ import type { NamedNode, Quad, Term } from "@rdfjs/types";
 const df = new DataFactory();
 
 export type MembershipRule =
-    | { kind: "direct"; stream: Term }
-    | { kind: "graph" }
-    | { kind: "type"; type: Term }
-    | { kind: "path"; path: Term; pathStore: RdfStore };
+    { kind: "direct"; stream: Term } | { kind: "graph" } | { kind: "type"; type: Term } | { kind: "path"; path: Term; pathStore: RdfStore };
 
 /**
  * Derives the rule that is used to find the member identifier in every member message
  * from the description of the `ldes:EventStream`.
  * At most one of the indirect membership properties may be set.
  */
-export function membershipRule(
-    description: RdfStore,
-    stream: Term,
-): MembershipRule {
-    const graphs = description
-        .getQuads(stream, V.memberGraph, null, null)
-        .filter((q) => q.object.value === "true" || q.object.value === "1");
+export function membershipRule(description: RdfStore, stream: Term): MembershipRule {
+    const graphs = description.getQuads(stream, V.memberGraph, null, null).filter((q) => q.object.value === "true" || q.object.value === "1");
     const types = description.getQuads(stream, V.memberType, null, null);
     const paths = description.getQuads(stream, V.memberPath, null, null);
 
@@ -35,7 +27,7 @@ export function membershipRule(
     if (set > 1 || types.length > 1 || paths.length > 1) {
         throw new Error(
             "The ldes:EventStream sets more than one of ldes:memberGraph, ldes:memberType and ldes:memberPath, " +
-            "or sets one of them more than once",
+                "or sets one of them more than once",
         );
     }
     if (graphs.length > 0) return { kind: "graph" };
@@ -49,9 +41,7 @@ export function membershipRule(
 function onlyIri(candidates: Term[], what: string): NamedNode {
     const unique = new Map(candidates.map((term) => [term.termType + term.value, term]));
     if (unique.size !== 1) {
-        throw new Error(
-            `Expected exactly one ${what} in the member message, found ${unique.size}`,
-        );
+        throw new Error(`Expected exactly one ${what} in the member message, found ${unique.size}`);
     }
     const term = [...unique.values()][0];
     if (term.termType !== "NamedNode") {
@@ -65,26 +55,17 @@ export function findMemberId(rule: MembershipRule, quads: Quad[]): NamedNode {
     switch (rule.kind) {
         case "direct":
             return onlyIri(
-                quads
-                    .filter(
-                        (q) =>
-                            q.subject.equals(rule.stream) && q.predicate.equals(V.member),
-                    )
-                    .map((q) => q.object),
+                quads.filter((q) => q.subject.equals(rule.stream) && q.predicate.equals(V.member)).map((q) => q.object),
                 "<ES> ldes:member triple",
             );
         case "graph":
             return onlyIri(
-                quads
-                    .map((q) => q.graph)
-                    .filter((graph) => graph.termType !== "DefaultGraph"),
+                quads.map((q) => q.graph).filter((graph) => graph.termType !== "DefaultGraph"),
                 "named graph",
             );
         case "type":
             return onlyIri(
-                quads
-                    .filter((q) => q.predicate.equals(V.type) && q.object.equals(rule.type))
-                    .map((q) => q.subject),
+                quads.filter((q) => q.predicate.equals(V.type) && q.object.equals(rule.type)).map((q) => q.subject),
                 `subject with rdf:type ${rule.type.value}`,
             );
         case "path": {
@@ -95,16 +76,11 @@ export function findMemberId(rule: MembershipRule, quads: Quad[]): NamedNode {
             let candidates: Term[];
             if (rule.path.termType === "NamedNode") {
                 // Plain predicate path: a scan over the quads suffices
-                candidates = quads
-                    .filter((q) => q.predicate.equals(rule.path))
-                    .map((q) => q.subject);
+                candidates = quads.filter((q) => q.predicate.equals(rule.path)).map((q) => q.subject);
             } else {
                 const store = RdfStore.createDefault();
                 quads.forEach((quad) => store.addQuad(quad));
-                candidates = [...subjects.values()].filter(
-                    (subject) =>
-                        resolveShaclPath(store, subject, rule.path, rule.pathStore).length > 0,
-                );
+                candidates = [...subjects.values()].filter((subject) => resolveShaclPath(store, subject, rule.path, rule.pathStore).length > 0);
             }
             return onlyIri(candidates, "subject from which ldes:memberPath leads to a value");
         }
@@ -112,16 +88,9 @@ export function findMemberId(rule: MembershipRule, quads: Quad[]): NamedNode {
 }
 
 /** Evaluates a SHACL path in the union graph of a member message, with the member identifier as the focus node */
-export function evaluatePath(
-    path: Term,
-    pathStore: RdfStore,
-    member: Term,
-    quads: Quad[],
-): Term[] {
+export function evaluatePath(path: Term, pathStore: RdfStore, member: Term, quads: Quad[]): Term[] {
     if (path.termType === "NamedNode" && pathStore.getQuads(path, null, null, null).length === 0) {
-        return quads
-            .filter((q) => q.subject.equals(member) && q.predicate.equals(path))
-            .map((q) => q.object);
+        return quads.filter((q) => q.subject.equals(member) && q.predicate.equals(path)).map((q) => q.object);
     }
     const store = RdfStore.createDefault();
     quads.forEach((quad) => store.addQuad(quad));

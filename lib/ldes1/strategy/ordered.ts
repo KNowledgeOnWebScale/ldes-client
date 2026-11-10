@@ -1,34 +1,12 @@
 import { Heap } from "heap-js";
 import { TREE } from "@treecg/types";
 import { Fetcher, ModulatorFactory, RelationChain, Manager, memberIsOld } from "../fetcher";
-import {
-    parseInBetweenRelation,
-    getLoggerFor,
-    deserializeMember,
-    serializeMember,
-    termToOrderValue,
-    isNumericOrderValue,
-} from "../../utils";
+import { parseInBetweenRelation, getLoggerFor, deserializeMember, serializeMember, termToOrderValue, isNumericOrderValue } from "../../utils";
 import { GTRs, LTR } from "./types";
 import { Condition } from "../../condition";
 
-import type {
-    FoundRelation,
-    FetchEvent,
-    SimpleRelation,
-    MemberEvents,
-    Modulator
-} from "../fetcher";
-import type {
-    Member,
-    LDESInfo,
-    FetchedPage,
-    Notifier,
-    OrderValue,
-    StrategyEvents,
-    Ordered,
-    SerializedMember,
-} from "../../types";
+import type { FoundRelation, FetchEvent, SimpleRelation, MemberEvents, Modulator } from "../fetcher";
+import type { Member, LDESInfo, FetchedPage, Notifier, OrderValue, StrategyEvents, Ordered, SerializedMember } from "../../types";
 
 type StoredRelation = {
     important: boolean;
@@ -39,7 +17,7 @@ type StoredRelation = {
 type NodeChain = {
     chain: RelationChain;
     expected: Set<string>;
-}
+};
 
 export class OrderedStrategy {
     private members: Heap<Member>;
@@ -61,10 +39,7 @@ export class OrderedStrategy {
 
     private modulator: Modulator<NodeChain, Member>;
     private preloadedPages = new Map<string, FetchedPage>();
-    private fetchNotifier: Notifier<
-        FetchEvent,
-        { chain: RelationChain; index: number }
-    >;
+    private fetchNotifier: Notifier<FetchEvent, { chain: RelationChain; index: number }>;
     private memberNotifier: Notifier<
         MemberEvents,
         {
@@ -123,7 +98,7 @@ export class OrderedStrategy {
          *       start member extraction
          * - relationsFiltered: Indicates that a fragment had relations that were filtered out
          *       due to the process conditions. The fragment should be kept in state for future processes
-         *       that may have different conditions. 
+         *       that may have different conditions.
          * - relationFound: a relation has been found, put the extended chain in the queue
          */
         this.fetchNotifier = {
@@ -135,7 +110,7 @@ export class OrderedStrategy {
                 chain.target = target;
                 this.toPoll.push({ chain, expected });
                 // Register in the state that this page needs to be refetched in the future
-                if (await this.modulator.addMutable(target, { chain, expected }) && !this.canceled) {
+                if ((await this.modulator.addMutable(target, { chain, expected })) && !this.canceled) {
                     this.notifier.mutable({}, {});
                 }
             },
@@ -144,10 +119,7 @@ export class OrderedStrategy {
                 for (const { from, target } of relations) {
                     from.expected.add(target.node);
                     this.logger.debug(`[fetchNotifier - relationFound] Relation found ${target.node}`);
-                    const newChain = chain.push(
-                        target.node,
-                        this.extractRelation(target),
-                    );
+                    const newChain = chain.push(target.node, this.extractRelation(target));
                     if (newChain.ordering(chain) >= 0) {
                         // Only launch the fetching of this relation if it hasn't been launched already
                         if (!this.launchedRelations.contains(newChain, (e, o) => e.target === o.target)) {
@@ -156,9 +128,7 @@ export class OrderedStrategy {
                             toFetch.push({ chain: newChain, expected: newExpected });
                         }
                     } else {
-                        this.logger.error(
-                            "Found relation backwards in time, this indicates wrong tree structure. Ignoring",
-                        );
+                        this.logger.error("Found relation backwards in time, this indicates wrong tree structure. Ignoring");
                     }
                 }
                 await this.modulator.push(toFetch);
@@ -186,7 +156,6 @@ export class OrderedStrategy {
                     if (await this.modulator.addUnemitted(member.id.value, member)) {
                         this.logger.silly(`[memberNotifier - extracted] Member <${member.id.value}> added to unemitted list`);
                     }
-
                 }
             },
             done: async (fragment: FetchedPage, { chain, index }) => {
@@ -227,11 +196,7 @@ export class OrderedStrategy {
                         );
                     } else if (!(await this.modulator.seen(chain.target))) {
                         this.logger.debug(`[modulator - ready] Ready to fetch page: ${chain.target}`);
-                        await this.fetcher.fetch(
-                            { target: chain.target, expected },
-                            { chain, index },
-                            this.fetchNotifier,
-                        );
+                        await this.fetcher.fetch({ target: chain.target, expected }, { chain, index }, this.fetchNotifier);
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
                         this.relationFinished.set(chain, true);
@@ -257,15 +222,20 @@ export class OrderedStrategy {
                 };
             },
             (inp: unknown) => {
-                const { chain, expected } = <{
-                    chain: { source: string; target: string; relations: StoredRelation[] };
-                    expected: string[];
-                }>inp;
+                const { chain, expected } = <
+                    {
+                        chain: { source: string; target: string; relations: StoredRelation[] };
+                        expected: string[];
+                    }
+                >inp;
                 const relations = chain.relations.map(({ important, value, valueType }) => {
                     // In legacy state the relation's path was not saved. Only
                     // restore a date automatically for timestamp-only streams.
-                    const legacyDate = valueType === undefined && this.timestampOrdering &&
-                        !this.hasSequencePath && typeof value === "string" &&
+                    const legacyDate =
+                        valueType === undefined &&
+                        this.timestampOrdering &&
+                        !this.hasSequencePath &&
+                        typeof value === "string" &&
                         /^[+-]?\d{4,6}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value);
                     if ((valueType === "date" || legacyDate) && typeof value === "string") {
                         const date = new Date(value);
@@ -277,13 +247,7 @@ export class OrderedStrategy {
                     };
                 });
                 return {
-                    chain: new RelationChain(
-                        chain.source,
-                        chain.target,
-                        relations,
-                        undefined,
-                        this.compareRelations,
-                    ),
+                    chain: new RelationChain(chain.source, chain.target, relations, undefined, this.compareRelations),
                     expected: new Set(expected),
                 };
             },
@@ -297,12 +261,7 @@ export class OrderedStrategy {
         this.members = new Heap((a, b) => compareMembers(a, b, ordered, this.timestampOrdering));
     }
 
-    async start(
-        url: string,
-        condition: Condition,
-        root?: FetchedPage,
-        traverseRoot = true,
-    ) {
+    async start(url: string, condition: Condition, root?: FetchedPage, traverseRoot = true) {
         if (this.canceled) return;
         // Try to initialize the modulator
         if (!(await this.modulator.init(condition))) return;
@@ -318,36 +277,32 @@ export class OrderedStrategy {
 
         // Schedule any mutable pages found in a previous run
         const mutableFragments = await this.modulator.getAllMutable();
-        mutableFragments.forEach(fragment => {
+        mutableFragments.forEach((fragment) => {
             this.toPoll.push(fragment);
         });
 
         if (root && !traverseRoot) {
-            this.background(this.manager.extractMembers(
-                root,
-                {
-                    chain: new RelationChain("", ""),
-                    index: 0,
-                    modulator: this.modulator,
-                },
-                this.memberNotifier
-            ));
+            this.background(
+                this.manager.extractMembers(
+                    root,
+                    {
+                        chain: new RelationChain("", ""),
+                        index: 0,
+                        modulator: this.modulator,
+                    },
+                    this.memberNotifier,
+                ),
+            );
             return;
         } else if (root) {
             this.preloadedPages.set(root.url, root);
         }
 
-        if (await this.modulator.pendingCount() < 1) {
+        if ((await this.modulator.pendingCount()) < 1) {
             this.logger.debug(`[start] Starting at ${url}`);
 
             // Pushing the root relation
-            const relation = new RelationChain(
-                "",
-                url,
-                [],
-                undefined,
-                this.compareRelations,
-            ).push(url, {
+            const relation = new RelationChain("", url, [], undefined, this.compareRelations).push(url, {
                 important: false,
                 value: 0,
             });
@@ -355,9 +310,7 @@ export class OrderedStrategy {
             this.launchRelation(relation);
             this.background(this.modulator.push([{ chain: relation, expected: new Set() }]));
         } else {
-            this.logger.debug(
-                "[start] Things are already inflight, not adding start url",
-            );
+            this.logger.debug("[start] Things are already inflight, not adding start url");
         }
     }
 
@@ -368,17 +321,14 @@ export class OrderedStrategy {
 
     async cancel() {
         this.canceled = true;
-        await Promise.all([
-            this.processingEmit,
-            this.processingCheckEnd,
-        ]);
+        await Promise.all([this.processingEmit, this.processingCheckEnd]);
     }
 
     /**
      * This function implements the logic of a synchronized end checking loop that uses
-     * the @isEndChecking and @shouldCheckEndAgain flags to prevent multiple end checking loops from running at the same time. 
-     * When a process is already running, subsequent calls simply set the shouldCheckEndAgain flag and return. 
-     * The original process then picks up these pending requests in its loop, 
+     * the @isEndChecking and @shouldCheckEndAgain flags to prevent multiple end checking loops from running at the same time.
+     * When a process is already running, subsequent calls simply set the shouldCheckEndAgain flag and return.
+     * The original process then picks up these pending requests in its loop,
      * ensuring sequential execution without overlapping asynchronous operations
      */
     private async checkEnd() {
@@ -409,7 +359,7 @@ export class OrderedStrategy {
         if (this.canceled) return;
 
         // Check if there are any pending fragments
-        if (await this.modulator.pendingCount() < 1 && this.launchedRelations.isEmpty()) {
+        if ((await this.modulator.pendingCount()) < 1 && this.launchedRelations.isEmpty()) {
             this.logger.debug("[_checkEnd] No more pending relations");
             let member = this.members.pop();
             while (member) {
@@ -425,11 +375,7 @@ export class OrderedStrategy {
 
                     this.notifier.pollCycle({}, {});
                     const toPollArray = this.toPoll.toArray();
-                    this.logger.debug(
-                        `[_checkEnd] Let's repoll (${JSON.stringify(
-                            toPollArray.map((x) => x.chain.target),
-                        )})`,
-                    );
+                    this.logger.debug(`[_checkEnd] Let's repoll (${JSON.stringify(toPollArray.map((x) => x.chain.target))})`);
                     this.toPoll.clear();
 
                     for (const rel of toPollArray) {
@@ -450,8 +396,7 @@ export class OrderedStrategy {
      * Sorting in ascending order: if a relation comes in with a LT relation, then that relation is not important, because it can be handled later
      * Sorting in descending order: if a relation comes in with a GT relation, then that relation is not important, because it can be handled later
      */
-    private compareRelations = (a: OrderValue, b: OrderValue): number =>
-        (this.ordered === "ascending" ? 1 : -1) * compareOrderValues(a, b);
+    private compareRelations = (a: OrderValue, b: OrderValue): number => (this.ordered === "ascending" ? 1 : -1) * compareOrderValues(a, b);
 
     private extractRelation(rel: FoundRelation): SimpleRelation {
         let bound: OrderValue | undefined;
@@ -477,23 +422,23 @@ export class OrderedStrategy {
         return { important: bound !== undefined, value: bound ?? 0 };
     }
 
-    private async handleFetched(page: FetchedPage, state: { chain: RelationChain, index: number }) {
+    private async handleFetched(page: FetchedPage, state: { chain: RelationChain; index: number }) {
         // Page was fetched and will now be extracted
         await this.manager.extractMembers(
             page,
             {
                 modulator: this.modulator,
-                ...state
+                ...state,
             },
-            this.memberNotifier
+            this.memberNotifier,
         );
     }
 
     /**
      * This function implements the logic of a synchronized emit loop that uses
-     * the @isChecking and @shouldCheckAgain flags to prevent multiple emit loops from running at the same time. 
-     * When a process is already running, subsequent calls simply set the shouldCheckAgain flag and return. 
-     * The original process then picks up these pending requests in its loop, 
+     * the @isChecking and @shouldCheckAgain flags to prevent multiple emit loops from running at the same time.
+     * When a process is already running, subsequent calls simply set the shouldCheckAgain flag and return.
+     * The original process then picks up these pending requests in its loop,
      * ensuring sequential execution without overlapping asynchronous operations
      */
     /**
@@ -537,38 +482,33 @@ export class OrderedStrategy {
         this.logger.debug("[_checkEmit] Checking possible member emission");
         let head = this.launchedRelations.pop();
         while (head) {
-            // Find the most conservative important marker 
-            // (i.e., the relation leading to a fragment containing members 
-            // with the lowest or highest timestamp value, depending of the chosen order) 
+            // Find the most conservative important marker
+            // (i.e., the relation leading to a fragment containing members
+            // with the lowest or highest timestamp value, depending of the chosen order)
             // across all active branches. This includes the current head and everything still in the queue.
             const allActive = [head, ...this.launchedRelations.toArray()];
-            const importantChains = allActive.filter(rel => rel?.important());
+            const importantChains = allActive.filter((rel) => rel?.important());
 
             let marker: SimpleRelation = { value: 0, important: false };
             if (importantChains.length > 0) {
                 // In Ascending LDES: This finds the relation with the lowest timestamp value.
                 // In Descending LDES: This finds the relation with the highest timestamp value.
-                const mostConservative = importantChains.reduce((a, b) => a!.ordering(b!) < 0 ? a : b);
+                const mostConservative = importantChains.reduce((a, b) => (a!.ordering(b!) < 0 ? a : b));
                 marker = mostConservative!.relations[0];
             }
 
-            this.logger.debug("[_checkEmit] Marker found: {important: " + marker.important
-                + ", value: " + String(marker.value) + "}");
+            this.logger.debug("[_checkEmit] Marker found: {important: " + marker.important + ", value: " + String(marker.value) + "}");
 
             // A relation should only be blocked by PEER branches that are in transit.
             // It should NOT be blocked by its own descendants or by itself.
             // However, if we don't have an important marker, we must be strict and block on children too
             // to ensure we don't interleave members from the same time slice out of order.
-            const inTransit = (await Promise.all([
-                this.modulator.getAllInFlight(),
-                this.modulator.getAllTodo()
-            ])).flat().find((x) =>
-                x.chain.ordering(head!) == 0 &&
-                (marker.important ?
-                    (!x.expected.has(head!.target) && x.chain.target !== head!.target) :
-                    true
-                )
-            );
+            const inTransit = (await Promise.all([this.modulator.getAllInFlight(), this.modulator.getAllTodo()]))
+                .flat()
+                .find(
+                    (x) =>
+                        x.chain.ordering(head!) == 0 && (marker.important ? !x.expected.has(head!.target) && x.chain.target !== head!.target : true),
+                );
 
             const completed = this.relationFinished.get(head);
             if (inTransit || (!head.important() && !completed)) {
@@ -580,13 +520,17 @@ export class OrderedStrategy {
             let member = this.members.pop();
             while (member) {
                 const order = this.timestampOrdering ? member.timestamp : member.sequence;
-                if (order === undefined || !marker.important ||
+                if (
+                    order === undefined ||
+                    !marker.important ||
                     !comparableOrderValues(order, marker.value) ||
-                    this.compareRelations(order, marker.value) < 0) {
+                    this.compareRelations(order, marker.value) < 0
+                ) {
                     await this.emitIfNotOld(member);
                 } else {
-                    this.logger.debug("[_checkEmit] Member <" + member.id.value + "> with ordering value "
-                        + String(order) + " didn't fit in the marker range");
+                    this.logger.debug(
+                        "[_checkEmit] Member <" + member.id.value + "> with ordering value " + String(order) + " didn't fit in the marker range",
+                    );
                     break;
                 }
                 member = this.members.pop();
@@ -639,8 +583,7 @@ export class OrderedStrategy {
 
 function comparableOrderValues(a: OrderValue, b: OrderValue): boolean {
     if (isNumericOrderValue(a) || isNumericOrderValue(b)) {
-        return (isNumericOrderValue(a) || typeof a === "number") &&
-            (isNumericOrderValue(b) || typeof b === "number");
+        return (isNumericOrderValue(a) || typeof a === "number") && (isNumericOrderValue(b) || typeof b === "number");
     }
     if (a instanceof Date || b instanceof Date) return a instanceof Date && b instanceof Date;
     return typeof a === typeof b;
@@ -648,9 +591,7 @@ function comparableOrderValues(a: OrderValue, b: OrderValue): boolean {
 
 function compareMembers(a: Member, b: Member, ordered: Ordered, timestampOrdering: boolean): number {
     if (a.id.equals(b.id)) return 0;
-    let order = timestampOrdering
-        ? compareOrderValues(a.timestamp, b.timestamp)
-        : compareOrderValues(a.sequence, b.sequence);
+    let order = timestampOrdering ? compareOrderValues(a.timestamp, b.timestamp) : compareOrderValues(a.sequence, b.sequence);
     if (order === 0 && timestampOrdering) {
         order = compareOrderValues(a.sequence, b.sequence);
     }
@@ -663,17 +604,12 @@ function compareMembers(a: Member, b: Member, ordered: Ordered, timestampOrderin
     return a.id.value < b.id.value ? -1 : 1;
 }
 
-function compareOrderValues(
-    a: OrderValue | undefined,
-    b: OrderValue | undefined,
-): number {
+function compareOrderValues(a: OrderValue | undefined, b: OrderValue | undefined): number {
     if (a === undefined && b === undefined) return 0;
     if (a === undefined) return 1;
     if (b === undefined) return -1;
-    if ((isNumericOrderValue(a) || typeof a === "number") &&
-        (isNumericOrderValue(b) || typeof b === "number")) {
-        return compareNumericStrings(isNumericOrderValue(a) ? a.value : String(a),
-            isNumericOrderValue(b) ? b.value : String(b));
+    if ((isNumericOrderValue(a) || typeof a === "number") && (isNumericOrderValue(b) || typeof b === "number")) {
+        return compareNumericStrings(isNumericOrderValue(a) ? a.value : String(a), isNumericOrderValue(b) ? b.value : String(b));
     }
     const left = a instanceof Date ? a.getTime() : a;
     const right = b instanceof Date ? b.getTime() : b;

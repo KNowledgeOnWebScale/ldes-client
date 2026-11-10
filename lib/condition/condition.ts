@@ -43,27 +43,15 @@ export function empty_condition(): Condition {
 export function parse_condition(source: string, baseIRI: string): Condition {
     const shapeQuads = parseQuads(SHAPES);
     const output = extractShapes(shapeQuads, {
-        "http://vocab.deri.ie/csp#And": (obj) =>
-            new AndCondition(
-                <ConstructorParameters<typeof AndCondition>[0]>obj,
-            ),
-        "http://vocab.deri.ie/csp#MaxCount": (obj) =>
-            new MaxCountCondition(
-                <ConstructorParameters<typeof MaxCountCondition>[0]>obj,
-            ),
-        "http://vocab.deri.ie/csp#Or": (obj) =>
-            new OrCondition(<ConstructorParameters<typeof OrCondition>[0]>obj),
-        "http://vocab.deri.ie/csp#Condition": (obj) =>
-            new LeafCondition(
-                <ConstructorParameters<typeof LeafCondition>[0]>obj,
-            ),
+        "http://vocab.deri.ie/csp#And": (obj) => new AndCondition(<ConstructorParameters<typeof AndCondition>[0]>obj),
+        "http://vocab.deri.ie/csp#MaxCount": (obj) => new MaxCountCondition(<ConstructorParameters<typeof MaxCountCondition>[0]>obj),
+        "http://vocab.deri.ie/csp#Or": (obj) => new OrCondition(<ConstructorParameters<typeof OrCondition>[0]>obj),
+        "http://vocab.deri.ie/csp#Condition": (obj) => new LeafCondition(<ConstructorParameters<typeof LeafCondition>[0]>obj),
     });
 
     const dataQuads = parseQuads(source, { baseIRI: baseIRI });
 
-    return <Condition>output.lenses[
-        "https://w3id.org/rdf-lens/ontology#TypedExtract"
-    ].execute({
+    return <Condition>output.lenses["https://w3id.org/rdf-lens/ontology#TypedExtract"].execute({
         quads: dataQuads,
         id: df.namedNode(baseIRI),
     });
@@ -75,10 +63,7 @@ export function cbdEquals(a: Path, b: Path): boolean {
         return !a.id && !b.id;
     }
     // A path that is an IRI (a single predicate) is only equal to that same IRI: it has no quads that could be compared
-    if (
-        (a.id.termType === "NamedNode" || b.id.termType === "NamedNode") &&
-        !a.id.equals(b.id)
-    ) {
+    if ((a.id.termType === "NamedNode" || b.id.termType === "NamedNode") && !a.id.equals(b.id)) {
         return false;
     }
     const sort = (a: Quad, b: Quad) => {
@@ -102,12 +87,7 @@ export function cbdEquals(a: Path, b: Path): boolean {
 
         if (av.termType !== bv.termType) return false;
         if (av.termType === "BlankNode") {
-            if (
-                !cbdEquals(
-                    { id: av, store: a.store },
-                    { id: bv, store: b.store },
-                )
-            ) {
+            if (!cbdEquals({ id: av, store: a.store }, { id: bv, store: b.store })) {
                 return false;
             }
         } else {
@@ -142,30 +122,13 @@ export class RelationCondition {
     }
 
     addRelation(relationId: Term) {
-        const ty =
-            getObjects(this.store, relationId, RDF.terms.type, null)[0] ||
-            TREE.Relation;
+        const ty = getObjects(this.store, relationId, RDF.terms.type, null)[0] || TREE.Relation;
 
-        const path = getObjects(
-            this.store,
-            relationId,
-            TREE.terms.path,
-            null,
-        )[0];
+        const path = getObjects(this.store, relationId, TREE.terms.path, null)[0];
 
-        const value = getObjects(
-            this.store,
-            relationId,
-            TREE.terms.value,
-            null,
-        )[0];
+        const value = getObjects(this.store, relationId, TREE.terms.value, null)[0];
 
-        let range = this.ranges.find((range) =>
-            cbdEquals(
-                { id: path, store: this.store },
-                { id: range.cbdEntry, store: this.store },
-            ),
-        );
+        let range = this.ranges.find((range) => cbdEquals({ id: path, store: this.store }, { id: range.cbdEntry, store: this.store }));
 
         if (!range) {
             const newRange: PathRange = {
@@ -225,12 +188,7 @@ export class LeafCondition implements Condition {
             dataType = inp.value.datatype.value;
         }
 
-        this.range = new Range(
-            this.parseValue(inp.value.value),
-            inp.relationType.value,
-            this.defaultTimezone,
-            dataType,
-        );
+        this.range = new Range(this.parseValue(inp.value.value), inp.relationType.value, this.defaultTimezone, dataType);
     }
 
     memberEmitted(): void {
@@ -238,10 +196,7 @@ export class LeafCondition implements Condition {
     }
 
     toString(): string {
-        const vts =
-            this.compareType === "date"
-                ? (x: RelationValue) => (<Date>x).toISOString()
-                : undefined;
+        const vts = this.compareType === "date" ? (x: RelationValue) => (<Date>x).toISOString() : undefined;
         return `${this.pathQuads.id.value} ∈ ${this.range.toString(vts)}`;
     }
 
@@ -250,21 +205,12 @@ export class LeafCondition implements Condition {
             return true;
         }
         if (!range) {
-            this.logger.debug(
-                "[matchRelation] Range is here also undefined, returning false",
-            );
+            this.logger.debug("[matchRelation] Range is here also undefined, returning false");
             return false;
         }
 
-        const vts =
-            this.compareType === "date"
-                ? (x: RelationValue) => new Date(x).toISOString()
-                : undefined;
-        this.logger.debug(
-            `${this.range.toString(vts)} contains ${range.toString(vts)}. Overlaps: ${this.range.overlaps(
-                range,
-            )}`,
-        );
+        const vts = this.compareType === "date" ? (x: RelationValue) => new Date(x).toISOString() : undefined;
+        this.logger.debug(`${this.range.toString(vts)} contains ${range.toString(vts)}. Overlaps: ${this.range.overlaps(range)}`);
 
         return this.range.overlaps(range);
     }
@@ -275,9 +221,7 @@ export class LeafCondition implements Condition {
             const value = this.parseValue(rawPathValue.id.value);
             return this.range.contains(value);
         } else {
-            throw new Error(
-                `Property Path <${this.pathQuads.id.value}> does not exist in member <${member.id.value}>`,
-            );
+            throw new Error(`Property Path <${this.pathQuads.id.value}> does not exist in member <${member.id.value}>`);
         }
     }
 
@@ -313,15 +257,11 @@ abstract class BiCondition implements Condition {
     abstract memberEmitted(member: Member): void;
 
     matchRelation(range: Range | undefined, cbdId: Path): boolean {
-        return this.items
-            .map((x) => x.matchRelation(range, cbdId))
-            .reduce(this.combine.bind(this));
+        return this.items.map((x) => x.matchRelation(range, cbdId)).reduce(this.combine.bind(this));
     }
 
     matchMember(member: Member): boolean {
-        return this.items
-            .map((x) => x.matchMember(member))
-            .reduce(this.combine.bind(this));
+        return this.items.map((x) => x.matchMember(member)).reduce(this.combine.bind(this));
     }
 
     poll(): void {
@@ -360,7 +300,6 @@ export class OrCondition extends BiCondition {
 }
 
 export class EmptyCondition implements Condition {
-
     matchRelation(_range: Range, _cbdId: Path): boolean {
         return true;
     }
@@ -413,23 +352,15 @@ export class MaxCountCondition implements Condition {
     }
 }
 
-export async function processConditionFile(
-    conditionFile?: string,
-): Promise<Condition> {
+export async function processConditionFile(conditionFile?: string): Promise<Condition> {
     let condition: Condition = empty_condition();
 
     /* eslint-disable  @typescript-eslint/no-require-imports */
-    const fs =
-        typeof require === "undefined"
-            ? await import("fs/promises")
-            : require("fs/promises");
+    const fs = typeof require === "undefined" ? await import("fs/promises") : require("fs/promises");
 
     if (conditionFile) {
         try {
-            condition = parse_condition(
-                await fs.readFile(conditionFile, { encoding: "utf8" }),
-                conditionFile,
-            );
+            condition = parse_condition(await fs.readFile(conditionFile, { encoding: "utf8" }), conditionFile);
         } catch (ex) {
             console.error(`Failed to read condition file: ${conditionFile}`);
             throw ex;
@@ -443,13 +374,7 @@ export async function processConditionFile(
  * Function that handles any given condition, together with the "before" and "after" options,
  * and builds the corresponding unified Condition.
  */
-export function handleConditions(
-    condition: Condition,
-    defaultTimezone: string,
-    before?: Date,
-    after?: Date,
-    timestampPath?: Term,
-): Condition {
+export function handleConditions(condition: Condition, defaultTimezone: string, before?: Date, after?: Date, timestampPath?: Term): Condition {
     if ((before || after) && !timestampPath) {
         throw "Cannot apply 'before' or 'after' filters since the target LDES does not define a ldes:timestampPath predicate";
     }
