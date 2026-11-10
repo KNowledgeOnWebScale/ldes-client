@@ -52,6 +52,10 @@ export { intoConfig } from "./config";
 export * from "./condition";
 export type { Ordered } from "./types";
 
+// Re-export storage types and adapters
+export type { KVStore, Storage } from "./storage";
+export { MemoryStorage } from "./storage/memory";
+
 export type ClientEvents = {
     fragment: FetchedPage;
     description: LDESInfo;
@@ -83,6 +87,7 @@ export class Client {
     private closed = false;
     private modulatorFactory: ModulatorFactory;
     private clientStateManager: ClientStateManager;
+    private readonly persistState: boolean;
     private gate = new Gate();
 
     private listeners: {
@@ -102,20 +107,20 @@ export class Client {
                 : ldfetchDereferencer);
         this.streamId = stream;
         this.ordered = ordered;
-        this.clientStateManager = new ClientStateManager(this.config.statePath, this.config.startFresh);
+        this.clientStateManager = new ClientStateManager(this.config.storage, this.config.statePath, this.config.startFresh);
+        this.persistState = this.config.statePath !== undefined || this.config.storage !== undefined;
         this.modulatorFactory = new ModulatorFactory(
             this.clientStateManager,
-            this.config.statePath !== undefined,
+            this.persistState,
             this.config.concurrentFetches,
             this.config.lastVersionOnly,
         );
-        if (typeof process !== "undefined") {
-            // Handle exit gracefully
-            handleExit(() => {
-                this.logger.warn("Process was externally terminated, closing client...");
-                this.logger.info("Managed to emit " + this.memberCount + " members from " + this.fragmentCount + " fragments before termination");
-            });
-        }
+        // handleExit internally checks for process signal support,
+        // so it's safe to call unconditionally (no-op on CF Workers)
+        handleExit(() => {
+            this.logger.warn("Process was externally terminated, closing client...");
+            this.logger.info("Managed to emit " + this.memberCount + " members from " + this.fragmentCount + " fragments before termination");
+        });
     }
 
     on<K extends EventKey<ClientEvents>>(key: K, fn: EventReceiver<ClientEvents[K]>) {
@@ -127,12 +132,12 @@ export class Client {
 
     async init(streamOut: (member: Member) => boolean, close: () => void): Promise<void> {
         // Initialize the client state manager
-        this.clientStateManager.init();
+        await this.clientStateManager.init();
 
         const rootState = this.clientStateManager.build<string, CachedRoot>("root");
         let root: FetchedPage | undefined;
         let cached: CachedRoot | undefined;
-        if (this.config.statePath) {
+        if (this.persistState) {
             cached = await rootState.get(this.config.url).catch(() => undefined);
             if (cached?.immutable) {
                 const data = RdfStore.createDefault();
@@ -180,7 +185,7 @@ export class Client {
             root.immutable = root.data
                 .getQuads(df.namedNode(root.url), LDES.terms.custom("immutable"), null, null)
                 .some((quad) => quad.object.value === "true" || quad.object.value === "1");
-            if (this.config.statePath) {
+            if (this.persistState) {
                 await rootState.put(this.config.url, {
                     url: root.url,
                     quads: serializeQuads(root.data.getQuads()),
@@ -360,7 +365,7 @@ export class Client {
         streamOut: (member: Member) => boolean,
         close: () => void,
     ): Promise<void> {
-        const bookmarks = this.config.statePath ? this.clientStateManager.build<string, SavedBookmark>("ldes2") : undefined;
+        const bookmarks = this.persistState ? this.clientStateManager.build<string, SavedBookmark>("ldes2") : undefined;
         // The notifier needs the description of the LDES, which is only known when the root page was read.
         // The members are only emitted after that, so it is safe to complete this reference afterwards.
         let notifier!: Notifier<StrategyEvents, unknown>;

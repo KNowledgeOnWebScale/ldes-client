@@ -12,7 +12,8 @@ import type { ContextCacheOptions } from "./contextCache";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
-const isNode = typeof process !== "undefined" && !!process.versions?.node;
+const isCloudflareWorker = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+const isNode = !isCloudflareWorker && typeof process !== "undefined" && !!process.versions?.node;
 
 /**
  * A readable of a web stream. Node.js has Readable.fromWeb. The polyfills of `stream` for browsers do not have a working

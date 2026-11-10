@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import fs from "fs";
 import { Writer, DataFactory as JellyFactory } from "rdfjs-jelly";
 import { MessageWriter, parseMessages } from "n3.js-messages";
-import { replicateLDES } from "../../lib/client";
+import { MemoryStorage, replicateLDES } from "../../lib/client";
 import { ldfetchDereferencer } from "../../lib/fetcher/ldfetchDereferencer";
 import { MockServer, PREFIXES } from "./server";
 
@@ -460,10 +460,11 @@ describe("State management", () => {
     const description = `ex:ES a ldes:EventStream ; ldes:timestampPath dcterms:created ; ldes:memberType ex:Record .
 <> ldes:relation [ ldes:page <${server.base}/a> ] .`;
 
-    test("members that share the timestamp of the bookmark are emitted exactly once", async () => {
+    test.each(["Level", "Memory"])("%s bookmarks emit members sharing a timestamp exactly once", async (backend) => {
+        const state = backend === "Level" ? { statePath: "client-state-ldes2" } : { storage: new MemoryStorage() };
         server.trig("/root", description);
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"), record("a2", "2026-01-02T00:00:00Z"));
-        expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["a1", "a2"]);
+        expect(ids(await collect(ROOT, state))).toEqual(["a1", "a2"]);
 
         server.trig(
             "/a",
@@ -472,8 +473,8 @@ describe("State management", () => {
             record("a3", "2026-01-02T00:00:00Z"),
             record("a4", "2026-01-03T00:00:00Z"),
         );
-        expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["a3", "a4"]);
-        expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual([]);
+        expect(ids(await collect(ROOT, state))).toEqual(["a3", "a4"]);
+        expect(ids(await collect(ROOT, state))).toEqual([]);
     });
 
     test("the members of a bookmark are a set, which is saved as an array of JSON", async () => {

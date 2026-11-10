@@ -3,9 +3,36 @@
   "description": "This package provides common tooling to work with LDESs.",
   "version": "0.4.0",
   "main": "dist/lib/client.js",
+  "imports": {
+    "#load-winston": {
+      "types": "./lib/utils/loadWinston.d.ts",
+      "workerd": "./lib/utils/skipWinston.js",
+      "browser": "./lib/utils/skipWinston.js",
+      "node": "./lib/utils/loadWinston.cjs",
+      "default": "./lib/utils/skipWinston.js"
+    }
+  },
   "exports": {
-    "import": "./dist/lib/client.js",
-    "require": "./dist/lib/client.cjs"
+    ".": {
+      "import": "./dist/lib/client.js",
+      "require": "./dist/lib/client.cjs"
+    },
+    "./storage": {
+      "import": "./dist/lib/storage/index.js",
+      "require": "./dist/lib/storage/index.cjs"
+    },
+    "./storage/do-sqlite": {
+      "import": "./dist/lib/storage/do-sqlite.js",
+      "require": "./dist/lib/storage/do-sqlite.cjs"
+    },
+    "./storage/memory": {
+      "import": "./dist/lib/storage/memory.js",
+      "require": "./dist/lib/storage/memory.cjs"
+    },
+    "./storage/level": {
+      "import": "./dist/lib/storage/level.js",
+      "require": "./dist/lib/storage/level.cjs"
+    }
   },
   "type": "module",
   "bin": {
@@ -26,6 +53,9 @@
     "test:perf": "node perf/test/report.mjs"
   },
   "files": [
+    "lib/utils/loadWinston.cjs",
+    "lib/utils/loadWinston.d.ts",
+    "lib/utils/skipWinston.js",
     "dist/lib/**/*.js",
     "dist/lib/**/*.cjs",
     "dist/lib/**/*.d.ts",
@@ -62,15 +92,19 @@
     "winston": "^3.19.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261103.1",
     "@eslint/js": "^10.0.1",
     "@fastify/cors": "^11.3.1",
     "@fastify/static": "^10.1.6",
     "@grpc/grpc-js": "^1.14.6",
+    "@inferal-oss/cf-dosql": "^0.1.0",
     "@rdfc/js-runner": "^3.4.0",
     "@rdfc/proto": "^0.1.3",
     "@rdfjs/types": "^2.0.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/n3": "^1.26.5",
     "@types/node": "^26.6.5",
+    "@types/sql.js": "^1.4.11",
     "@vitest/browser": "^5.0.5",
     "@vitest/browser-playwright": "^5.0.5",
     "@vitest/coverage-v8": "^5.0.5",
