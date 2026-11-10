@@ -476,6 +476,16 @@ describe("State management", () => {
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual([]);
     });
 
+    test("the members of a bookmark are a set, which is saved as an array of JSON", async () => {
+        const { loadBookmark, saveBookmark } = await import("../../lib/ldes2/traversal");
+        const bookmark = { key: { time: 0 }, members: new Set(["a", "b"]), immutable: ["p"] };
+        const json = JSON.stringify(saveBookmark(bookmark));
+        expect(JSON.parse(json).members).toEqual(["a", "b"]);
+        expect(loadBookmark(JSON.parse(json))).toEqual(bookmark);
+        // The state saved by earlier versions, which kept the members as an array, is read the same way
+        expect(loadBookmark({ members: ["a"] }).members).toEqual(new Set(["a"]));
+    });
+
     test("many members that share the timestamp of the bookmark are emitted once, and skipped after a restart", async () => {
         // Sensor data often has one timestamp for a whole batch (Telraam: about 30 000 members per hour).
         // The bookmark then holds the identifiers of all of them, and is looked up for every member.

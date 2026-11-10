@@ -27,7 +27,7 @@ import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
 import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
-import type { Bookmark } from "./ldes2";
+import type { SavedBookmark } from "./ldes2";
 import type { LDESInfo, Notifier, FetchedPage, Member, Ordered, StrategyEvents } from "./types";
 
 type CachedRoot = {
@@ -356,7 +356,7 @@ export class Client {
         streamOut: (member: Member) => boolean,
         close: () => void,
     ): Promise<void> {
-        const bookmarks = this.config.statePath ? this.clientStateManager.build<string, Bookmark>("ldes2") : undefined;
+        const bookmarks = this.config.statePath ? this.clientStateManager.build<string, SavedBookmark>("ldes2") : undefined;
         // The notifier needs the description of the LDES, which is only known when the root page was read.
         // The members are only emitted after that, so it is safe to complete this reference afterwards.
         let notifier!: Notifier<StrategyEvents, unknown>;
