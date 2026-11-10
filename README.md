@@ -241,14 +241,16 @@ Cloudflare Workers can persist state in a SQLite-backed Durable Object:
 import { replicateLDES } from "ldes-client";
 import { DOSqliteStorage } from "ldes-client/storage/do-sqlite";
 
-const storage = new DOSqliteStorage(ctx.storage);
+const storage = new DOSqliteStorage(ctx.storage, "orders_ldes_state");
 const client = replicateLDES({ url, storage });
 ```
 
-Enable `nodejs_compat` for the client dependencies. The adapter uses its own
-`ldes_client_storage` table; a custom table name can be passed as the second
-constructor argument. Durable Object and memory adapter lifetimes belong to the
-caller; closing a client leaves their saved data available for the next run.
+Enable `nodejs_compat` for the client dependencies. The default table is
+`ldes_client_storage`. Pass a separate table name as the second constructor
+argument for each independent replication in the same Durable Object.
+`startFresh` clears the adapter's entire table, including state from any other
+client using it. Reuse the same table name when resuming a replication. Closing
+a client leaves saved Durable Object and memory state available for the next run.
 
 See `test-worker/` for a runnable local integration fixture. Run
 `npm run build`, then `cd test-worker && npm ci && npm test`.

@@ -75,6 +75,26 @@ describe.each(["Level", "Memory", "SQLite"])("%s storage contract", (backend) =>
     });
 });
 
+test("SQLite fresh start clears shared state and preserves other tables", async () => {
+    const sqlite = createDurableObjectState();
+    try {
+        const storage = new DOSqliteStorage(sqlite.ctx.storage, "orders_state");
+        const shared = new DOSqliteStorage(sqlite.ctx.storage, "orders_state");
+        const other = new DOSqliteStorage(sqlite.ctx.storage, "products_state");
+        const sharedMembers = shared.store<string, string>("members");
+        const otherMembers = other.store<string, string>("members");
+        await sharedMembers.put("key", "saved order");
+        await otherMembers.put("key", "saved product");
+
+        await new ClientStateManager(storage, undefined, true).init();
+
+        expect(await sharedMembers.get("key")).toBeUndefined();
+        expect(await otherMembers.get("key")).toBe("saved product");
+    } finally {
+        sqlite.close();
+    }
+});
+
 test("the state manager waits for asynchronous storage initialization", async () => {
     const memory = new MemoryStorage();
     let release!: () => void;

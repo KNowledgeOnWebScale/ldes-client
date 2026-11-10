@@ -3,6 +3,15 @@
   "description": "This package provides common tooling to work with LDESs.",
   "version": "0.4.0",
   "main": "dist/lib/client.js",
+  "imports": {
+    "#load-winston": {
+      "types": "./lib/utils/loadWinston.d.ts",
+      "workerd": "./lib/utils/skipWinston.js",
+      "browser": "./lib/utils/skipWinston.js",
+      "node": "./lib/utils/loadWinston.cjs",
+      "default": "./lib/utils/skipWinston.js"
+    }
+  },
   "exports": {
     ".": {
       "import": "./dist/lib/client.js",
@@ -44,6 +53,9 @@
     "test:perf": "node perf/test/report.mjs"
   },
   "files": [
+    "lib/utils/loadWinston.cjs",
+    "lib/utils/loadWinston.d.ts",
+    "lib/utils/skipWinston.js",
     "dist/lib/**/*.js",
     "dist/lib/**/*.cjs",
     "dist/lib/**/*.d.ts",

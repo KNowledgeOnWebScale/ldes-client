@@ -1,3 +1,5 @@
+import { loadWinston } from "#load-winston";
+
 import type { Logform } from "winston";
 import type { ConsoleTransportInstance } from "winston/lib/winston/transports";
 
@@ -50,18 +52,7 @@ class ConsoleLogger implements ILogger {
     silly(message: string, ...meta: unknown[]): void { this.log("silly", message, ...meta); }
 }
 
-let winston: typeof import("winston") | undefined;
-if (typeof process !== "undefined" && process.release?.name === "node") {
-    try {
-        // Non-literal specifier hides from esbuild's static analysis so
-        // winston is NOT bundled into CF Worker builds.
-        const name = "winston";
-        const m = await import(/* @vite-ignore */ name);
-        winston = typeof m.createLogger === "function" ? m : m.default;
-    } catch {
-        // winston not installed — fall back to ConsoleLogger
-    }
-}
+const winston = loadWinston();
 
 let consoleTransport: ConsoleTransportInstance | undefined;
 

@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 
 const packageName = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).name as string;
 
-test.each(["ESM", "CommonJS"])("built package works for %s consumers", (mode) => {
+test.each([
+    ["ESM", "node"],
+    ["CommonJS", "node"],
+    ["ESM", "workerd"],
+    ["CommonJS", "workerd"],
+])("built package works for %s consumers with the %s condition", (mode, condition) => {
     const script = `
         import assert from "node:assert/strict";
         import { createRequire } from "node:module";
@@ -14,6 +19,8 @@ test.each(["ESM", "CommonJS"])("built package works for %s consumers", (mode) =>
         for (const suffix of ["", "/storage", "/storage/level", "/storage/memory", "/storage/do-sqlite"]) {
             await load(name + suffix);
         }
+        const { replicateLDES } = await load(name);
+        await replicateLDES({ url: "https://example.invalid" }).close();
         const { LevelStorage } = await load(name + "/storage/level");
         const storage = new LevelStorage();
         try {
@@ -26,6 +33,17 @@ test.each(["ESM", "CommonJS"])("built package works for %s consumers", (mode) =>
         }
         console.log("package consumer passed");
     `;
-    const output = execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 10_000 });
+    const output = execFileSync(process.execPath, [`--conditions=${condition}`, "--input-type=module", "-e", script], {
+        encoding: "utf8",
+        timeout: 10_000,
+        env: { ...process.env, LOG_LEVEL: "error" },
+    });
     expect(output).toContain("package consumer passed");
+    // Winston honors LOG_LEVEL. The console logger prints the client's info message.
+    if (condition === "node") {
+        expect(output.trim()).toBe("package consumer passed");
+    } else {
+        expect(output).toContain("Client has been gracefully closed");
+        expect(output).not.toContain("could not load Winston");
+    }
 });
