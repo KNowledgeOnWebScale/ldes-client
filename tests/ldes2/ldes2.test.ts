@@ -476,6 +476,32 @@ describe("State management", () => {
         expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual([]);
     });
 
+    test("the members of a bookmark are a set, which is saved as an array of JSON", async () => {
+        const { loadBookmark, saveBookmark } = await import("../../lib/ldes2/traversal");
+        const bookmark = { key: { time: 0 }, members: new Set(["a", "b"]), immutable: ["p"] };
+        const json = JSON.stringify(saveBookmark(bookmark));
+        expect(JSON.parse(json).members).toEqual(["a", "b"]);
+        expect(loadBookmark(JSON.parse(json))).toEqual(bookmark);
+        // The state saved by earlier versions, which kept the members as an array, is read the same way
+        expect(loadBookmark({ members: ["a"] }).members).toEqual(new Set(["a"]));
+    });
+
+    test("many members that share the timestamp of the bookmark are emitted once, and skipped after a restart", async () => {
+        // Sensor data often has one timestamp for a whole batch (Telraam: about 30 000 members per hour).
+        // The bookmark then holds the identifiers of all of them, and is looked up for every member.
+        const n = 20_000;
+        const batch = Array.from({ length: n }, (_, i) => record(`b${i}`, "2026-01-01T00:00:00Z"));
+        server.trig("/root", description);
+        server.trig("/a", ...batch);
+        const first = ids(await collect(ROOT, { statePath: "client-state-ldes2" }));
+        expect(first).toHaveLength(n);
+        expect(new Set(first).size).toBe(n);
+
+        // After a restart, the whole batch is skipped by the bookmark: only the new members are emitted
+        server.trig("/a", ...batch, record("late", "2026-01-01T00:00:00Z"), record("next", "2026-01-02T00:00:00Z"));
+        expect(ids(await collect(ROOT, { statePath: "client-state-ldes2" }))).toEqual(["late", "next"]);
+    });
+
     test("a polling client emits members that are published later", async () => {
         server.trig("/root", description);
         server.trig("/a", record("a1", "2026-01-01T00:00:00Z"));
