@@ -69,16 +69,17 @@ export async function getConfig(): Promise<Config & WithTarget> {
 export function intoConfig(config: Partial<Config>): Config {
     // An option that is passed as undefined (for example by the RDF-Connect processor, for everything that
     // the pipeline does not set) keeps its default, instead of replacing it with undefined
-    const given = Object.fromEntries(
-        Object.entries(config).filter(([, value]) => value !== undefined),
-    );
+    const given = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined));
     const out = Object.assign({}, defaultConfig, defaultTarget, given);
-    out.fetch = enhanced_fetch({
-        retry: {
-            base: 10,
-            maxRetries: 10,
+    out.fetch = enhanced_fetch(
+        {
+            retry: {
+                base: 10,
+                maxRetries: 10,
+            },
+            concurrent: out.concurrentFetches,
         },
-        concurrent: out.concurrentFetches,
-    }, config.fetch);
+        config.fetch,
+    );
     return out;
 }

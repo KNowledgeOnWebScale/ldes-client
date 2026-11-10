@@ -1,4 +1,3 @@
-
 import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { LDES } from "@treecg/types";
@@ -80,13 +79,7 @@ export class Fetcher {
 
     private logger = getLoggerFor(this);
 
-    constructor(
-        dereferencer: Dereferencer,
-        loose: boolean,
-        condition: Condition,
-        defaultTimezone: string,
-        fetch_f?: typeof fetch,
-    ) {
+    constructor(dereferencer: Dereferencer, loose: boolean, condition: Condition, defaultTimezone: string, fetch_f?: typeof fetch) {
         this.dereferencer = dereferencer;
         this.loose = loose;
         this.fetch_f = fetch_f;
@@ -119,9 +112,7 @@ export class Fetcher {
                 const cacheControlCandidate = resp.headers.get("cache-control");
                 cache.etag = resp.headers.get("etag") ?? undefined;
                 if (cacheControlCandidate) {
-                    const controls = cacheControlCandidate
-                        .split(",")
-                        .map((x) => x.split("=", 2).map((x) => x.trim()));
+                    const controls = cacheControlCandidate.split(",").map((x) => x.split("=", 2).map((x) => x.trim()));
 
                     for (const control of controls) {
                         if (control[0] == "max-age") {
@@ -135,9 +126,7 @@ export class Fetcher {
                 }
             }
 
-            this.logger.debug(
-                `[fetch] Cache for ${node.target} ${JSON.stringify(cache)}`,
-            );
+            this.logger.debug(`[fetch] Cache for ${node.target} ${JSON.stringify(cache)}`);
 
             const data = RdfStore.createDefault();
             await new Promise((resolve, reject) => {
@@ -169,62 +158,57 @@ export class Fetcher {
         }
     }
 
-    async processFetchedPage<S>(
-        node: Node,
-        page: FetchedPage,
-        state: S,
-        notifier: Notifier<FetchEvent, S>,
-        cache: Cache = {},
-    ) {
+    async processFetchedPage<S>(node: Node, page: FetchedPage, state: S, notifier: Notifier<FetchEvent, S>, cache: Cache = {}) {
         cache.immutable ||= page.immutable || isRdfImmutable(page.data, namedNode(page.url));
 
         this.logger.debug(`[fetch] Got data ${page.url}`);
-        const toFetch: { from: Node; target: FoundRelation }[] = page.status === 304
-            ? (node.relations ?? []).map((target) => ({
-                from: node,
-                target: {
-                    source: page.url,
-                    node: target,
-                    allowed: true,
-                    relations: [],
-                },
-            }))
-            : [];
-        for (const rel of extractRelations(
-            page.data,
-            namedNode(page.url),
-            this.loose,
-            this.condition,
-            this.defaultTimezone,
-        )) {
+        const toFetch: { from: Node; target: FoundRelation }[] =
+            page.status === 304
+                ? (node.relations ?? []).map((target) => ({
+                      from: node,
+                      target: {
+                          source: page.url,
+                          node: target,
+                          allowed: true,
+                          relations: [],
+                      },
+                  }))
+                : [];
+        for (const rel of extractRelations(page.data, namedNode(page.url), this.loose, this.condition, this.defaultTimezone)) {
             if (!node.expected.has(rel.node) && rel.allowed) {
                 toFetch.push({ from: node, target: rel });
             }
         }
 
         if (!cache.immutable && !this.closed) {
-            notifier.scheduleFetch({
-                ...node,
-                target: page.url,
-                etag: cache.etag ?? node.etag,
-                relations: toFetch.map(({ target }) => target.node),
-            }, state);
+            notifier.scheduleFetch(
+                {
+                    ...node,
+                    target: page.url,
+                    etag: cache.etag ?? node.etag,
+                    relations: toFetch.map(({ target }) => target.node),
+                },
+                state,
+            );
         }
 
         if (!this.closed) {
             if (toFetch.length > 0) {
                 await notifier.relationsFound(toFetch, state);
             }
-            notifier.pageFetched({
-                data: page.data,
-                url: page.url,
-                immutable: !!cache.immutable,
-                memberCount: 0,
-                etag: cache.etag ?? page.etag,
-                status: page.status,
-                created: page.created,
-                updated: page.updated,
-            }, state);
+            notifier.pageFetched(
+                {
+                    data: page.data,
+                    url: page.url,
+                    immutable: !!cache.immutable,
+                    memberCount: 0,
+                    etag: cache.etag ?? page.etag,
+                    status: page.status,
+                    created: page.created,
+                    updated: page.updated,
+                },
+                state,
+            );
         }
     }
 }

@@ -11,10 +11,7 @@ declare module "ldfetch/lib/RdfParsers.js" {
     };
 
     export function parse(options: ParseOptions): EventEmitter;
-    export function parseStream(
-        stream: Readable,
-        options: { contentType: string; baseIRI: string },
-    ): EventEmitter;
+    export function parseStream(stream: Readable, options: { contentType: string; baseIRI: string }): EventEmitter;
     export function prepareStream(
         stream: Readable,
         options: {
@@ -25,9 +22,5 @@ declare module "ldfetch/lib/RdfParsers.js" {
         },
     ): Promise<{ stream: Readable; contentType: string; decompressed: boolean }>;
     export function isStreamable(contentType: string): boolean;
-    export function resolveContentType(
-        contentType: string,
-        url: string,
-        fallbackUrl?: string,
-    ): string;
+    export function resolveContentType(contentType: string, url: string, fallbackUrl?: string): string;
 }

@@ -24,21 +24,42 @@ export type Key = {
 
 const NUMERIC = new Set(
     [
-        "byte", "decimal", "double", "float", "int", "integer", "long", "negativeInteger",
-        "nonNegativeInteger", "nonPositiveInteger", "positiveInteger", "short",
-        "unsignedByte", "unsignedInt", "unsignedLong", "unsignedShort",
+        "byte",
+        "decimal",
+        "double",
+        "float",
+        "int",
+        "integer",
+        "long",
+        "negativeInteger",
+        "nonNegativeInteger",
+        "nonPositiveInteger",
+        "positiveInteger",
+        "short",
+        "unsignedByte",
+        "unsignedInt",
+        "unsignedLong",
+        "unsignedShort",
     ].map((name) => XSD_NS + name),
 );
 const INTEGER = new Set(
     [
-        "byte", "int", "integer", "long", "negativeInteger", "nonNegativeInteger",
-        "nonPositiveInteger", "positiveInteger", "short", "unsignedByte", "unsignedInt",
-        "unsignedLong", "unsignedShort",
+        "byte",
+        "int",
+        "integer",
+        "long",
+        "negativeInteger",
+        "nonNegativeInteger",
+        "nonPositiveInteger",
+        "positiveInteger",
+        "short",
+        "unsignedByte",
+        "unsignedInt",
+        "unsignedLong",
+        "unsignedShort",
     ].map((name) => XSD_NS + name),
 );
-const DATES = new Set(
-    ["date", "dateTime", "dateTimeStamp"].map((name) => XSD_NS + name),
-);
+const DATES = new Set(["date", "dateTime", "dateTimeStamp"].map((name) => XSD_NS + name));
 
 const numeric = (a: number, b: number) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -123,11 +144,7 @@ function compareDigits(a: string, b: string): number {
     return x < y ? -1 : x > y ? 1 : 0;
 }
 
-function compareOptional<T>(
-    a: T | undefined,
-    b: T | undefined,
-    compare: (a: T, b: T) => number,
-): number {
+function compareOptional<T>(a: T | undefined, b: T | undefined, compare: (a: T, b: T) => number): number {
     // An absent component is the lowest possible value
     if (a === undefined && b === undefined) return 0;
     if (a === undefined) return -1;
@@ -169,9 +186,7 @@ export function compareKeysCertain(a: Key, b: Key): Comparison {
     if (a.page !== undefined || b.page !== undefined) {
         return certain(compareOptional(a.page, b.page, numeric) || compareOptional(a.index, b.index, numeric));
     }
-    const time = a.time !== undefined && b.time !== undefined
-        ? compareTimes(a, b)
-        : certain(compareOptional(a.time, b.time, numeric));
+    const time = a.time !== undefined && b.time !== undefined ? compareTimes(a, b) : certain(compareOptional(a.time, b.time, numeric));
     const sequence = compareOptional(a.sequence, b.sequence, compareSequences);
     if (time.certain) {
         return certain(time.order || sequence);
@@ -199,10 +214,7 @@ export function compareLower(a: Key | undefined, b: Key | undefined): number {
  * that is when the latest instant of the upper key is not later than the earliest instant of the bookmark.
  */
 export function isBeforeBookmark(upper: Key, bookmark: Key): boolean {
-    if (
-        upper.time !== undefined && bookmark.time !== undefined &&
-        !!upper.local !== !!bookmark.local
-    ) {
+    if (upper.time !== undefined && bookmark.time !== undefined && !!upper.local !== !!bookmark.local) {
         return latest(upper) <= earliest(bookmark);
     }
     const comparison = compareKeysCertain(upper, bookmark);

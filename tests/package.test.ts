@@ -8,10 +8,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Vitest's source transforms would otherwise bypass the CommonJS bundle.
 test.each([
     ["module", 'import { replicateLDES, intoConfig } from "ldes-client";'],
-    [
-        "commonjs",
-        'const { replicateLDES, intoConfig } = require("ldes-client");',
-    ],
+    ["commonjs", 'const { replicateLDES, intoConfig } = require("ldes-client");'],
 ])("the built package loads with %s exports", (type, load) => {
     const script = `${load}
         if (typeof replicateLDES !== "function") throw new Error("Missing replicateLDES export");

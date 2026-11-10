@@ -2,20 +2,8 @@ import { Fetcher, ModulatorFactory, Manager } from "../fetcher";
 import { deserializeMember, getLoggerFor, serializeMember } from "../../utils";
 import { Condition } from "../../condition";
 
-import type {
-    FetchEvent,
-    Node,
-    Modulator,
-    MemberEvents,
-    Ranker
-} from "../fetcher";
-import type {
-    FetchedPage,
-    Notifier,
-    Member,
-    StrategyEvents,
-    SerializedMember,
-} from "../../types";
+import type { FetchEvent, Node, Modulator, MemberEvents, Ranker } from "../fetcher";
+import type { FetchedPage, Notifier, Member, StrategyEvents, SerializedMember } from "../../types";
 
 export class UnorderedStrategy {
     private manager: Manager;
@@ -23,10 +11,7 @@ export class UnorderedStrategy {
     private notifier: Notifier<StrategyEvents, unknown>;
 
     private fetchNotifier: Notifier<FetchEvent, { index: number }>;
-    private memberNotifier: Notifier<
-        MemberEvents,
-        { index: number, modulator: Modulator<Node, Member> }
-    >;
+    private memberNotifier: Notifier<MemberEvents, { index: number; modulator: Modulator<Node, Member> }>;
 
     private modulator: Modulator<Node, Member>;
     private preloadedPages = new Map<string, FetchedPage>();
@@ -73,7 +58,7 @@ export class UnorderedStrategy {
             scheduleFetch: async (node: Node) => {
                 this.logger.debug(`[fetchNotifier - pageFetched] Scheduling fetch for mutable page: ${node.target}`);
                 // Register in the state that this page needs to be refetched in the future
-                if (await this.modulator.addMutable(node.target, node) && !this.canceled) {
+                if ((await this.modulator.addMutable(node.target, node)) && !this.canceled) {
                     this.notifier.mutable({}, {});
                 }
             },
@@ -122,10 +107,10 @@ export class UnorderedStrategy {
                 this.notifier.fragment(fragment, {});
                 await this.modulator.finished(index);
 
-                // Mark fragment as immutable if cache headers indicate so 
+                // Mark fragment as immutable if cache headers indicate so
                 if (fragment.immutable) {
                     this.logger.debug(`[memberNotifier - done] Remembering immutable page to avoid future refetching: ${fragment.url}`);
-                    if (!await this.modulator.addImmutable(fragment.url)) return;
+                    if (!(await this.modulator.addImmutable(fragment.url))) return;
                 }
                 this.background(this.checkEnd());
             },
@@ -139,18 +124,13 @@ export class UnorderedStrategy {
             new QueueRanker(),
             {
                 ready: async ({ item, index }) => {
-                        const preloadedPage = this.preloadedPages.get(item.target);
-                        if (preloadedPage) {
-                            this.preloadedPages.delete(item.target);
-                            await this.fetcher.processFetchedPage(
-                                item,
-                                preloadedPage,
-                                { index },
-                                this.fetchNotifier,
-                            );
-                        } else if (!(await this.modulator.seen(item.target))) {
-                            this.logger.debug(`[modulator - ready] Ready to fetch page: ${item.target}`);
-                            this.background(this.fetcher.fetch(item, { index }, this.fetchNotifier));
+                    const preloadedPage = this.preloadedPages.get(item.target);
+                    if (preloadedPage) {
+                        this.preloadedPages.delete(item.target);
+                        await this.fetcher.processFetchedPage(item, preloadedPage, { index }, this.fetchNotifier);
+                    } else if (!(await this.modulator.seen(item.target))) {
+                        this.logger.debug(`[modulator - ready] Ready to fetch page: ${item.target}`);
+                        this.background(this.fetcher.fetch(item, { index }, this.fetchNotifier));
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${item.target}`);
                         await this.modulator.finished(index);
@@ -179,22 +159,13 @@ export class UnorderedStrategy {
         );
     }
 
-    async start(
-        url: string,
-        condition: Condition,
-        root?: FetchedPage,
-        traverseRoot = true,
-    ) {
+    async start(url: string, condition: Condition, root?: FetchedPage, traverseRoot = true) {
         if (this.canceled) return;
         // Try to initialize the modulator
         if (!(await this.modulator.init(condition))) return;
 
         if (root && !traverseRoot) {
-            this.background(this.manager.extractMembers(
-                root,
-                { index: 0, modulator: this.modulator },
-                this.memberNotifier
-            ));
+            this.background(this.manager.extractMembers(root, { index: 0, modulator: this.modulator }, this.memberNotifier));
         } else if (root) {
             this.preloadedPages.set(root.url, root);
             await this.modulator.push([{ target: root.url, expected: new Set() }]);
@@ -202,9 +173,7 @@ export class UnorderedStrategy {
             this.logger.debug("[start] Nothing in pending, adding start url");
             this.background(this.modulator.push([{ target: url, expected: new Set() }]));
         } else {
-            this.logger.debug(
-                "[start] Pending things are already being processed, not adding start url",
-            );
+            this.logger.debug("[start] Pending things are already being processed, not adding start url");
         }
     }
 
@@ -222,18 +191,14 @@ export class UnorderedStrategy {
     }
 
     private handleFetched(page: FetchedPage, index: number) {
-        this.background(this.manager.extractMembers(
-            page,
-            { index, modulator: this.modulator },
-            this.memberNotifier
-        ));
+        this.background(this.manager.extractMembers(page, { index, modulator: this.modulator }, this.memberNotifier));
     }
 
     /**
      * This function implements the logic of a synchronized ending loop that uses
-     * the @isEnding and @shouldEndAgain flags to prevent multiple ending loops from running at the same time. 
-     * When a process is already running, subsequent calls simply set the shouldEndAgain flag and return. 
-     * The original process then picks up these pending requests in its loop, 
+     * the @isEnding and @shouldEndAgain flags to prevent multiple ending loops from running at the same time.
+     * When a process is already running, subsequent calls simply set the shouldEndAgain flag and return.
+     * The original process then picks up these pending requests in its loop,
      * ensuring sequential execution without overlapping asynchronous operations
      */
     private async checkEnd() {

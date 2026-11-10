@@ -20,8 +20,7 @@ beforeEach(() => {
     server.requests = [];
 });
 
-const record = (name: string, time: string, extra = "") =>
-    `ex:${name} a ex:Record ; dcterms:created "${time}"^^xsd:dateTime ${extra}.`;
+const record = (name: string, time: string, extra = "") => `ex:${name} a ex:Record ; dcterms:created "${time}"^^xsd:dateTime ${extra}.`;
 
 const ids = (members: Member[]) => members.map((m) => m.id.value.replace("http://example.org/", ""));
 
@@ -50,26 +49,20 @@ const conditionOn = (path: string, relationType: string, value: string, compareT
 
 describe("Conditions in an LDES 2.0", () => {
     const setup = () => {
-        server.trig("/root", `${description}
+        server.trig(
+            "/root",
+            `${description}
 <> ldes:relation
    [ ldes:page <${server.base}/jan> ; ldes:timeFrom "2026-01-01T00:00:00Z"^^xsd:dateTime ; ldes:timeUntil "2026-02-01T00:00:00Z"^^xsd:dateTime ] ,
-   [ ldes:page <${server.base}/mar> ; ldes:timeFrom "2026-03-01T00:00:00Z"^^xsd:dateTime ] .`);
-        server.trig("/jan",
-            record("j1", "2026-01-01T00:00:00Z"),
-            record("j2", "2026-01-10T00:00:00Z"),
-            record("j3", "2026-01-20T00:00:00Z"),
+   [ ldes:page <${server.base}/mar> ; ldes:timeFrom "2026-03-01T00:00:00Z"^^xsd:dateTime ] .`,
         );
+        server.trig("/jan", record("j1", "2026-01-01T00:00:00Z"), record("j2", "2026-01-10T00:00:00Z"), record("j3", "2026-01-20T00:00:00Z"));
         server.trig("/mar", record("m1", "2026-03-05T00:00:00Z"));
     };
 
     test("a condition on the timestamp filters the members, and the relations that cannot match are not followed", async () => {
         setup();
-        const condition = conditionOn(
-            "dcterms:created",
-            "LessThanRelation",
-            "\"2026-01-15T00:00:00Z\"^^xsd:dateTime",
-            "date",
-        );
+        const condition = conditionOn("dcterms:created", "LessThanRelation", '"2026-01-15T00:00:00Z"^^xsd:dateTime', "date");
         const { members, errors } = await collect(condition);
         expect(errors).toEqual([]);
         expect(ids(members)).toEqual(["j1", "j2"]);
@@ -79,20 +72,19 @@ describe("Conditions in an LDES 2.0", () => {
 
     test("a condition on the timestamp prunes the rest of a page, once its members are past the range", async () => {
         setup();
-        const condition = conditionOn(
-            "dcterms:created",
-            "GreaterThanOrEqualToRelation",
-            "\"2026-01-05T00:00:00Z\"^^xsd:dateTime",
-            "date",
-        );
+        const condition = conditionOn("dcterms:created", "GreaterThanOrEqualToRelation", '"2026-01-05T00:00:00Z"^^xsd:dateTime', "date");
         const { members } = await collect(condition);
         expect(ids(members)).toEqual(["j2", "j3", "m1"]);
     });
 
     test("a condition on another property filters the members, and does not prune relations", async () => {
-        server.trig("/root", `${description}
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
-        server.trig("/a",
+        server.trig(
+            "/root",
+            `${description}
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
+        );
+        server.trig(
+            "/a",
             record("a1", "2026-01-01T00:00:00Z", "; ex:size 5 "),
             record("a2", "2026-01-02T00:00:00Z", "; ex:size 50 "),
             record("a3", "2026-01-03T00:00:00Z", "; ex:size 500 "),
@@ -105,10 +97,7 @@ describe("Conditions in an LDES 2.0", () => {
     test("a condition on another property does not prune relations of the timestamp, whatever its values are", async () => {
         setup();
         // Compared as numbers, "size < 5" would not overlap with the timestamps, which are much larger
-        server.trig("/jan",
-            record("j1", "2026-01-01T00:00:00Z", "; ex:size 1 "),
-            record("j2", "2026-01-10T00:00:00Z", "; ex:size 9 "),
-        );
+        server.trig("/jan", record("j1", "2026-01-01T00:00:00Z", "; ex:size 1 "), record("j2", "2026-01-10T00:00:00Z", "; ex:size 9 "));
         server.trig("/mar", record("m1", "2026-03-05T00:00:00Z", "; ex:size 2 "));
         const { members } = await collect(conditionOn("ex:size", "LessThanRelation", "5", "integer"));
         expect(ids(members)).toEqual(["j1", "m1"]);
@@ -122,21 +111,27 @@ describe("Conditions in an LDES 2.0", () => {
     });
 
     test("a MaxCountCondition that resets on every poll continues after the last emitted member", async () => {
-        server.trig("/root", `${description}
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
-        server.trig("/a",
+        server.trig(
+            "/root",
+            `${description}
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
+        );
+        server.trig(
+            "/a",
             record("a1", "2026-01-01T00:00:00Z"),
             record("a2", "2026-01-02T00:00:00Z"),
             record("a3", "2026-01-03T00:00:00Z"),
             record("a4", "2026-01-04T00:00:00Z"),
             record("a5", "2026-01-05T00:00:00Z"),
         );
-        const client = replicateLDES(intoConfig({
-            url: ROOT,
-            polling: true,
-            pollInterval: 20,
-            condition: new MaxCountCondition({ count: 2, reset_on_poll: true }),
-        }));
+        const client = replicateLDES(
+            intoConfig({
+                url: ROOT,
+                polling: true,
+                pollInterval: 20,
+                condition: new MaxCountCondition({ count: 2, reset_on_poll: true }),
+            }),
+        );
         const members: Member[] = [];
         for await (const member of client.stream()) {
             members.push(member);
@@ -150,9 +145,13 @@ describe("Conditions in an LDES 2.0", () => {
     });
 
     test("a member on which the condition cannot be evaluated is reported as an extraction error, as in an LDES 1.0", async () => {
-        server.trig("/root", `${description}
-<> ldes:relation [ ldes:page <${server.base}/a> ] .`);
-        server.trig("/a",
+        server.trig(
+            "/root",
+            `${description}
+<> ldes:relation [ ldes:page <${server.base}/a> ] .`,
+        );
+        server.trig(
+            "/a",
             record("a1", "2026-01-01T00:00:00Z", "; ex:size 50 "),
             record("a2", "2026-01-02T00:00:00Z"),
             record("a3", "2026-01-03T00:00:00Z", "; ex:size 60 "),

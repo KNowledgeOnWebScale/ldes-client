@@ -39,10 +39,7 @@ export type LdesVersion = 1 | 2;
  * following https://w3id.org/ldes/specification#compatibility.
  * Returns undefined when the response does not tell.
  */
-export function detectVersion(
-    log: MessageLog,
-    first: Quad[] | undefined,
-): LdesVersion | undefined {
+export function detectVersion(log: MessageLog, first: Quad[] | undefined): LdesVersion | undefined {
     // 1. media type and syntax
     const profile = /profile="?([^";]+)"?/.exec(log.headers.get("content-type") ?? "")?.[1];
     if (log.framed || profile === LDES_PROFILE || /\.ldes\.[a-z]+(\.gz)?$/.test(log.url)) {
@@ -56,9 +53,7 @@ export function detectVersion(
 }
 
 export function isEventStreamDescription(quads: Quad[]): boolean {
-    return quads.some(
-        (quad) => quad.predicate.equals(V.type) && quad.object.equals(V.EventStream),
-    );
+    return quads.some((quad) => quad.predicate.equals(V.type) && quad.object.equals(V.EventStream));
 }
 
 /**
@@ -66,12 +61,7 @@ export function isEventStreamDescription(quads: Quad[]): boolean {
  * or when it describes the LDES using a subject with `rdf:type ldes:EventStream`.
  */
 export function isDescriptionMessage(quads: Quad[], pageUrl: string): boolean {
-    return (
-        isEventStreamDescription(quads) ||
-        quads.some(
-            (quad) => quad.subject.termType === "NamedNode" && quad.subject.value === pageUrl,
-        )
-    );
+    return isEventStreamDescription(quads) || quads.some((quad) => quad.subject.termType === "NamedNode" && quad.subject.value === pageUrl);
 }
 
 export function toStore(quads: Quad[]): RdfStore {
@@ -121,16 +111,8 @@ function sequence(term: Term | undefined): SequenceValue | undefined {
  * @param mode the order of the LDES, which determines what the bounds of a relation mean
  * @param defaultOffset the timezone of timestamps without timezone, if known
  */
-export function readDescription(
-    quads: Quad[],
-    pageUrl: string,
-    mode: OrderMode,
-    defaultOffset?: string,
-    store = toStore(quads),
-): Description {
-    const pageNode = quads.find(
-        (quad) => quad.subject.termType === "NamedNode" && quad.subject.value === pageUrl,
-    )?.subject;
+export function readDescription(quads: Quad[], pageUrl: string, mode: OrderMode, defaultOffset?: string, store = toStore(quads)): Description {
+    const pageNode = quads.find((quad) => quad.subject.termType === "NamedNode" && quad.subject.value === pageUrl)?.subject;
     const relations: Relation[] = [];
     let immutable = false;
     let pageNumber: number | undefined;
@@ -143,13 +125,8 @@ export function readDescription(
     );
 
     if (pageNode) {
-        immutable = getObjects(store, pageNode, V.immutable).some(
-            (term) => term.value === "true" || term.value === "1",
-        );
-        pageNumber = nonNegativeInteger(
-            single(store, pageNode, V.pageNumber, "ldes:pageNumber of the page"),
-            "ldes:pageNumber",
-        );
+        immutable = getObjects(store, pageNode, V.immutable).some((term) => term.value === "true" || term.value === "1");
+        pageNumber = nonNegativeInteger(single(store, pageNode, V.pageNumber, "ldes:pageNumber of the page"), "ldes:pageNumber");
         for (const relation of getObjects(store, pageNode, V.relation)) {
             relations.push(readRelation(store, relation, mode, defaultOffset));
         }
@@ -160,19 +137,14 @@ export function readDescription(
 function readRelation(store: RdfStore, relation: Term, mode: OrderMode, defaultOffset?: string): Relation {
     const pages = getObjects(store, relation, V.page);
     if (pages.length !== 1 || pages[0].termType !== "NamedNode") {
-        throw new Error(
-            `A relation must have exactly one ldes:page that is an IRI, found ${pages.length}`,
-        );
+        throw new Error(`A relation must have exactly one ldes:page that is an IRI, found ${pages.length}`);
     }
     const page = pages[0].value;
     const get = (predicate: Term, what: string) => single(store, relation, predicate, what);
 
     if (mode === "implicit") {
         const pageNumber = nonNegativeInteger(get(V.pageNumber, "ldes:pageNumber"), "ldes:pageNumber");
-        const until = nonNegativeInteger(
-            get(V.pageNumberUntil, "ldes:pageNumberUntil"),
-            "ldes:pageNumberUntil",
-        );
+        const until = nonNegativeInteger(get(V.pageNumberUntil, "ldes:pageNumberUntil"), "ldes:pageNumberUntil");
         if (pageNumber === undefined) return { page };
         return {
             page,

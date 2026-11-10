@@ -42,12 +42,24 @@ class ConsoleLogger implements ILogger {
         }
     }
 
-    debug(message: string, ...meta: unknown[]): void { this.log("debug", message, ...meta); }
-    info(message: string, ...meta: unknown[]): void { this.log("info", message, ...meta); }
-    warn(message: string, ...meta: unknown[]): void { this.log("warn", message, ...meta); }
-    error(message: string, ...meta: unknown[]): void { this.log("error", message, ...meta); }
-    verbose(message: string, ...meta: unknown[]): void { this.log("verbose", message, ...meta); }
-    silly(message: string, ...meta: unknown[]): void { this.log("silly", message, ...meta); }
+    debug(message: string, ...meta: unknown[]): void {
+        this.log("debug", message, ...meta);
+    }
+    info(message: string, ...meta: unknown[]): void {
+        this.log("info", message, ...meta);
+    }
+    warn(message: string, ...meta: unknown[]): void {
+        this.log("warn", message, ...meta);
+    }
+    error(message: string, ...meta: unknown[]): void {
+        this.log("error", message, ...meta);
+    }
+    verbose(message: string, ...meta: unknown[]): void {
+        this.log("verbose", message, ...meta);
+    }
+    silly(message: string, ...meta: unknown[]): void {
+        this.log("silly", message, ...meta);
+    }
 }
 
 let winston: typeof import("winston") | undefined;
@@ -93,28 +105,12 @@ function createLogger(label: string): ILogger {
         // Node.js environment with winston successfully loaded
         if (!consoleTransport) {
             consoleTransport = new winston.transports.Console({
-                stderrLevels: [
-                    "crit",
-                    "error",
-                    "emerg",
-                    "warn",
-                    "warning",
-                    "alert",
-                    "info",
-                    "http",
-                    "verbose",
-                    "debug",
-                    "silly"
-                ]
+                stderrLevels: ["crit", "error", "emerg", "warn", "warning", "alert", "info", "http", "verbose", "debug", "silly"],
             });
 
             if (process.env) {
                 consoleTransport.level =
-                    process.env.LOG_LEVEL ||
-                    (process.env.DEBUG?.includes(PROCESSOR_NAME) ||
-                        process.env.DEBUG === "*"
-                        ? "debug"
-                        : "info");
+                    process.env.LOG_LEVEL || (process.env.DEBUG?.includes(PROCESSOR_NAME) || process.env.DEBUG === "*" ? "debug" : "info");
             }
         }
 
@@ -127,12 +123,7 @@ function createLogger(label: string): ILogger {
                     fillExcept: ["level", "timestamp", "label", "message"],
                 }),
                 winston.format.printf(
-                    ({
-                        level: levelInner,
-                        message,
-                        label: labelInner,
-                        timestamp,
-                    }: Logform.TransformableInfo): string =>
+                    ({ level: levelInner, message, label: labelInner, timestamp }: Logform.TransformableInfo): string =>
                         `${timestamp} {${PROCESSOR_NAME}} [${labelInner}] ${levelInner}: ${message}`,
                 ),
             ),

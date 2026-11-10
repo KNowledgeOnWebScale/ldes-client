@@ -42,8 +42,6 @@ export const V = {
 };
 
 /** The terms that mark a page as an LDES 1.0 (TREE based) page */
-export const LDES1_PREDICATES = ["view", "member", "relation", "viewDescription"].map(
-    (name) => TREE_NS + name,
-);
+export const LDES1_PREDICATES = ["view", "member", "relation", "viewDescription"].map((name) => TREE_NS + name);
 /** The terms that mark a page as an LDES 2.0 page */
 export const LDES2_PREDICATES = [V.relation.value, V.page.value, V.member.value];

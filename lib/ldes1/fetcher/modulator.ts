@@ -24,125 +24,124 @@ export type ModulatorEvents<T> = {
     ready: Indexed<T>;
 };
 
-
 export interface Modulator<F, M> {
     /**
      * Initializes the modulator and loads any previously existing state from the state manager.
      * @param {Condition} condition The condition under which the client runs.
      * @returns {Promise<boolean>} True if the modulator was initialized successfully.
-    */
+     */
     init(condition: Condition): Promise<boolean>;
     /**
      * Starts the handling of a fragment by adding it to the todo list.
      * @param {ReadonlyArray<F>} fragments The fragments to be handled.
-    */
+     */
     push(fragments: ReadonlyArray<F>): Promise<void>;
 
     /**
      * Checks if the modulator is ready to trigger the ready event.
-    */
+     */
     checkReady(): Promise<void>;
 
     /**
      * Called when a fragment has been handled, which removes it from the inflight list.
      * @param index The index of the fragment that has been handled.
-    */
+     */
     finished(index: number): Promise<void>;
 
     /**
      * Closes the modulator, which removes it from the factory.
-    */
+     */
     close(): void;
 
     /**
      * Returns the number of fragments that are still pending.
-    */
+     */
     pendingCount(): Promise<number>;
 
     /**
      * Returns whether a fragment has been encountered before and is in the immutable list.
      * @param {string} url The URL of the element to check.
      * @return {Promise<boolean>} True if the element is in the immutable list.
-    */
+     */
     seen(url: string): Promise<boolean>;
 
     /**
      * Returns all fragments that are mutable.
      * @returns {Promise<ReadonlyArray<F>>} The mutable list.
-    */
-    getAllMutable(): Promise<ReadonlyArray<F>>
+     */
+    getAllMutable(): Promise<ReadonlyArray<F>>;
 
     /**
      * Returns one mutable fragment by URL if it is known.
-    */
-    getMutable(url: string): Promise<F | undefined>
+     */
+    getMutable(url: string): Promise<F | undefined>;
 
     /**
      * Returns all data entities that have been extracted but not emitted yet.
      * @returns {Promise<ReadonlyArray<M>>} The unemitted list.
-    */
-    getAllUnemitted(): Promise<ReadonlyArray<M>>
+     */
+    getAllUnemitted(): Promise<ReadonlyArray<M>>;
 
     /**
      * Returns all fragments that are currently in flight.
      * @returns {Promise<ReadonlyArray<F>>} The inflight list.
-    */
-    getAllInFlight(): Promise<ReadonlyArray<F>>
+     */
+    getAllInFlight(): Promise<ReadonlyArray<F>>;
 
     /**
      * Returns all fragments that are currently in todo.
      * @returns {Promise<ReadonlyArray<F>>} The todo list.
-    */
-    getAllTodo(): Promise<ReadonlyArray<F>>
+     */
+    getAllTodo(): Promise<ReadonlyArray<F>>;
 
     /**
      * Records the fact that an element is mutable
      * @param {string} url The URL of the element to record.
      * @param {F} fragment The element to record.
      * @returns {Promise<boolean>} True if all is good to proceed, false if must not emit new notifications.
-    */
-    addMutable(url: string, fragment: F): Promise<boolean>
+     */
+    addMutable(url: string, fragment: F): Promise<boolean>;
 
     /**
      * Records the fact that an element is immutable.
      * @param {string} url The URL of the element to record.
      * @returns {Promise<boolean>} True if all is good to proceed, false if must not emit new notifications.
-    */
-    addImmutable(url: string): Promise<boolean>
+     */
+    addImmutable(url: string): Promise<boolean>;
 
     /**
      * Records the fact that a data entity has been emitted.
      * @param {string} url The URL of the emitted data entity.
      * @returns {Promise<boolean>} True if all is good to proceed, false if must not emit new notifications.
-    */
-    addEmitted(url: string): Promise<boolean>
+     */
+    addEmitted(url: string): Promise<boolean>;
 
     /**
      * Records the fact that a data entity has been extracted but not emitted yet.
      * @param {string} url The URL of the data entity.
      * @param {M} member The extracted data entity.
      * @returns {Promise<boolean>} True if all is good to proceed, false if must not emit new notifications.
-    */
-    addUnemitted(url: string, member: M): Promise<boolean>
+     */
+    addUnemitted(url: string, member: M): Promise<boolean>;
 
     /**
      * Returns whether a data entity has been emitted.
      * @param {string} url The URL of the data entity.
      * @returns {Promise<boolean>} True if the data entity has been emitted.
-    */
-    wasEmitted(url: string): Promise<boolean>
+     */
+    wasEmitted(url: string): Promise<boolean>;
 
     /**
      * Removes a data entity from the unemitted list.
      * @param {string} url The URL of the data entity.
      * @returns {Promise<boolean>} True if all is good to proceed, false if must not emit new notifications.
-    */
-    deleteUnemitted(url: string): Promise<boolean>
+     */
+    deleteUnemitted(url: string): Promise<boolean>;
 
     /**
      * Returns whether the modulator is tracking latest versions
      * @returns {boolean} True if the modulator is tracking latest versions
-    */
+     */
     hasLatestVersions(): boolean;
 
     /**
@@ -151,9 +150,8 @@ export interface Modulator<F, M> {
      * @param {number} version The version of the member.
      * @returns {Promise<boolean>} True if the member is old and should be filtered out.
      * @throws {Error} If processing was cancelled and must not continue.
-    */
-    filterLatest(memberId: string, version: number): Promise<boolean>
-
+     */
+    filterLatest(memberId: string, version: number): Promise<boolean>;
 }
 
 type ModulatorState<F, M> = {
@@ -186,12 +184,7 @@ export class ModulatorFactory {
     clientStateManager: ClientStateManager;
     children: { [key: string]: Modulator<unknown, unknown> } = {};
 
-    constructor(
-        clientStateManager: ClientStateManager,
-        saveState?: boolean,
-        concurrent?: number,
-        lastVersionOnly?: boolean,
-    ) {
+    constructor(clientStateManager: ClientStateManager, saveState?: boolean, concurrent?: number, lastVersionOnly?: boolean) {
         this.clientStateManager = clientStateManager;
         this.saveState = saveState!;
         this.concurrent = concurrent || 10;
@@ -230,12 +223,7 @@ export class ModulatorFactory {
             modulatorState.latestVersions = this.clientStateManager.build<string, number>("latestVersions");
         }
 
-        const modulator = new ModulatorInstance(
-            modulatorState,
-            ranker,
-            notifier,
-            this
-        );
+        const modulator = new ModulatorInstance(modulatorState, ranker, notifier, this);
         this.children[name] = modulator;
         return modulator;
     }
@@ -269,12 +257,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
     private closed = false;
     private versionStateSync = Promise.resolve();
 
-    constructor(
-        state: ModulatorState<F, M>,
-        ranker: Ranker<Indexed<F>>,
-        notifier: Notifier<ModulatorEvents<F>, unknown>,
-        factory: ModulatorFactory,
-    ) {
+    constructor(state: ModulatorState<F, M>, ranker: Ranker<Indexed<F>>, notifier: Notifier<ModulatorEvents<F>, unknown>, factory: ModulatorFactory) {
         this.modulatorState = state;
         this.ranker = ranker;
         this.notifier = notifier;
@@ -289,24 +272,17 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
             // Check we are running under the same conditions as before (if any)
             const oldCondition = await this.modulatorState.condition.get(0);
             if (oldCondition && oldCondition !== condition.toString()) {
-                this.logger.error("The running conditions have changed from "
-                    + oldCondition + " to " + condition.toString() + ", shutting down!");
+                this.logger.error("The running conditions have changed from " + oldCondition + " to " + condition.toString() + ", shutting down!");
                 throw new Error("Different conditions");
             } else {
                 await this.modulatorState.condition.put(0, condition.toString());
             }
 
             // Load any pending fragments from a previous run
-            const pending = (await Promise.all([
-                this.getAllTodo(),
-                this.getAllInFlight(),
-            ])).flat();
+            const pending = (await Promise.all([this.getAllTodo(), this.getAllInFlight()])).flat();
 
             // Clean up previous record lists
-            await Promise.all([
-                this.clearAllTodo(),
-                this.clearAllInFlight(),
-            ]);
+            await Promise.all([this.clearAllTodo(), this.clearAllInFlight()]);
 
             this.logger.verbose(`Initializing and loading ${pending.length} pending fragments from a previous run`);
             this.logger.debug(`Pending fragments: ${JSON.stringify(pending)}`);
@@ -342,10 +318,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
                 const { todo } = this.modulatorState;
 
                 // This item is no longer todo and is now inflight
-                await Promise.all([
-                    todo.del(indexedItem.index),
-                    this.addInFlight(indexedItem.index, indexedItem.item),
-                ]);
+                await Promise.all([todo.del(indexedItem.index), this.addInFlight(indexedItem.index, indexedItem.item)]);
 
                 this.at += 1;
                 this.notifier.ready(indexedItem, {});
@@ -375,10 +348,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         if (!todo || !inflight) {
             return 0;
         }
-        const [a, b] = await Promise.all([
-            todo.values().all(),
-            inflight.values().all(),
-        ]);
+        const [a, b] = await Promise.all([todo.values().all(), inflight.values().all()]);
         return a.length + b.length;
     }
 
@@ -459,10 +429,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         if (this.closed) return false;
         return this.withState<boolean>(true, async (st) => {
             const { mutable, fragmentEncoder } = st;
-            await mutable.put(
-                url,
-                fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment
-            );
+            await mutable.put(url, fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment);
             // State was updated successfully, so notifications may proceed
             return true;
         });
@@ -513,10 +480,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
                 // State is not being tracked, so notifications may proceed
                 return true;
             }
-            await unemitted.put(
-                url,
-                memberEncoder ? <M>memberEncoder(member) : member
-            );
+            await unemitted.put(url, memberEncoder ? <M>memberEncoder(member) : member);
             // State was updated successfully, so notifications may proceed
             return true;
         });
@@ -551,9 +515,9 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
     }
 
     /**
-     * This method uses a promise-chain (versionStateSync) to serialize all version checks and updates, 
+     * This method uses a promise-chain (versionStateSync) to serialize all version checks and updates,
      * preventing race conditions when multiple fragment extractions occur in parallel.
-    */
+     */
     async filterLatest(memberId: string, version: number): Promise<boolean> {
         // If things are shutting down, relay back that we must not emit new notifications
         if (this.closed) throw new Error("Modulator is closed");
@@ -572,7 +536,8 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
                 }
                 return version < latestVersion;
             });
-            this.versionStateSync = p.then(() => { })
+            this.versionStateSync = p
+                .then(() => {})
                 .catch((err) => {
                     // Things are shutting down or something went wrong, relay back that we must not emit new notifications
                     throw err;
@@ -583,7 +548,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     /**
      * Clears the todo list.
-    */
+     */
     private async clearAllTodo(): Promise<void> {
         if (this.closed) return;
         return this.withState<void>(undefined, async (st) => {
@@ -594,21 +559,18 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     /**
      * Adds a fragment to the todo list.
-    */
+     */
     private async addTodo(index: number, fragment: F): Promise<void> {
         if (this.closed) return;
         return this.withState<void>(undefined, async (st) => {
             const { todo, fragmentEncoder } = st;
-            await todo.put(
-                index,
-                fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment
-            );
+            await todo.put(index, fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment);
         });
     }
 
     /**
      * Clears the in-flight list.
-    */
+     */
     private async clearAllInFlight(): Promise<void> {
         if (this.closed) return;
         return this.withState<void>(undefined, async (st) => {
@@ -619,25 +581,19 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     /**
      * Adds a fragment to the in-flight list.
-    */
+     */
     private async addInFlight(index: number, fragment: F): Promise<void> {
         if (this.closed) return;
         return this.withState<void>(undefined, async (st) => {
             const { inflight, fragmentEncoder } = st;
-            await inflight.put(
-                index,
-                fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment
-            );
+            await inflight.put(index, fragmentEncoder ? <F>fragmentEncoder(fragment) : fragment);
         });
     }
 
     /**
      * Utility function to execute an operation on the modulator state.
-    */
-    private async withState<T>(
-        def: T,
-        fn: (st: typeof this.modulatorState) => Promise<T>
-    ): Promise<T> {
+     */
+    private async withState<T>(def: T, fn: (st: typeof this.modulatorState) => Promise<T>): Promise<T> {
         if (this.closed) return def;
         try {
             return await fn(this.modulatorState);
