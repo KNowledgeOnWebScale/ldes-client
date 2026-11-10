@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794319367968,
+  "lastUpdate": 1794327121971,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -9317,6 +9317,102 @@ window.BENCHMARK_DATA = {
             "value": 4777.465672846154,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.207–0.211 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9bddcf0af176f94c07131b7f93d319e105e6512e",
+          "message": "Merge pull request #160 from inferal-oss/codex/upstream-pluggable-storage\n\nfeat: add pluggable storage and Cloudflare Durable Object support",
+          "timestamp": "2026-11-10T17:08:35+01:00",
+          "tree_id": "05e851675e54e7855e5ab73c972d5b72284e3b2c",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/9bddcf0af176f94c07131b7f93d319e105e6512e"
+        },
+        "date": 1794327121139,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 12553.035492255467,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.768–0.865 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 33197.26934533109,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.280–0.325 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 37535.60017078698,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.253–0.279 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 12597.540345616517,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.762–0.919 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 40627.756694861135,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.237–0.250 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 49079.3571487642,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.194–0.209 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 8895.508974110136,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.113–1.209 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 42028.52897387317,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.229–0.643 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 58849.62368107917,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.164–0.188 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3604.3110486842834,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.272–0.617 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4757.846658551207,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.206–0.216 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 5183.773397939669,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.192–0.199 s"
           }
         ]
       }
