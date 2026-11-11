@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
+import { rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,12 +45,7 @@ async function waitForReady(url: string, timeout = 90_000, interval = 500): Prom
 }
 
 /** Fetch with retry on 500 for DO propagation delays in preview mode. */
-async function fetchRetry(
-    input: string | URL | Request,
-    init?: RequestInit,
-    retries = isPreview ? 10 : 0,
-    interval = 3000,
-): Promise<Response> {
+async function fetchRetry(input: string | URL | Request, init?: RequestInit, retries = isPreview ? 10 : 0, interval = 3000): Promise<Response> {
     for (let i = 0; i <= retries; i++) {
         const res = await fetch(input, init);
         if (res.status !== 500 || i === retries) return res;
@@ -59,25 +55,63 @@ async function fetchRetry(
     throw new Error("unreachable");
 }
 
+/**
+ * `npx wrangler dev` is not one process: npx starts wrangler's launcher, which starts the real wrangler, which starts
+ * workerd and esbuild. Signalling only the process that was spawned leaves all the others running, as orphans.
+ * Wrangler is therefore started as the leader of its own process group, and the whole group is signalled.
+ * (There are no process groups on Windows: there only the spawned process can be signalled.)
+ */
+const hasProcessGroups = process.platform !== "win32";
+
+function signalGroup(signal: NodeJS.Signals): void {
+    if (!wrangler?.pid) return;
+    try {
+        if (hasProcessGroups) process.kill(-wrangler.pid, signal);
+        else wrangler.kill(signal);
+    } catch {
+        // the group is gone already (ESRCH)
+    }
+}
+
+function groupIsAlive(): boolean {
+    if (!wrangler?.pid) return false;
+    if (!hasProcessGroups) return wrangler.exitCode === null;
+    try {
+        process.kill(-wrangler.pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function groupExited(timeout: number, interval = 100): Promise<boolean> {
+    const deadline = Date.now() + timeout;
+    while (groupIsAlive()) {
+        if (Date.now() >= deadline) return false;
+        await new Promise((r) => setTimeout(r, interval));
+    }
+    return true;
+}
+
 async function setupDev(): Promise<void> {
     const port = await findFreePort();
     baseUrl = `http://localhost:${port}`;
 
     persistDir = await mkdtemp(join(tmpdir(), "ldes-test-worker-"));
 
-    wrangler = spawn(
-        "npx",
-        [
-            "wrangler", "dev",
-            "--port", String(port),
-            "--persist-to", persistDir,
-        ],
-        {
-            cwd: workerDir,
-            stdio: ["ignore", "pipe", "pipe"],
-            env: { ...process.env, NO_COLOR: "1" },
-        },
-    );
+    wrangler = spawn("npx", ["wrangler", "dev", "--port", String(port), "--persist-to", persistDir], {
+        cwd: workerDir,
+        // The leader of a new process group, so that teardown can stop wrangler, workerd and esbuild together
+        detached: hasProcessGroups,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env, NO_COLOR: "1" },
+    });
+    // A detached group does not receive Ctrl-C and does not end with this process: if the tests are aborted
+    // before the teardown runs, this last resort still stops it, and removes its state
+    process.once("exit", () => {
+        signalGroup("SIGKILL");
+        rmSync(persistDir, { recursive: true, force: true });
+    });
 
     let stderr = "";
     wrangler.stderr?.on("data", (chunk: Buffer) => {
@@ -93,22 +127,20 @@ async function setupDev(): Promise<void> {
 }
 
 async function teardownDev(): Promise<void> {
-    if (wrangler && wrangler.exitCode === null) {
-        wrangler.kill("SIGTERM");
-        await new Promise<void>((resolve) => {
-            const timer = setTimeout(() => {
-                wrangler!.kill("SIGKILL");
-                resolve();
-            }, 5000);
-            wrangler!.on("exit", () => {
-                clearTimeout(timer);
-                resolve();
-            });
-        });
+    // Ask the whole group to stop, so that wrangler can shut workerd down, and force it after 5 seconds
+    signalGroup("SIGTERM");
+    let stopped = await groupExited(5000);
+    if (!stopped) {
+        signalGroup("SIGKILL");
+        stopped = await groupExited(5000);
     }
 
-    if (persistDir) {
+    // Only remove the state when nothing can write to it any more
+    if (persistDir && stopped) {
         await rm(persistDir, { recursive: true, force: true }).catch(() => {});
+    }
+    if (!stopped) {
+        throw new Error(`The wrangler process group of pid ${wrangler?.pid} is still running after SIGKILL`);
     }
 }
 
@@ -120,30 +152,22 @@ async function setupPreview(): Promise<void> {
 
     let stdout: string;
     try {
-        stdout = execSync(
-            `npx wrangler deploy --name ${previewWorkerName}`,
-            {
-                cwd: workerDir,
-                env: { ...process.env, NO_COLOR: "1" },
-                timeout: 300_000,
-                stdio: ["ignore", "pipe", "pipe"],
-            },
-        ).toString();
+        stdout = execSync(`npx wrangler deploy --name ${previewWorkerName}`, {
+            cwd: workerDir,
+            env: { ...process.env, NO_COLOR: "1" },
+            timeout: 300_000,
+            stdio: ["ignore", "pipe", "pipe"],
+        }).toString();
     } catch (err: unknown) {
         const e = err as { stdout?: Buffer; stderr?: Buffer };
         const out = e.stdout?.toString() ?? "";
         const errOut = e.stderr?.toString() ?? "";
-        throw new Error(
-            `wrangler deploy failed.\nstdout: ${out}\nstderr: ${errOut}`,
-            { cause: err },
-        );
+        throw new Error(`wrangler deploy failed.\nstdout: ${out}\nstderr: ${errOut}`, { cause: err });
     }
 
     const urlMatch = stdout.match(/https:\/\/[a-z0-9._-]+\.workers\.dev/);
     if (!urlMatch) {
-        throw new Error(
-            `Could not find workers.dev URL in deploy output:\n${stdout}`,
-        );
+        throw new Error(`Could not find workers.dev URL in deploy output:\n${stdout}`);
     }
     baseUrl = urlMatch[0];
     console.error(`Deployed to: ${baseUrl}`);
@@ -155,14 +179,11 @@ async function teardownPreview(): Promise<void> {
     if (!previewWorkerName) return;
     console.error(`Deleting preview worker: ${previewWorkerName}`);
     try {
-        execSync(
-            `npx wrangler delete --name ${previewWorkerName} --force`,
-            {
-                cwd: workerDir,
-                timeout: 60_000,
-                stdio: "ignore",
-            },
-        );
+        execSync(`npx wrangler delete --name ${previewWorkerName} --force`, {
+            cwd: workerDir,
+            timeout: 60_000,
+            stdio: "ignore",
+        });
         console.error(`Deleted ${previewWorkerName}`);
     } catch {
         console.error(`Failed to delete ${previewWorkerName} (may not exist)`);
@@ -202,9 +223,13 @@ describe("bundle sanity", () => {
                     readFileSync(candidate);
                     bundlePath = candidate;
                     break;
-                } catch { /* not this dir */ }
+                } catch {
+                    /* not this dir */
+                }
             }
-        } catch { /* no .wrangler/tmp */ }
+        } catch {
+            /* no .wrangler/tmp */
+        }
 
         if (bundlePath) {
             const bundle = readFileSync(bundlePath, "utf-8");
@@ -230,20 +255,16 @@ describe("test-worker", () => {
 describe("mock LDES", () => {
     it("serves a valid LDES stream that the client can consume", async () => {
         const mockUrl = `${baseUrl}/mock/basic/stream.ttl`;
-        const res = await fetchRetry(
-            `${baseUrl}/replicate?url=${encodeURIComponent(mockUrl)}&count=10`,
-        );
+        const res = await fetchRetry(`${baseUrl}/replicate?url=${encodeURIComponent(mockUrl)}&count=10`);
         expect(res.status).toBe(200);
-        const body = await res.json() as {
+        const body = (await res.json()) as {
             received: number;
             members: { id: string }[];
         };
         expect(body.received).toBe(3);
-        expect(body.members.map((m) => m.id).sort()).toEqual([
-            `${baseUrl}/mock/basic/mem1`,
-            `${baseUrl}/mock/basic/mem2`,
-            `${baseUrl}/mock/basic/mem3`,
-        ].sort());
+        expect(body.members.map((m) => m.id).sort()).toEqual(
+            [`${baseUrl}/mock/basic/mem1`, `${baseUrl}/mock/basic/mem2`, `${baseUrl}/mock/basic/mem3`].sort(),
+        );
     });
 });
 
@@ -259,19 +280,19 @@ describe("state persistence", () => {
         // --- First replication: get 3 members, state is persisted ---
         const res1 = await fetchRetry(replicateUrl);
         expect(res1.status).toBe(200);
-        const body1 = await res1.json() as { received: number };
+        const body1 = (await res1.json()) as { received: number };
         expect(body1.received).toBe(3);
 
         // --- Second replication without startFresh: should get 0 (all already emitted) ---
         const res2 = await fetchRetry(replicateUrl);
         expect(res2.status).toBe(200);
-        const body2 = await res2.json() as { received: number };
+        const body2 = (await res2.json()) as { received: number };
         expect(body2.received).toBe(0);
 
         // --- Third replication with startFresh=true: should get 3 again (state cleared) ---
         const res3 = await fetchRetry(`${replicateUrl}&startFresh=true`);
         expect(res3.status).toBe(200);
-        const body3 = await res3.json() as { received: number };
+        const body3 = (await res3.json()) as { received: number };
         expect(body3.received).toBe(3);
     });
 
@@ -282,7 +303,7 @@ describe("state persistence", () => {
         // --- Phase 1: replicate → should get 3 members ---
         const res1 = await fetchRetry(replicateUrl);
         expect(res1.status).toBe(200);
-        const body1 = await res1.json() as {
+        const body1 = (await res1.json()) as {
             received: number;
             members: { id: string }[];
         };
@@ -294,13 +315,13 @@ describe("state persistence", () => {
             method: "POST",
         });
         expect(advRes.status).toBe(200);
-        const advBody = await advRes.json() as { phase: number };
+        const advBody = (await advRes.json()) as { phase: number };
         expect(advBody.phase).toBe(2);
 
         // --- Phase 2: replicate again with same DO → should get only 3 NEW members ---
         const res2 = await fetchRetry(replicateUrl);
         expect(res2.status).toBe(200);
-        const body2 = await res2.json() as {
+        const body2 = (await res2.json()) as {
             received: number;
             members: { id: string }[];
         };
