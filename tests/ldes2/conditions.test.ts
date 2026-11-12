@@ -169,3 +169,27 @@ describe("Conditions in an LDES 2.0", () => {
         expect(errors).toHaveLength(1);
     });
 });
+
+describe("The after and before options in an LDES 2.0", () => {
+    async function window(after?: string, before?: string) {
+        const client = replicateLDES(
+            intoConfig({ url: ROOT, after: after ? new Date(after) : undefined, before: before ? new Date(before) : undefined }),
+        );
+        const members: Member[] = [];
+        for await (const member of client.stream({ highWaterMark: 10 })) members.push(member);
+        return ids(members);
+    }
+
+    test("both bounds are exclusive, as in an LDES 1.0", async () => {
+        server.trig(
+            "/root",
+            description,
+            record("r1", "2026-01-01T00:00:00Z"),
+            record("r2", "2026-01-02T00:00:00Z"),
+            record("r3", "2026-01-03T00:00:00Z"),
+        );
+        expect(await window("2026-01-01T00:00:00Z")).toEqual(["r2", "r3"]);
+        expect(await window(undefined, "2026-01-03T00:00:00Z")).toEqual(["r1", "r2"]);
+        expect(await window("2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z")).toEqual(["r2"]);
+    });
+});

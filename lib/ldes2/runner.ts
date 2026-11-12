@@ -260,11 +260,12 @@ export function relevance(condition: Condition, context: StreamContext, defaultT
     };
 }
 
-/** The `before` and `after` options of the client apply to the timestamp of the member */
+/** The `before` and `after` options of the client apply to the timestamp of the member,
+ *  and exclude both bounds, as in an LDES 1.0 */
 function inWindow(member: Member, config: Config): boolean {
     if (!(member.timestamp instanceof Date)) return true;
-    if (config.after && member.timestamp < config.after) return false;
-    if (config.before && member.timestamp > config.before) return false;
+    if (config.after && member.timestamp <= config.after) return false;
+    if (config.before && member.timestamp >= config.before) return false;
     return true;
 }
 
