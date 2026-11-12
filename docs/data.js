@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794479485976,
+  "lastUpdate": 1794482339998,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -9893,6 +9893,102 @@ window.BENCHMARK_DATA = {
             "value": 4159.358189070015,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.239–0.246 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "distinct": true,
+          "id": "904ec71a1914472b3bb82dceb11c9f221938e9ac",
+          "message": "Fixed local dump tes",
+          "timestamp": "2026-11-12T12:14:17+01:00",
+          "tree_id": "45d34b6ed46514584f1b31250586ca69e8ae82aa",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/904ec71a1914472b3bb82dceb11c9f221938e9ac"
+        },
+        "date": 1794482339319,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 9599.099549171475,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.013–1.145 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 23874.64508728539,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.366–0.657 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 29177.29731768671,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.339–0.408 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 9908.63613241834,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.992–1.182 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 33125.856048723836,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.299–0.338 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 36900.421971454416,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.252–0.401 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 7033.865379084035,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.401–1.440 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 35343.227768908284,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.275–0.300 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 44491.65364829758,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.224–0.266 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 2989.0709969433847,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.332–0.402 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4031.5798649984367,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.237–0.331 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4410.635122768728,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.221–0.321 s"
           }
         ]
       }
