@@ -258,7 +258,7 @@ export class Client {
         this.streamId = this.streamId || ldesUri;
 
         // Extract the main LDES information (e.g., timestampPath, versionOfPath, etc.)
-        const info: LDESInfo = await getInfo(ldesUri, viewId, root.data, root.url, this.dereferencer, this.config);
+        const info: LDESInfo = await getInfo(ldesUri, viewId, root.data, root.url, this.dereferencer, this.config, isLocalDump);
         this.emit("description", info);
 
         // Handle and assemble condition object that dictates fragment fetching and member emission
@@ -484,6 +484,7 @@ async function getInfo(
     fetchedRootUrl: string,
     dereferencer: MessageDereferencer,
     config: Config,
+    isLocalDump: boolean,
 ): Promise<LDESInfo> {
     const logger = getLoggerFor("getShape");
 
@@ -517,8 +518,8 @@ async function getInfo(
     let versionSequencePaths;
     let pollingIntervals;
 
-    const isLocalDump = ldesId.value.startsWith("file://");
-
+    // Whether this is a local dump is known from the URL that the client was given: `ldesId` is the IRI of the LDES
+    // in the data, which is a web IRI even when that data is read from a local file
     if (isLocalDump) {
         // We are dealing with a local dump LDES
         contextShapeIds = getObjects(store, null, TREE.terms.shape);
