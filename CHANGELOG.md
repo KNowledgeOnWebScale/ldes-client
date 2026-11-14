@@ -20,6 +20,39 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   being interrupted, the error names the page. Errors are logged with their message, instead of `{}`
   ([#107](https://github.com/KNowledgeOnWebScale/ldes-client/issues/107)).
 
+- A member is emitted when the consumer of the stream has read it, and not when it is put in the buffer of the stream: the state
+  (the members that were emitted, the pages that were finished, the bookmark of an LDES 2.0) is updated then. A consumer that stops
+  with members in the buffer used to lose them, as the next run took them for emitted, which happened with every hierarchy of pages
+  (the Rijksmuseum and MINT shapes) and now no longer does. No member is lost or emitted twice when a replication is interrupted
+  again and again, for LDES 1.0 (unordered and ordered) and LDES 2.0. The stream that `stream()` returns has a buffer of its own that
+  has the `highWaterMark`, behind a stream that has none: it ends after the client has closed, and the state can be opened then
+  ([#170](https://github.com/KNowledgeOnWebScale/ldes-client/issues/170)).
+- A saved state resumes a linked list of pages (OpenLDES `by-page`): the root of such a list does not change, and the immutable first
+  page is skipped, so that the pages that were mutable when the run ended were never requested, and new members were not found.
+  A new run starts at them, in the unordered and in the ordered strategy. A second run of the mock LDES requests the mutable pages of the first run now (3 fragments, where it was 1 or 2).
+- A page of which the modulator index was shared with another page, because pages were pushed at the same time, overwrote it in the
+  saved queue and was finished with it. That lost pages in interrupted replications, and in the ordered strategy emitted a member twice.
+- A view without `tree:view` that is `dct:isPartOf` an `ldes:EventStream` (the root of an OpenLDES server such as Telraam's) is the view,
+  and the LDES is described by the stream. A client that fails to start closes its state, so that the next client can open it, and work
+  that was running when a client was closed does not fail with `Database is not open`. A closed client does not start requests that were queued.
+- A page that two pages link to is requested once in a run, also when it is mutable, and so is the view page of an LDES of which the
+  page that the client was given is not the view: it was requested twice. This holds for both strategies.
+- Pages that can change are requested again with their `ETag`, and answered with a 304, in every poll and when a run resumes, in the
+  ordered strategy of LDES 1.0 and in LDES 2.0 as well, as the unordered strategy did. The ETag in the state is the one of the version
+  of which the consumer read the members. An LDES 2.0 has the ETag and the description message of such a page in its bookmark.
+- A client that follows (`polling: true`) and has no `statePath` or `storage` keeps its state in memory. Without it, the unordered
+  strategy requested every page again in every poll.
+- `skipMissingPages` (`--skip-missing-pages`): skip a page of an LDES 1.0 that answers 404 with a warning, and do not request it again.
+  By default, a 404 is an error, as the specification says, and as the page is in the state, so is every run after it. A server removes a
+  page with 410. `HttpStatusError` is the error for a response with an error status.
+- `perf/latency.mjs` measures the latency of a client that follows a growing feed, the replication of its history, and what a poll costs.
+
+### LDES 2.0 (experimental)
+
+- The bookmark of the state has `pages`: the ETag and the description message of the pages that can change, as they were when a run read
+  them completely and the consumer had read all their members. It is saved when a run has finished, as `immutable` is, and the key
+  and members of the bookmark are those of the members that the consumer has read.
+
 ## 0.4.0
 
 ### LDES 2.0 (experimental)

@@ -4,6 +4,7 @@ import { LDES } from "@treecg/types";
 import { errorMessage, getLoggerFor } from "../../utils";
 import { extractRelations } from "./relation";
 
+import { HttpStatusError } from "../../fetcher/ldfetchDereferencer";
 import type { Dereferencer, DereferenceOptions } from "../../fetcher/ldfetchDereferencer";
 import type { Condition } from "../../condition";
 import type { FetchedPage, Notifier } from "../../types";
@@ -62,6 +63,12 @@ export type FetchEvent = {
     error: unknown;
 };
 
+/**
+ * What to do with a page of an LDES 1.0 that is not found (HTTP 404). The pages that the client was given or found as the root
+ * (`entries`) are always an error: there is nothing to replicate without them.
+ */
+export type MissingPages = { skip: boolean; entries: string[] };
+
 export type Cache = {
     immutable?: boolean;
     maxAge?: number;
@@ -76,15 +83,25 @@ export class Fetcher {
     private defaultTimezone: string;
 
     private closed = false;
+    /** Pages that are not found are skipped, except the pages in `entries`: see {@link MissingPages} */
+    private missingPages: MissingPages;
 
     private logger = getLoggerFor(this);
 
-    constructor(dereferencer: Dereferencer, loose: boolean, condition: Condition, defaultTimezone: string, fetch_f?: typeof fetch) {
+    constructor(
+        dereferencer: Dereferencer,
+        loose: boolean,
+        condition: Condition,
+        defaultTimezone: string,
+        fetch_f?: typeof fetch,
+        missingPages: MissingPages = { skip: false, entries: [] },
+    ) {
         this.dereferencer = dereferencer;
         this.loose = loose;
         this.fetch_f = fetch_f;
         this.condition = condition;
         this.defaultTimezone = defaultTimezone;
+        this.missingPages = missingPages;
     }
 
     close() {
@@ -92,6 +109,8 @@ export class Fetcher {
     }
 
     async fetch<S>(node: Node, state: S, notifier: Notifier<FetchEvent, S>) {
+        // A client that is closed does not start requests for the pages that were queued
+        if (this.closed) return;
         try {
             const options: DereferenceOptions = {
                 localFiles: true,
@@ -153,9 +172,34 @@ export class Fetcher {
                 cache,
             );
         } catch (ex) {
+            if (this.isMissing(ex, node)) {
+                // A page that was found through a relation, and is not there (any more): a retention policy removes pages.
+                // It is an empty page that is not requested again, and not an error that every next run, which has the page in its state, fails on.
+                this.logger.warn(
+                    `[fetch] Page ${node.target} was not found (HTTP 404) and is skipped: it has no members and no relations for this client`,
+                );
+                await this.processFetchedPage(
+                    node,
+                    { data: RdfStore.createDefault(), url: node.target, immutable: true, memberCount: 0, status: 404 },
+                    state,
+                    notifier,
+                    { immutable: true },
+                );
+                return;
+            }
             this.logger.error(`[fetch] Fetch failed for ${node.target} ${errorMessage(ex)}`);
             notifier.error(ex, state);
         }
+    }
+
+    private isMissing(ex: unknown, node: Node): boolean {
+        return (
+            this.missingPages.skip &&
+            ex instanceof HttpStatusError &&
+            ex.status === 404 &&
+            !this.closed &&
+            !this.missingPages.entries.includes(node.target)
+        );
     }
 
     async processFetchedPage<S>(node: Node, page: FetchedPage, state: S, notifier: Notifier<FetchEvent, S>, cache: Cache = {}) {
@@ -181,11 +225,12 @@ export class Fetcher {
         }
 
         if (!cache.immutable && !this.closed) {
-            notifier.scheduleFetch(
+            // Before the members are extracted: the state of the page is written, and what is written when the consumer has read them comes after
+            await notifier.scheduleFetch(
                 {
                     ...node,
                     target: page.url,
-                    etag: cache.etag ?? node.etag,
+                    etag: cache.etag ?? page.etag ?? node.etag,
                     relations: toFetch.map(({ target }) => target.node),
                 },
                 state,

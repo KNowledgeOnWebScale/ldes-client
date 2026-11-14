@@ -47,6 +47,15 @@ export interface Config {
      */
     contextCache?: ContextCacheOptions | false;
     /**
+     * What to do with a page of an LDES 1.0 that was found through a relation, and answers HTTP 404. The LDES specification says that
+     * the client reports an error then, as it does for every status code except 410 Gone, which is how a server tells that a page
+     * was removed (by a retention policy, for example): that is a page without members and relations, and is not an error.
+     * A server that answers 404 for a page that it removed, makes every run fail at that page, as the page is in the state of the client.
+     * With `skipMissingPages`, such a page is skipped with a warning, and is not requested again.
+     * Members that can only be reached through the missing page are not replicated. The page that the client starts at is always an error.
+     */
+    skipMissingPages?: boolean;
+    /**
      * What to do when the server drops the connection while a page is being transferred, after it sent a successful response.
      * The page is requested again, with a doubling time between the requests. The default is 5 new requests, starting after 500 ms.
      * A `maxRetries` of 0 is unlimited, as for `--retry-count`.

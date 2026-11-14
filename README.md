@@ -46,6 +46,8 @@ ldes-client https://example.org/ldes --follow --save ./state > members.trig
 
 The state is saved while the client runs and when you stop it with Ctrl-C. To resume, run the same command with the same `--save` path: the client continues from the saved state and does not emit the members it already emitted, so it only produces what is new. Without `--follow`, it reads what is new and exits, which is how you synchronize on a schedule (for example with cron). Append the output (`>>`) if you want to keep the earlier members in the same file.
 
+A member counts as emitted when your code has read it from the stream, not when the client put it in the buffer of the stream. When you stop reading with members still in that buffer, the next run emits them: no member is lost, and none is emitted twice.
+
 Use `--start-fresh` to discard the saved state and read everything again. Use a separate state path for every LDES you replicate. In the library, the same is done with `statePath` (or a custom `storage`, see [State Management](#state-management)).
 
 ## Command line
@@ -67,7 +69,7 @@ By default, standard output is a TriG RDF Message Log with one message per membe
 | `--condition <file>` | Apply a [Turtle condition](#conditions). |
 | `-s, --save <path>` | Persist state for resuming and synchronization. |
 | `--start-fresh` | Discard existing saved state and start again. |
-| `--poll-interval <ms>` | Polling interval while following; default `1000`. |
+| `--poll-interval <ms>` | Polling interval while following; default `1000`. An LDES that declares `ldes:pollingInterval` sets the interval itself, and that value is used instead. |
 | `-t, --default-timezone <timezone>` | Default timezone for LDES 1.0 `tree:InBetweenRelation` dates; default `AoE`. See [LDES 2.0](#ldes-20) for timestamps without a timezone. |
 
 ### Extraction and output
@@ -94,6 +96,7 @@ LDES 2.0 members contain all quads of their message; SHACL/CBD extraction option
 | `--basic-auth <username>:<password>` | HTTP Basic authentication. |
 | `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. It also applies to a page of which the transfer is interrupted. |
 | `--http-codes <codes...>` | HTTP status codes to retry. |
+| `--skip-missing-pages` | LDES 1.0: skip a page that a relation leads to and that answers `404` with a warning, instead of failing. See [Pages that are removed](#pages-that-are-removed). |
 | `--safe` | Retry thrown fetch errors. |
 | `--context-min-ttl <seconds>` | Keep external JSON-LD contexts for at least this long, whatever their cache headers say; default `600`. |
 | `--no-context-cache` | Do not cache external JSON-LD contexts. |
@@ -244,11 +247,24 @@ ldes-client examples/riverbench/root.trig
 
 The example uses named-graph membership, timestamp ordering and an immutable data page. [catalog.ttl](examples/riverbench/catalog.ttl) contains the dataset metadata. Reading it requires network access.
 
+### Pages that are removed
+
+A server that applies a retention policy removes pages. The LDES specification tells a server to answer `410 Gone` for such a page, which is a page without members and relations for the client. Any other 4xx or 5xx status code is an error, also `404`: the client stops, and as the page is in its state, the next runs stop at it too. When a server answers `404` for the pages that it removed, set `skipMissingPages` (CLI: `--skip-missing-pages`): the client skips such a page of an LDES 1.0 with a warning, and does not request it again. The members that can only be reached through that page are not replicated. The page that the client starts at is always an error.
+
 ### State Management
 
 By default, the client stores progress with Level. Set `statePath` to keep that
 state between client instances. Without a path, Level uses temporary storage.
 Existing `statePath` and `startFresh` options continue to work.
+
+The state also has the `ETag` of the pages that can change, and the client requests them again with `If-None-Match`, in every poll and when it resumes: a page that has not changed is answered with a `304`, without a body. This holds for LDES 1.0, unordered and ordered, and for LDES 2.0 (where the bookmark has the description of such a page, so that its relations are known). A server that does not send an `ETag` is requested in full.
+
+A client that follows the stream (`polling: true`) without a `statePath` or a
+`storage` keeps its state in memory, so that every poll only requests the pages that
+can have changed: the pages that are immutable and the members that were emitted are
+remembered for as long as the client runs. That state is gone when the process ends.
+To resume after a restart, set `statePath` or a `storage`: the same state then also
+lets the next run revalidate pages with their `ETag`.
 
 Custom storage can return a promise from `init(fresh)`: the client waits for it
 before creating stores. When using an adapter directly, await `storage.init()`

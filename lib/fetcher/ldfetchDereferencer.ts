@@ -57,6 +57,17 @@ export const DEFAULT_ACCEPT = [
 
 export const ORIGINAL_STATUS_HEADER = "x-ldes-client-original-status";
 
+/** A request that is answered with a 4xx or 5xx HTTP status code */
+export class HttpStatusError extends Error {
+    constructor(
+        public readonly url: string,
+        public readonly status: number,
+    ) {
+        super(`Could not dereference ${url}: HTTP ${status}`);
+        this.name = "HttpStatusError";
+    }
+}
+
 export type DereferenceOptions = {
     fetch?: typeof fetch;
     headers?: Record<string, string>;
@@ -213,6 +224,14 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     /** A log without any messages, e.g. for 410 Gone */
     static empty(url: string, status: number, headers: Headers): MessageLog {
         const log = new MessageLog(url, status, headers, "");
+        log.ended = true;
+        return log;
+    }
+
+    /** A log of messages that were read before, for a page that has not changed since */
+    static fromMessages(url: string, status: number, headers: Headers, messages: Quad[][]): MessageLog {
+        const log = new MessageLog(url, status, headers, "");
+        log.queue = [...messages];
         log.ended = true;
         return log;
     }
@@ -486,7 +505,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         const originalStatus = Number(response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status);
         if (response.status >= 400) {
             await response.body?.cancel().catch(() => undefined);
-            throw new Error(`Could not dereference ${url}: HTTP ${response.status}`);
+            throw new HttpStatusError(url, response.status);
         }
         if (originalStatus === 304 || originalStatus === 410 || !response.body) {
             // The client's fetch hides these statuses behind an empty 200 response
