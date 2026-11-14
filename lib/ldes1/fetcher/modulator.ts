@@ -117,6 +117,27 @@ export interface Modulator<F, M> {
     addEmitted(url: string): Promise<boolean>;
 
     /**
+     * Records that a data entity is emitted to the stream, and that the consumer has not read it yet. It is not emitted again
+     * while it is there, and it is not in the state: a consumer that stops without reading it leaves it to the next run.
+     * `addEmitted` is called when the consumer has read it.
+     * @param {string} url The URL of the data entity.
+     * @returns {boolean} False if it was being emitted already: it must not be emitted a second time.
+     */
+    markEmitting(url: string): boolean;
+
+    /**
+     * Returns whether the consumer has read a data entity in a run of any time: what the state says, without the data entities that are being emitted.
+     * @param {string} url The URL of the data entity.
+     */
+    wasEmittedInState(url: string): Promise<boolean>;
+
+    /**
+     * Undoes `markEmitting`, for a data entity that was not emitted after all.
+     * @param {string} url The URL of the data entity.
+     */
+    unmarkEmitting(url: string): void;
+
+    /**
      * Records the fact that a data entity has been extracted but not emitted yet.
      * @param {string} url The URL of the data entity.
      * @param {M} member The extracted data entity.
@@ -255,6 +276,8 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     private logger = getLoggerFor(this);
     private closed = false;
+    /** Emitted to the stream, and not read by the consumer yet: see markEmitting */
+    private emitting = new Set<string>();
     private versionStateSync = Promise.resolve();
 
     constructor(state: ModulatorState<F, M>, ranker: Ranker<Indexed<F>>, notifier: Notifier<ModulatorEvents<F>, unknown>, factory: ModulatorFactory) {
@@ -299,9 +322,11 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     async push(fragments: ReadonlyArray<F>) {
         for (const fragment of fragments) {
-            const indexed = { item: fragment, index: this.index };
-            await this.addTodo(this.index, fragment);
-            this.index += 1;
+            // The index is taken before anything is awaited: pushes run concurrently, and a fragment that shares its index
+            // with another overwrites it in the todo and inflight lists of the state, and is finished with it
+            const index = this.index++;
+            const indexed = { item: fragment, index };
+            await this.addTodo(index, fragment);
             this.ranker.push(indexed);
         }
         await this.checkReady();
@@ -453,6 +478,21 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
         });
     }
 
+    markEmitting(url: string): boolean {
+        if (this.emitting.has(url)) return false;
+        this.emitting.add(url);
+        return true;
+    }
+
+    async wasEmittedInState(url: string): Promise<boolean> {
+        if (this.closed) return false;
+        return this.withState<boolean>(false, async (st) => await st.emitted.has(url));
+    }
+
+    unmarkEmitting(url: string) {
+        this.emitting.delete(url);
+    }
+
     async addEmitted(url: string): Promise<boolean> {
         // If things are shutting down, relay back that we must not emit new notifications
         if (this.closed) return false;
@@ -460,6 +500,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
             const { emitted, unemitted } = st;
             // Add to emitted list
             await emitted.put(url, true);
+            this.emitting.delete(url);
             if (!unemitted) {
                 // State is not being tracked, so notifications may proceed
                 return true;
@@ -488,6 +529,7 @@ export class ModulatorInstance<F, M> implements Modulator<F, M> {
 
     async wasEmitted(url: string): Promise<boolean> {
         if (this.closed) return false;
+        if (this.emitting.has(url)) return true;
         return this.withState<boolean>(false, async (st) => {
             const { emitted } = st;
             return await emitted.has(url);

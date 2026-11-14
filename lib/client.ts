@@ -4,7 +4,7 @@ import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
 import { DEFAULT_TRANSFER_RETRY, LdfetchDereferencer, ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
-import { Gate, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
+import { Gate, cachedLog, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
 import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
 import {
@@ -26,9 +26,10 @@ import {
 import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
+import { MemoryStorage } from "./storage/memory";
 import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
 import type { SavedBookmark } from "./ldes2";
-import type { LDESInfo, Notifier, FetchedPage, Member, Ordered, StrategyEvents } from "./types";
+import type { LDESInfo, Notifier, FetchedPage, Member, MemberDelivery, Ordered, StrategyEvents } from "./types";
 
 type CachedRoot = {
     url: string;
@@ -41,7 +42,10 @@ type CachedRoot = {
 const df = new DataFactory();
 
 // Local types
-type Controller = ReadableStreamDefaultController<Member>;
+/** A member in the buffer of the stream, with what is to be done when the consumer has read it */
+type Buffered = { member: Member; delivered?: MemberDelivery["delivered"] };
+type Controller = ReadableStreamDefaultController<Buffered>;
+type StreamOut = (member: Member, delivered?: MemberDelivery["delivered"]) => boolean;
 type EventMap = Record<string, unknown>;
 type EventKey<T extends EventMap> = string & keyof T;
 type EventReceiver<T> = (params: T) => void;
@@ -89,6 +93,16 @@ export class Client {
     private clientStateManager: ClientStateManager;
     private readonly persistState: boolean;
     private gate = new Gate();
+    /** The updates of the state for members that were read by the consumer, and that are not done yet, in the order of the members */
+    private waitingCommits: Array<NonNullable<MemberDelivery["delivered"]>> = [];
+    private committing?: Promise<void>;
+    private deliveryError?: { error: unknown };
+    private closing?: Promise<void>;
+    /** The members that are emitted to the stream, and that the consumer has not read yet */
+    private undelivered = 0;
+    private deliveryWaiters: Array<() => void> = [];
+    /** Saves the bookmark of an LDES 2.0 */
+    private persistLdes2?: () => Promise<void>;
 
     private listeners: {
         [K in keyof ClientEvents]?: Array<(p: ClientEvents[K]) => void>;
@@ -107,8 +121,15 @@ export class Client {
                 : ldfetchDereferencer);
         this.streamId = stream;
         this.ordered = ordered;
-        this.clientStateManager = new ClientStateManager(this.config.storage, this.config.statePath, this.config.startFresh);
-        this.persistState = this.config.statePath !== undefined || this.config.storage !== undefined;
+        // A client that polls keeps its state in memory when no state is configured: it needs to remember the pages that
+        // are immutable and the members that were emitted, or every poll would request every page again.
+        const keepInMemory = this.config.polling === true && this.config.statePath === undefined && this.config.storage === undefined;
+        this.clientStateManager = new ClientStateManager(
+            keepInMemory ? new MemoryStorage() : this.config.storage,
+            this.config.statePath,
+            this.config.startFresh,
+        );
+        this.persistState = keepInMemory || this.config.statePath !== undefined || this.config.storage !== undefined;
         this.modulatorFactory = new ModulatorFactory(
             this.clientStateManager,
             this.persistState,
@@ -130,7 +151,7 @@ export class Client {
         this.listeners[key].push(fn);
     }
 
-    async init(streamOut: (member: Member) => boolean, close: () => void): Promise<void> {
+    async init(streamOut: StreamOut, close: () => void): Promise<void> {
         // Initialize the client state manager
         await this.clientStateManager.init();
 
@@ -152,8 +173,19 @@ export class Client {
             }
         }
         if (!root) {
-            const headers = cached?.etag ? { "If-None-Match": cached.etag } : undefined;
-            const log = await this.dereferencer.dereferenceMessages(this.config.url, { fetch: this.config.fetch, headers, localFiles: true });
+            // The root of an LDES 2.0 is requested with the ETag that it had when the last run read it completely: the bookmark has its description
+            const cachedLdes2 = this.persistState
+                ? (
+                      await this.clientStateManager
+                          .build<string, SavedBookmark>("ldes2")
+                          .get(this.config.url)
+                          .catch(() => undefined)
+                  )?.pages?.[this.config.url]
+                : undefined;
+            const etag = cached?.etag ?? cachedLdes2?.etag;
+            const headers = etag ? { "If-None-Match": etag } : undefined;
+            const answer = await this.dereferencer.dereferenceMessages(this.config.url, { fetch: this.config.fetch, headers, localFiles: true });
+            const log = answer.status === 304 && cachedLdes2 && !cached ? cachedLog(answer.url, answer, cachedLdes2) : answer;
             const first = await log.next();
 
             // Is this an LDES 1.0 or an LDES 2.0? The first message tells.
@@ -209,8 +241,25 @@ export class Client {
         const suppliedIriViewQuads = root.data.getQuads(ldesId, TREE.terms.view, null, null);
         let viewId: Term;
         let ldesUri: Term | undefined;
+        // Whether the page that was fetched is the view itself, and the LDES is described elsewhere
+        let urlIsView = this.config.urlIsView;
 
-        if (this.config.urlIsView) {
+        // A page without a tree:view that is dct:isPartOf an LDES: how an OpenLDES server describes the root of a view
+        const partOfLdes = root.data.getQuads(fetchedUrl, df.namedNode("http://purl.org/dc/terms/isPartOf"), null, null).map((quad) => quad.object);
+        const viewIsPartOfLdes =
+            !this.config.urlIsView &&
+            !isLocalDump &&
+            currentViewQuads.length === 0 &&
+            suppliedIriViewQuads.length === 0 &&
+            partOfLdes.length === 1 &&
+            root.data.getQuads(partOfLdes[0], RDF.terms.type, LDES.terms.EventStream, null).length > 0;
+
+        if (viewIsPartOfLdes) {
+            this.logger.debug(`Page ${root.url} is part of the LDES ${partOfLdes[0].value}, and has no tree:view: it is the view`);
+            urlIsView = true;
+            viewId = fetchedUrl;
+            ldesUri = partOfLdes[0];
+        } else if (this.config.urlIsView) {
             viewId = ldesId;
             if (currentViewQuads.length === 1) {
                 ldesUri = currentViewQuads[0].subject;
@@ -258,7 +307,11 @@ export class Client {
         this.streamId = this.streamId || ldesUri;
 
         // Extract the main LDES information (e.g., timestampPath, versionOfPath, etc.)
-        const info: LDESInfo = await getInfo(ldesUri, viewId, root.data, root.url, this.dereferencer, this.config, isLocalDump);
+        // The view is read to find what the page of the LDES does not tell: the strategy starts at this page, and does not request it again
+        let viewPage: FetchedPage | undefined;
+        const info: LDESInfo = await getInfo(ldesUri, viewId, root.data, root.url, this.dereferencer, this.config, isLocalDump, urlIsView, (page) => {
+            viewPage = page;
+        });
         this.emit("description", info);
 
         // Handle and assemble condition object that dictates fragment fetching and member emission
@@ -288,7 +341,10 @@ export class Client {
         }
 
         // Component that manages the fetching of RDF data over HTTP
-        this.fetcher = new Fetcher(this.dereferencer, this.config.loose, condition, this.config.defaultTimezone, this.config.fetch);
+        this.fetcher = new Fetcher(this.dereferencer, this.config.loose, condition, this.config.defaultTimezone, this.config.fetch, {
+            skip: this.config.skipMissingPages === true,
+            entries: [this.config.url, root.url, viewId.value, ldesUri.value],
+        });
 
         const notifier = this.buildNotifier(info, streamOut, close, condition);
 
@@ -315,7 +371,9 @@ export class Client {
 
         if (!isLocalDump) this.logger.debug(`Found ${allViewQuads.length} views, choosing ${viewId.value}`);
 
-        await this.strategy.start(viewId.value, condition, isLocalDump || root.url === viewId.value ? root : undefined, !isLocalDump);
+        const startPage =
+            isLocalDump || root.url === viewId.value ? root : (viewPage as FetchedPage | undefined)?.url === viewId.value ? viewPage : undefined;
+        await this.strategy.start(viewId.value, condition, startPage, !isLocalDump);
     }
 
     /**
@@ -323,7 +381,7 @@ export class Client {
      */
     private buildNotifier(
         info: LDESInfo,
-        streamOut: (member: Member) => boolean,
+        streamOut: StreamOut,
         close: () => void,
         condition?: ReturnType<typeof handleConditions>,
     ): Notifier<StrategyEvents, unknown> {
@@ -333,10 +391,11 @@ export class Client {
                 this.emit("fragment", fragment);
                 this.fragmentCount++;
             },
-            member: (m) => {
+            member: (m, state) => {
                 const streamed = streamOut(
                     // Check if member is to be materialized
                     maybeVersionMaterialize(m, this.config.materialize === true, info),
+                    (state as MemberDelivery | undefined)?.delivered,
                 );
                 if (streamed) {
                     this.memberCount++;
@@ -362,20 +421,20 @@ export class Client {
     private async initLdes2(
         log: Awaited<ReturnType<MessageDereferencer["dereferenceMessages"]>>,
         first: Quad[] | undefined,
-        streamOut: (member: Member) => boolean,
+        streamOut: StreamOut,
         close: () => void,
     ): Promise<void> {
         const bookmarks = this.persistState ? this.clientStateManager.build<string, SavedBookmark>("ldes2") : undefined;
         // The notifier needs the description of the LDES, which is only known when the root page was read.
         // The members are only emitted after that, so it is safe to complete this reference afterwards.
         let notifier!: Notifier<StrategyEvents, unknown>;
-        await startLdes2({
+        const { persist } = await startLdes2({
             config: this.config,
             dereferencer: this.dereferencer,
             bookmarks,
             root: { log, first },
             hooks: {
-                member: (m) => notifier.member(m, undefined) as boolean,
+                member: (m, delivered) => notifier.member(m, { delivered }) as boolean,
                 fragment: (page) => {
                     this.fragmentCount++;
                     this.emit("fragment", page);
@@ -386,6 +445,7 @@ export class Client {
                 close: () => notifier.close({}, undefined),
                 gate: this.gate,
                 isClosed: () => this.closed,
+                delivered: () => this.untilDelivered(),
             },
             onDescription: (info) => {
                 this.streamId = this.streamId ?? info.rootNode;
@@ -394,11 +454,98 @@ export class Client {
                 this.emit("description", info);
             },
         });
+        this.persistLdes2 = persist;
     }
 
+    /**
+     * The members of the LDES. A member is emitted when the consumer has read it, and not when it is put in the buffer of the
+     * stream: the state is updated then (see `MemberDelivery`). A consumer that stops can leave members in the buffer,
+     * and the next run, which starts from the state, emits them.
+     * The buffer (`highWaterMark`) is behind the stream that the consumer reads: it reads from it when the consumer asks for a member.
+     */
     stream(strategy?: { highWaterMark?: number; size?: (chunk: Member) => number }): ReadableStream<Member> {
+        const reader = this.bufferedStream(
+            strategy && { ...strategy, size: strategy.size && ((chunk: Buffered) => strategy.size!(chunk.member)) },
+        ).getReader();
+        return new ReadableStream<Member>(
+            {
+                pull: async (controller) => {
+                    const { done, value } = await reader.read();
+                    if (done) return controller.close();
+                    try {
+                        controller.enqueue(value.member);
+                    } catch (_) {
+                        // The consumer is gone: the member was not read, and the state does not say it was
+                        return;
+                    }
+                    this.commit(value.delivered);
+                },
+                cancel: (reason) => reader.cancel(reason),
+            },
+            { highWaterMark: 0 },
+        );
+    }
+
+    /**
+     * Updates the state for a member that the consumer has read. The updates that wait are done together, and in the order of the
+     * members (they start in that order): the consumer is not held up by them, and a state that is stored on a disk is not
+     * written to one member at a time.
+     */
+    private commit(delivered: MemberDelivery["delivered"]) {
+        if (!delivered) return;
+        this.waitingCommits.push(delivered);
+        this.committing ??= this.drainCommits();
+    }
+
+    private async drainCommits() {
+        const failed = (ex: unknown) => {
+            if (this.deliveryError) return;
+            this.deliveryError = { error: ex };
+            this.logger.error(`Could not update the state of a member: ${ex}`);
+            // These writes started before storage closes, including when close() is flushing them. A failure
+            // must fail the stream and close(), rather than report that progress was saved successfully.
+            this.emit("error", ex);
+        };
+        // Not before the caller has stored the promise of this drain: it is cleared when the drain ends
+        await Promise.resolve();
+        try {
+            while (this.waitingCommits.length > 0) {
+                const batch = this.waitingCommits.splice(0);
+                // They start in the order of the members. Most of them do not wait for anything, and do not need a promise.
+                const pending: Promise<unknown>[] = [];
+                for (const delivered of batch) {
+                    try {
+                        const done = delivered();
+                        if (done) pending.push(Promise.resolve(done).catch(failed));
+                    } catch (ex) {
+                        failed(ex);
+                    }
+                }
+                if (pending.length > 0) await Promise.all(pending);
+                this.undelivered -= batch.length;
+                this.releaseDeliveryWaiters();
+            }
+        } finally {
+            this.committing = undefined;
+        }
+    }
+
+    private releaseDeliveryWaiters() {
+        if (this.undelivered > 0 && !this.closed) return;
+        const waiters = this.deliveryWaiters;
+        this.deliveryWaiters = [];
+        waiters.forEach((resolve) => resolve());
+    }
+
+    /** Resolves when every member that was emitted to the stream was read by the consumer, or when the client is closed */
+    untilDelivered(): Promise<void> {
+        if (this.undelivered <= 0 || this.closed) return Promise.resolve();
+        return new Promise((resolve) => this.deliveryWaiters.push(resolve));
+    }
+
+    private bufferedStream(strategy?: { highWaterMark?: number; size?: (chunk: Buffered) => number }): ReadableStream<Buffered> {
         const emitted = longPromise();
-        const config: UnderlyingDefaultSource = {
+        const config: UnderlyingDefaultSource<Buffered> = {
             //
             // Called when starting the stream
             //
@@ -411,22 +558,42 @@ export class Client {
                 });
                 this.modulatorFactory.pause();
                 this.gate.pause();
-                await this.init(
-                    (member) => {
-                        try {
-                            controller.enqueue(member);
-                            resetPromise(emitted);
-                            return true;
-                        } catch (_) {
-                            return false;
-                        }
-                    },
-                    () => {
-                        if (this.closed) return;
-                        controller.close();
-                        this.close().catch((ex) => this.logger.error(`Could not close the client: ${ex}`));
-                    },
-                );
+                try {
+                    await this.init(
+                        (member, delivered) => {
+                            try {
+                                controller.enqueue({ member, delivered });
+                                if (delivered) this.undelivered++;
+                                resetPromise(emitted);
+                                return true;
+                            } catch (_) {
+                                return false;
+                            }
+                        },
+                        () => {
+                            if (this.closed) return;
+                            // The members that are in the buffer are read first: the state is updated when they are.
+                            // The end of the stream is the end of the client: the consumer that sees it can open the same state.
+                            void this.untilDelivered()
+                                .then(() => this.close())
+                                .then(() => {
+                                    try {
+                                        controller.close();
+                                    } catch (_) {
+                                        // The consumer is gone
+                                    }
+                                })
+                                .catch((ex) => {
+                                    this.logger.error(`Could not close the client: ${ex}`);
+                                    controller.error(ex);
+                                });
+                        },
+                    );
+                } catch (error) {
+                    // A client that could not start must not keep its state open: the next client of that state could not open it
+                    await this.close().catch((ex) => this.logger.error(`Could not close the client: ${ex}`));
+                    throw error;
+                }
             },
 
             //
@@ -451,7 +618,7 @@ export class Client {
             },
         };
 
-        return new ReadableStream(config, strategy);
+        return new ReadableStream<Buffered>(config, strategy);
     }
 
     private emit<K extends EventKey<ClientEvents>>(key: K, data: ClientEvents[K]) {
@@ -460,9 +627,18 @@ export class Client {
         });
     }
 
-    public async close() {
-        if (this.closed) return;
+    public close(): Promise<void> {
+        // Error handling, normal completion and cancellation can close the client together. All callers
+        // must wait for the same cleanup, including a delivery write that fails while it is being flushed.
+        return (this.closing ??= this.closeClient());
+    }
+
+    private async closeClient() {
         this.closed = true;
+        this.releaseDeliveryWaiters();
+        // The members that were read by the consumer are in the state before it is closed
+        await this.committing;
+        await this.persistLdes2?.();
         this.gate.unpause();
         this.memberManager?.close();
         this.fetcher?.close();
@@ -470,6 +646,7 @@ export class Client {
         await this.strategy?.cancel();
         await this.clientStateManager.close();
         cleanUpHandlers();
+        if (this.deliveryError) throw this.deliveryError.error;
         this.logger.info("Client has been gracefully closed");
     }
 }
@@ -485,6 +662,8 @@ async function getInfo(
     dereferencer: MessageDereferencer,
     config: Config,
     isLocalDump: boolean,
+    urlIsView: boolean,
+    onViewPage?: (page: FetchedPage) => void,
 ): Promise<LDESInfo> {
     const logger = getLoggerFor("getShape");
 
@@ -553,7 +732,7 @@ async function getInfo(
         logger.debug("Ignoring view since this is a local dump");
     } else if (shapeIds.length === 0 || timestampPaths.length === 0 || versionOfPaths.length === 0 || sequencePaths.length === 0) {
         let tryAgainUrl = viewId.value;
-        if (config.urlIsView) {
+        if (urlIsView) {
             tryAgainUrl = ldesId.value;
         }
         if (tryAgainUrl === fetchedRootUrl) {
@@ -580,9 +759,21 @@ async function getInfo(
                 localFiles: true,
                 fetch: config.fetch,
             });
+            const viewStore = RdfStore.createDefault();
             await new Promise((resolve, reject) => {
-                store.import(resp.data).on("end", resolve).on("error", reject);
+                viewStore.import(resp.data).on("end", resolve).on("error", reject);
             });
+            viewStore.getQuads().forEach((quad) => store.addQuad(quad));
+            if (!urlIsView) {
+                onViewPage?.({
+                    url: resp.url,
+                    data: viewStore,
+                    immutable: /(^|,)\s*immutable\b/i.test(resp.headers?.get("cache-control") ?? ""),
+                    memberCount: 0,
+                    etag: resp.headers?.get("etag") ?? undefined,
+                    status: resp.status,
+                });
+            }
 
             const shapeInView = getObjects(store, null, TREE.terms.shape);
             if (shapeInView) {

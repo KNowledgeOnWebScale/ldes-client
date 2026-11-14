@@ -88,3 +88,25 @@ PR jobs use read-only repository permissions and work for forks without a write 
 `LDES_CLIENT_CONFIG` accepts additional client configuration as JSON and is recorded in the result. Use consistent settings across comparisons.
 
 `lib/fixtures.mjs` generates the data; `lib/replicate.mjs` measures one child process; `lib/report.mjs` computes statistics and reports. Run `npm run test:perf` to check aggregation, regression decisions and report output.
+
+## Latency of a client that follows
+
+[latency.mjs](latency.mjs) answers a different question: how long does it take before a member that is published is emitted by a client that polls, and what does that cost? A feed grows on a local server while a polling client, in a process of its own ([lib/live-client.mjs](lib/live-client.mjs)), follows it. Every member is stamped when it is published and when the client emits it. The history of the feed is replicated first, so that a layout that has a low latency but a slow replication shows.
+
+```sh
+npm run build
+node perf/latency.mjs --formats ldes1,ldes1o,trig --layouts flat-1000,tiered-10 --poll 100 --output reports/perf/latency
+```
+
+| Option | Default / purpose |
+| --- | --- |
+| `--formats` | `ldes1,ldes1o,trig,jelly`: LDES 1.0 unordered and ordered, LDES 2.0 in TriG and in Jelly-RDF |
+| `--layouts` | `flat-10,flat-100,flat-1000`: `flat-N` is a root that lists pages of N members; `chain-N` links the root to the first page and every page to the next (LDES 1.0 only); `tiered-N` and `tchain-N` have the history in pages of 1,000 members and the pages that grow of N members |
+| `--poll` | polling interval in ms, `100` |
+| `--history` / `--live` / `--rate` | members in the history (`2000`), published while the client follows (`150`), and per second (`10`) |
+| `--etag` | `true`: the server sends ETags and answers `If-None-Match` with a 304 |
+| `--state` | `memory` (a `MemoryStorage`) or `none` (nothing configured, which is memory too when following) |
+| `--config` | more client configuration, as JSON |
+| `--output` | writes `<output>.json` and `<output>.md` |
+
+The report has the replication speed of the history, the median, the 95th percentile and the maximum latency, and the requests and KiB per new member. `DEBUG_URLS=1` prints the requests per URL. One run per cell, on one machine, over localhost, with synthetic members: differences of about 10 ms are noise, and there is no network time in the numbers.

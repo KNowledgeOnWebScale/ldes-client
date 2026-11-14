@@ -11,7 +11,7 @@ import { XSD_NS } from "./vocab";
 import { compareKeysCertain, compareLower, isBeforeBookmark, latestEarliest, parseTimestamp } from "./key";
 import { evaluatePath, findMemberId } from "./membership";
 import { isDescriptionMessage, readDescription } from "./description";
-import { memberFromQuads } from "../utils/general";
+import { memberFromQuads, parseQuads, serializeQuads } from "../utils/general";
 import { getLoggerFor } from "../utils/logUtil";
 
 import type { RdfStore } from "rdf-stores";
@@ -21,7 +21,7 @@ import type { Description, OrderMode, Relation } from "./description";
 import type { MembershipRule } from "./membership";
 import type { Member } from "../types";
 import type { MessageLog } from "../fetcher/ldfetchDereferencer";
-import { MAX_BUFFERED_MESSAGES } from "../fetcher/ldfetchDereferencer";
+import { MAX_BUFFERED_MESSAGES, MessageLog as MessageLogClass } from "../fetcher/ldfetchDereferencer";
 
 const logger = getLoggerFor("Ldes2Traversal");
 
@@ -41,7 +41,16 @@ export type Bookmark = {
      * relations: they do not need to be fetched again as long as a relation links to them.
      */
     immutable?: string[];
+    /**
+     * The pages that can change, by the IRI that they are requested at, as they were when a run read them completely and the consumer
+     * had read all their members: a page is requested again with the ETag, and an answer that it has not changed makes
+     * a request that is cheap for the server and for the client, as the description of the page is here.
+     */
+    pages?: Record<string, CachedPage>;
 };
+
+/** A page that is read completely, and can change: its final URL after redirects, ETag, and serialized description */
+export type CachedPage = { url?: string; etag: string; description?: string };
 
 /** A bookmark as it is saved in the state of the client, which is JSON: the members are an array */
 export type SavedBookmark = Omit<Bookmark, "members"> & { members: string[] };
@@ -73,16 +82,21 @@ export type StreamContext = {
 export type Traversal = {
     context: StreamContext;
     bookmark: Bookmark;
-    /** Opens a page: dereferences the IRI */
-    open(url: string, options?: { bufferedMessages?: number }): Promise<MessageLog>;
+    /** Opens a page: dereferences the IRI. With an `etag`, the page is requested with `If-None-Match`, and the answer can be a 304 without messages. */
+    open(url: string, options?: { bufferedMessages?: number; etag?: string }): Promise<MessageLog>;
     /**
      * The number of relations of which the page is requested before it is needed, the one that is awaited included (0 or 1: one by one).
      * They are the relations that are followed next, so a page is never fetched without being followed,
      * unless the consumer stops. Each of them buffers only a few messages, so the memory use is bounded.
      */
     prefetch?: number;
-    /** Called for every member that is not before the bookmark. Returns false when the consumer is gone. */
-    emit(member: Member): Promise<boolean>;
+    /**
+     * Called for every member that is not before the bookmark. Returns false when the consumer is gone.
+     * `advance` moves a bookmark to after the member. It is applied to the bookmark of the traversal when the member was emitted,
+     * and the caller applies it to the bookmark that it saves when the consumer has read the member: members that are
+     * buffered when the consumer stops are not in the saved bookmark, and are emitted by the next run.
+     */
+    emit(member: Member, advance: (bookmark: Bookmark) => void): Promise<boolean>;
     /**
      * Tells whether members with a key in the interval [lower, upper] may still be wanted, which is decided by the
      * conditions of the client. Relations and pages of which this is false are not followed (any more).
@@ -104,6 +118,11 @@ class OpenPage {
     linkedAs?: string;
     /** The page has no relations */
     leaf = true;
+    /** The description message of the page, as it was read, and the ETag of the response: what a next run needs to not read the page again */
+    descriptionMessage?: Quad[];
+    etag?: string;
+    /** The page is the one that was cached: it did not change, and has no members to read */
+    cached = false;
     private index = 0;
     private last?: Key;
 
@@ -194,6 +213,20 @@ function toMember(context: StreamContext, next: Next): Member {
     return member;
 }
 
+/** The log of a page that has not changed: its description message, as it was when the page was read completely, and no members */
+export function cachedLog(url: string, answer: MessageLog, cached: CachedPage): MessageLog {
+    const messages = cached.description ? [parseQuads(cached.description)] : [];
+    const headers = new Headers(answer.headers);
+    // A 304 should carry the ETag, but the page is the one of this ETag in any case
+    if (!headers.has("etag")) headers.set("etag", cached.etag);
+    // The description names the final URL of the original response, even when the relation uses an alias.
+    // Keep it in the cache: the fetch wrapper's empty 304 response need not retain that final URL.
+    const log = MessageLogClass.fromMessages(cached.url ?? url, 200, headers, messages);
+    // It is what a page of an LDES 2.0 is: the messages that were read
+    log.framed = true;
+    return log;
+}
+
 /**
  * Opens a page: reads its description message, if any, and its first member message.
  * @param first the first message of the page, when that has already been read
@@ -208,14 +241,18 @@ async function openPage(
     const { context } = traversal;
     let message = first ? first.quads : await log.next();
     let description: Description | undefined;
+    let descriptionMessage: Quad[] | undefined;
     if (message && message.length > 0 && isDescriptionMessage(message, log.url)) {
         description = readDescription(message, log.url, context.mode, context.defaultOffset);
+        descriptionMessage = message;
         if (isRoot) pageNumber = description.pageNumber ?? 0;
         message = await log.next();
     } else if (isRoot) {
         pageNumber = 0;
     }
     const page = new OpenPage(log.url, pageNumber, log, context);
+    page.etag = log.headers.get("etag") ?? undefined;
+    page.descriptionMessage = descriptionMessage;
     await page.advance(message, false);
     return { page, description };
 }
@@ -227,6 +264,7 @@ type Source = { kind: "page"; page: OpenPage } | { kind: "relation"; relation: R
  */
 export async function synchronize(traversal: Traversal): Promise<number> {
     const { context, bookmark } = traversal;
+    const rootUrl = traversal.root.log.url;
     const pages: OpenPage[] = [];
     const relations: Relation[] = [];
     const seen = new Set<string>();
@@ -234,6 +272,8 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     const markedImmutable = new Set<string>();
     const completed = new Set<string>();
     const referenced = new Set<string>();
+    // The pages that can change and that are read completely in this run, to be requested with their ETag in the next run
+    const observed = new Map<string, CachedPage>();
     let emitted = 0;
 
     // Pages that are requested ahead, by relation: the ones that are followed next.
@@ -244,9 +284,18 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     const prefetchWindow = Math.max(0, traversal.prefetch ?? 0);
     const relevant = (lower: Key | undefined, upper: Key | undefined) => traversal.relevant?.(lower, upper) ?? true;
     let finishedRun = false;
+    /** Opens the page of a relation. A page that has not changed since it was read completely (a 304) is read from the bookmark. */
+    const openRelation = async (relation: Relation, bufferedMessages?: number): Promise<MessageLog> => {
+        const cached = bookmark.pages?.[relation.page];
+        const log = await traversal.open(relation.page, { bufferedMessages, etag: cached?.etag });
+        if (log.status !== 304) return log;
+        if (!cached) throw new Error(`${relation.page} answered HTTP 304, while the client did not send an ETag`);
+        logger.debug(`${relation.page} has not changed (HTTP 304)`);
+        return cachedLog(log.url, log, cached);
+    };
     const prefetchPage = (relation: Relation) => {
         const pending = (async (): Promise<Prefetched> => {
-            const log = await traversal.open(relation.page, { bufferedMessages: PREFETCH_BUFFERED_MESSAGES });
+            const log = await openRelation(relation, PREFETCH_BUFFERED_MESSAGES);
             const first = await log.next();
             if (finishedRun) {
                 log.close();
@@ -331,6 +380,14 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     const finished = (page: OpenPage) => {
         if (page.linkedAs && page.leaf && markedImmutable.has(page.linkedAs)) {
             completed.add(page.linkedAs);
+        } else if (page.etag) {
+            // A page that can change: the next run requests it with this ETag, and does not read it when it answers that it has not changed
+            const key = page.linkedAs ?? rootUrl;
+            observed.set(key, {
+                url: page.url,
+                etag: page.etag,
+                ...(page.descriptionMessage && { description: serializeQuads(page.descriptionMessage) }),
+            });
         }
     };
 
@@ -374,20 +431,26 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.has(next.id.value))) ||
                     (!comparison.certain && bookmark.members.has(next.id.value));
                 if (!skip) {
-                    if (!(await traversal.emit(toMember(context, next)))) {
+                    // Filtered members advance the traversal but not the delivered bookmark. Compare against the
+                    // bookmark being updated, which can still be behind when the consumer reads this member.
+                    const advance = (target: Bookmark) => {
+                        const order = target.key ? compareKeysCertain(next.key, target.key) : { order: 1, certain: true };
+                        if (!order.certain) {
+                            // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
+                            target.key = latestEarliest(target.key!, next.key);
+                            target.members.add(next.id.value);
+                        } else if (order.order > 0) {
+                            target.key = next.key;
+                            target.members = new Set([next.id.value]);
+                        } else {
+                            target.members.add(next.id.value);
+                        }
+                    };
+                    if (!(await traversal.emit(toMember(context, next), advance))) {
                         return emitted;
                     }
                     emitted++;
-                    if (!comparison.certain) {
-                        // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
-                        bookmark.key = latestEarliest(bookmark.key!, next.key);
-                        bookmark.members.add(next.id.value);
-                    } else if (comparison.order > 0) {
-                        bookmark.key = next.key;
-                        bookmark.members = new Set([next.id.value]);
-                    } else {
-                        bookmark.members.add(next.id.value);
-                    }
+                    advance(bookmark);
                 }
                 await page.advance();
                 if (!page.next) {
@@ -424,7 +487,7 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     }
                     log.maxBuffered = MAX_BUFFERED_MESSAGES;
                 } else {
-                    log = await traversal.open(relation.page);
+                    log = await openRelation(relation);
                 }
                 await open(log, relation.pageNumber, false, first, relation.page);
             }
@@ -433,6 +496,8 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         const immutable = new Set([...(bookmark.immutable ?? []), ...completed]);
         bookmark.immutable = [...immutable].filter((url) => referenced.has(url));
         if (bookmark.immutable.length === 0) delete bookmark.immutable;
+        if (observed.size > 0) bookmark.pages = Object.fromEntries(observed);
+        else delete bookmark.pages;
         return emitted;
     } finally {
         traversal.root.log.close();

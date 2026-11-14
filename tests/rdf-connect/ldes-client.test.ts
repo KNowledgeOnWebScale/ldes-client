@@ -2747,9 +2747,11 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Start the processing function
         await Promise.all([processor2.produce(), processor2.transform()]);
 
-        // Check that we didn't get any members but we still fetched mutable fragments
+        // Check that we didn't get any members but we still fetched mutable fragments: the LDES and the view, and the last page,
+        // which is the only page that can have new members. It is only reachable through an immutable page, so it is requested
+        // from the state of the first run.
         expect(processor2.client.memberCount).toBe(0);
-        expect(processor2.client.fragmentCount).toBe(1);
+        expect(processor2.client.fragmentCount).toBe(3);
     });
 
     test("Fetching a Linked List LDES unordered and checking if state is saved and enforced upon resume", async () => {
@@ -2888,9 +2890,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Start the processing function
         await Promise.all([processor2.produce(), processor2.transform()]);
 
-        // Check that we didn't get any members but we still fetched mutable fragments
+        // Check that we didn't get any members but we still fetched mutable fragments: the LDES and the view, and the page that was mutable when the first run ended
         expect(processor2.client.memberCount).toBe(0);
-        expect(processor2.client.fragmentCount).toBe(1);
+        expect(processor2.client.fragmentCount).toBe(3);
     });
 
     test("Fetching a Linked List LDES in ascending order and checking if state is saved and enforced upon resume", async () => {
@@ -3038,9 +3040,9 @@ describe("Functional tests for the rdfc:LdesClient RDF-Connect processor", () =>
         // Start the processing function
         await Promise.all([processor2.produce(), processor2.transform()]);
 
-        // Check that we didn't get any members but we still fetched mutable fragments
+        // Check that we didn't get any members but we still fetched mutable fragments: the LDES and the view, and the page that was mutable when the first run ended
         expect(processor2.client.memberCount).toBe(0);
-        expect(processor2.client.fragmentCount).toBe(1);
+        expect(processor2.client.fragmentCount).toBe(3);
     });
 
     test("Fetching a Linked List LDES in descending ordered and checking if state is saved and enforced upon resume", async () => {

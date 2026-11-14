@@ -17,6 +17,8 @@ type StoredRelation = {
 type NodeChain = {
     chain: RelationChain;
     expected: Set<string>;
+    /** The ETag of the page when it was last fetched: it is revalidated with it, and a 304 means that it has not changed */
+    etag?: string;
 };
 
 export class OrderedStrategy {
@@ -36,6 +38,8 @@ export class OrderedStrategy {
     // With ordering descending LT relations are important
     private readonly launchedRelations: Heap<RelationChain>;
     private readonly relationFinished = new WeakMap<RelationChain, boolean>();
+    /** The pages that were launched in this pass: a poll starts a new one. A page that two pages lead to is requested once, also when it has been handled before the second relation is found. */
+    private readonly launchedTargets = new Set<string>();
 
     private modulator: Modulator<NodeChain, Member>;
     private preloadedPages = new Map<string, FetchedPage>();
@@ -59,6 +63,8 @@ export class OrderedStrategy {
     private readonly hasSequencePath: boolean;
 
     private canceled = false;
+    /** A poll is waiting for its time */
+    private pollScheduled = false;
     private isEmitChecking = false;
     private shouldCheckEmitAgain = false;
     public processingEmit = Promise.resolve();
@@ -105,12 +111,12 @@ export class OrderedStrategy {
             error: (error: unknown) => {
                 this.notifier.error(error, {});
             },
-            scheduleFetch: async ({ target, expected }, { chain }) => {
+            scheduleFetch: async ({ target, expected, etag }, { chain }) => {
                 this.logger.debug(`[fetchNotifier - scheduleFetch] Scheduling fetch for mutable page: ${target}`);
                 chain.target = target;
-                this.toPoll.push({ chain, expected });
+                this.toPoll.push({ chain, expected, etag });
                 // Register in the state that this page needs to be refetched in the future
-                if ((await this.modulator.addMutable(target, { chain, expected })) && !this.canceled) {
+                if ((await this.modulator.addMutable(target, { chain, expected, etag })) && !this.canceled) {
                     this.notifier.mutable({}, {});
                 }
             },
@@ -122,7 +128,7 @@ export class OrderedStrategy {
                     const newChain = chain.push(target.node, this.extractRelation(target));
                     if (newChain.ordering(chain) >= 0) {
                         // Only launch the fetching of this relation if it hasn't been launched already
-                        if (!this.launchedRelations.contains(newChain, (e, o) => e.target === o.target)) {
+                        if (!this.launchedTargets.has(target.node) && !this.launchedRelations.contains(newChain, (e, o) => e.target === o.target)) {
                             this.launchRelation(newChain);
                             const newExpected = new Set([...from.expected, from.target]);
                             toFetch.push({ chain: newChain, expected: newExpected });
@@ -149,13 +155,16 @@ export class OrderedStrategy {
                 this.notifier.error(error, {});
             },
             extracted: async (member) => {
+                // A member of the state of an earlier run can have been emitted since this page was read, and is not in the heap any more
+                if (await this.modulator.wasEmitted(member.id.value)) return;
                 // Only proceed to emit if the member is not already in process of being emitted
                 if (!this.members.contains(member, (e, o) => e.id.value === o.id.value)) {
-                    this.members.push(member);
-                    // Register extracted member in the unemitted list
+                    // Register extracted member in the unemitted list, before it can be emitted: when the consumer has read it, it is removed
+                    // from that list, and a record that is written after that would make the next run emit it again
                     if (await this.modulator.addUnemitted(member.id.value, member)) {
                         this.logger.silly(`[memberNotifier - extracted] Member <${member.id.value}> added to unemitted list`);
                     }
+                    if (!this.members.contains(member, (e, o) => e.id.value === o.id.value)) this.members.push(member);
                 }
             },
             done: async (fragment: FetchedPage, { chain, index }) => {
@@ -182,7 +191,7 @@ export class OrderedStrategy {
             "fetcher",
             new Heap((a, b) => a.item.chain.ordering(b.item.chain)),
             {
-                ready: async ({ item: { chain, expected }, index }) => {
+                ready: async ({ item: { chain, expected, etag }, index }) => {
                     // Restored pending fragments are queued by the modulator.
                     if (!this.relationFinished.has(chain)) this.launchRelation(chain);
                     const preloadedPage = this.preloadedPages.get(chain.target);
@@ -196,7 +205,7 @@ export class OrderedStrategy {
                         );
                     } else if (!(await this.modulator.seen(chain.target))) {
                         this.logger.debug(`[modulator - ready] Ready to fetch page: ${chain.target}`);
-                        await this.fetcher.fetch({ target: chain.target, expected }, { chain, index }, this.fetchNotifier);
+                        await this.fetcher.fetch({ target: chain.target, expected, etag }, { chain, index }, this.fetchNotifier);
                     } else {
                         this.logger.debug(`[modulator - ready] Skipping fetch for previously fetched immutable page: ${chain.target}`);
                         this.relationFinished.set(chain, true);
@@ -219,13 +228,15 @@ export class OrderedStrategy {
                         })),
                     },
                     expected: Array.from(inp.expected),
+                    etag: inp.etag,
                 };
             },
             (inp: unknown) => {
-                const { chain, expected } = <
+                const { chain, expected, etag } = <
                     {
                         chain: { source: string; target: string; relations: StoredRelation[] };
                         expected: string[];
+                        etag?: string;
                     }
                 >inp;
                 const relations = chain.relations.map(({ important, value, valueType }) => {
@@ -249,6 +260,7 @@ export class OrderedStrategy {
                 return {
                     chain: new RelationChain(chain.source, chain.target, relations, undefined, this.compareRelations),
                     expected: new Set(expected),
+                    etag,
                 };
             },
             serializeMember,
@@ -271,15 +283,23 @@ export class OrderedStrategy {
         if (unemitted.length > 0) {
             this.logger.debug(`[start] Found ${unemitted.length} unemitted members in the saved state`);
             for (const member of unemitted) {
-                this.members.push(member);
+                // A member that the consumer has read is not emitted again, whatever the list says
+                if (!(await this.modulator.wasEmitted(member.id.value))) this.members.push(member);
+                else await this.modulator.deleteUnemitted(member.id.value);
             }
         }
 
-        // Schedule any mutable pages found in a previous run
+        // The pages that were mutable when the previous run ended are where new members are, and they are not found from the root when
+        // everything on the way is immutable: a linked list of pages, as OpenLDES servers publish, has a root that never changes
+        // and links to the first page, which is immutable. A new run starts at them (the ones that are in the queue already, and the root,
+        // are requested anyway). The others are requested again when the poll is due.
         const mutableFragments = await this.modulator.getAllMutable();
-        mutableFragments.forEach((fragment) => {
-            this.toPoll.push(fragment);
-        });
+        const queued = new Set((await this.modulator.getAllTodo()).map((node) => node.chain.target));
+        const starts = new Set([url, root?.url]);
+        const revisit = mutableFragments.filter((fragment) => !queued.has(fragment.chain.target) && !starts.has(fragment.chain.target));
+        mutableFragments.filter((fragment) => !revisit.includes(fragment)).forEach((fragment) => this.toPoll.push(fragment));
+        // They are launched before a page is read: a relation that leads to one of them is not launched a second time
+        revisit.forEach((fragment) => this.launchRelation(fragment.chain));
 
         if (root && !traverseRoot) {
             this.background(
@@ -312,9 +332,15 @@ export class OrderedStrategy {
         } else {
             this.logger.debug("[start] Things are already inflight, not adding start url");
         }
+
+        if (revisit.length > 0) {
+            this.logger.debug(`[start] Adding ${revisit.length} mutable pages of the previous replication`);
+            this.background(this.modulator.push(revisit));
+        }
     }
 
     private launchRelation(chain: RelationChain) {
+        this.launchedTargets.add(chain.target);
         this.relationFinished.set(chain, false);
         this.launchedRelations.push(chain);
     }
@@ -369,11 +395,16 @@ export class OrderedStrategy {
 
             // Make sure polling task is only scheduled once
             if (this.polling) {
+                // One poll at a time
+                if (this.pollScheduled) return;
+                this.pollScheduled = true;
                 this.logger.debug(`[_checkEnd] Polling is enabled, setting timeout of ${this.pollInterval || 1000} ms to poll`);
                 setTimeout(() => {
+                    this.pollScheduled = false;
                     if (this.canceled) return;
 
                     this.notifier.pollCycle({}, {});
+                    this.launchedTargets.clear();
                     const toPollArray = this.toPoll.toArray();
                     this.logger.debug(`[_checkEnd] Let's repoll (${JSON.stringify(toPollArray.map((x) => x.chain.target))})`);
                     this.toPoll.clear();
@@ -555,27 +586,35 @@ export class OrderedStrategy {
     }
 
     private async emitIfNotOld(member: Member) {
+        // Make sure we keep the original member Id. It might change if materialization is enabled
+        const memberIri = member.id.value;
+        // A member that is not in the heap any more, and is not in the state either, must not be found again by a page that is
+        // extracted while this is going on: it is being emitted from here on. One that is being emitted is not emitted again.
+        if (!this.modulator.markEmitting(memberIri)) return;
         let isOld: boolean;
         try {
+            // A member of which the state says that the consumer has read it, is not emitted again: a page can have put it in the heap again
+            if (await this.modulator.wasEmittedInState(memberIri)) {
+                this.modulator.unmarkEmitting(memberIri);
+                await this.modulator.deleteUnemitted(memberIri);
+                return;
+            }
             // In the ordered strategy, we need to check again if this is an older version of the member
             // when emitting latest versions only, because older versions might have been fetched and queued
             // at a previous point in time.
             isOld = await memberIsOld(member, this.modulator);
         } catch (ex) {
             // Things are shutting down, stop processing
+            this.modulator.unmarkEmitting(memberIri);
             return;
         }
         if (!isOld) {
-            // Emit member and record it as emitted
-            // Make sure we keep the original member Id. It might change if materialization is enabled
-            const memberIri = member.id.value;
-            const streamed = this.notifier.member(member, {}) as boolean;
-            if (streamed) {
-                // We need this check in case the client is shut down while emitting
-                await this.modulator.addEmitted(memberIri);
-            }
+            // The member stays in the unemitted list of the state until the consumer has read it, and is emitted by the next run if it did not
+            const streamed = this.notifier.member(member, { delivered: () => this.modulator.addEmitted(memberIri) }) as boolean;
+            if (!streamed) this.modulator.unmarkEmitting(memberIri);
         } else {
             // Remove member from unemitted list as a newer version was already available/emitted
+            this.modulator.unmarkEmitting(memberIri);
             await this.modulator.deleteUnemitted(member.id.value);
         }
     }

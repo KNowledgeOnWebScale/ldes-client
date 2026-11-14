@@ -17,6 +17,7 @@ let after: Date | undefined;
 let before: Date | undefined;
 let materialize: boolean = false;
 let lastVersionOnly: boolean = false;
+let skipMissingPages: boolean = false;
 let conditionFile: string | undefined;
 let paramPollInterval: number;
 let urlIsView = false;
@@ -60,6 +61,7 @@ program
     )
     .option("--context-min-ttl <seconds>", "keep external JSON-LD contexts for at least this long, whatever their cache headers say", "600")
     .option("--no-context-cache", "don't cache external JSON-LD contexts")
+    .option("--skip-missing-pages", "skip a page that a relation leads to and that is not found (HTTP 404), with a warning, instead of failing")
     .option("--http-codes [codes...]", "What HTTP error codes to retry")
     .option("--last-version-only", "emit only the latest available version of every member")
     .option("-l --loose", "ignores if the page URL does not correspond to the tree:Node IRI when following tree:relation")
@@ -92,6 +94,7 @@ program
         conditionFile = program.condition;
         materialize = program.materialize;
         lastVersionOnly = program.lastVersionOnly;
+        skipMissingPages = program.skipMissingPages === true;
         defaultTimezone = program.defaultTimezone;
         includeMetadata = program.metadata;
         startFresh = program.startFresh;
@@ -164,6 +167,7 @@ async function main() {
             defaultTimezone,
             materialize,
             lastVersionOnly,
+            skipMissingPages,
             includeMetadata,
             concurrentFetches: fetch_config.concurrent,
             startFresh,
