@@ -3,7 +3,7 @@
  * they filter the members, and prune the relations and pages that cannot lead to wanted members.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { replicateLDES, intoConfig } from "../../lib/client";
+import { replicateLDES, intoConfig, MemoryStorage } from "../../lib/client";
 import { MaxCountCondition, parse_condition } from "../../lib/condition";
 import { MockServer } from "./server";
 
@@ -48,6 +48,25 @@ const conditionOn = (path: string, relationType: string, value: string, compareT
     );
 
 describe("Conditions in an LDES 2.0", () => {
+    describe.each([false, true])("filtered members with an existing bookmark: %s", (earlier) => {
+        test.each(["2026-01-01T00:00:00Z", "2026-01-01T00:30:00"])(
+            "a filtered member at %s does not prevent the next delivered member from advancing the bookmark",
+            async (filteredTime) => {
+                server.trig(
+                    "/root",
+                    description,
+                    ...(earlier ? [record("earlier", "2025-12-30T00:00:00Z", "; ex:size 50 ")] : []),
+                    record("filtered", filteredTime, "; ex:size 1 "),
+                    record("accepted", "2026-01-01T00:00:00Z", "; ex:size 50 "),
+                );
+                const condition = conditionOn("ex:size", "GreaterThanOrEqualToRelation", "10", "integer");
+                const storage = new MemoryStorage();
+                expect(ids((await collect(condition, { storage })).members)).toEqual(earlier ? ["earlier", "accepted"] : ["accepted"]);
+                expect((await collect(condition, { storage })).members).toEqual([]);
+            },
+        );
+    });
+
     const setup = () => {
         server.trig(
             "/root",

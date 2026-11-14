@@ -46,12 +46,17 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   By default, a 404 is an error, as the specification says, and as the page is in the state, so is every run after it. A server removes a
   page with 410. `HttpStatusError` is the error for a response with an error status.
 - `perf/latency.mjs` measures the latency of a client that follows a growing feed, the replication of its history, and what a poll costs.
+- A failed delivery-state write fails the stream and `close()` after storage is closed. Concurrent calls to `close()` wait for
+  the same cleanup, including writes that fail during shutdown, instead of reporting successful completion with unsaved progress.
 
 ### LDES 2.0 (experimental)
 
 - The bookmark of the state has `pages`: the ETag and the description message of the pages that can change, as they were when a run read
   them completely and the consumer had read all their members. It is saved when a run has finished, as `immutable` is, and the key
   and members of the bookmark are those of the members that the consumer has read.
+- Revalidated pages retain their final URL after redirects, so cached descriptions and their relations are interpreted correctly.
+- A delivered member advances its own bookmark even when filtered members advanced the traversal first. Members sharing a timestamp
+  with a filtered member are not repeated on resume, and mixed timestamps with and without timezones do not fail the state update.
 
 ## 0.4.0
 

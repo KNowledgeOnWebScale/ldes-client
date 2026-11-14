@@ -87,6 +87,38 @@ async function replicate(options: { limit?: number; highWaterMark?: number; orde
 }
 
 describe("An LDES 2.0 that is resumed", () => {
+    test("a redirected index is revalidated using its final URL to interpret the cached description", async () => {
+        publish(1);
+        const base = server.base;
+        const rootPage = server.routes.get("/ldes2/root")!;
+        rootPage.body = rootPage.body.replace(`${base}/ldes2/p1`, `${base}/ldes2/alias`);
+        server.redirect("/ldes2/alias", "/ldes2/index");
+        server.route("/ldes2/index", {
+            type: "application/trig",
+            etag: true,
+            body: `VERSION "1.2-messages"
+PREFIX ldes: <https://w3id.org/ldes#>
+<${base}/ldes2/index> ldes:relation [ ldes:page <${base}/ldes2/p1> ] .`,
+        });
+        expect((await replicate()).ids).toEqual([memberId(0)]);
+
+        // Only the leaf grows. The root and redirected index retain their ETags.
+        server.routes.get("/ldes2/p1")!.body += `\nMESSAGE\nex:m1 a ex:Record ; dcterms:created "${timeOf(1)}"^^xsd:dateTime .`;
+        const resumed = await replicate();
+        expect(resumed.error).toBeUndefined();
+        expect(resumed.ids).toEqual([memberId(1)]);
+        expect(resumed.log.map((request) => [request.url, request.status])).toEqual([
+            ["/ldes2/root", 304],
+            ["/ldes2/alias", 302],
+            ["/ldes2/index", 304],
+            ["/ldes2/p1", 200],
+        ]);
+        const unchanged = await replicate();
+        expect(unchanged.error).toBeUndefined();
+        expect(unchanged.ids).toEqual([]);
+        expect(unchanged.log.find((request) => request.url === "/ldes2/p1")?.status).toBe(304);
+    });
+
     test("is replicated completely, and a second replication emits nothing and gets 304s for what can change", async () => {
         publish(23);
         const run1 = await replicate();

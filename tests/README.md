@@ -51,3 +51,13 @@ The tests in [resume/](resume/) model four feeds as they are published (Marine R
  * A client that follows without a configured state does not request pages that are immutable again, and requests pages that can change with their `ETag`, in LDES 1.0 (unordered and ordered) and LDES 2.0
  * A page that was removed is an error (404) or an empty page (410), and the state of the client is not locked by the error
  * An entry that does not work (a redirect that is not valid any more) is an error, and the state is free for the next client
+
+The two Marine Regions polling cases remain skipped because the fixture advertises a daily polling interval.
+
+Two checks are opt-in:
+
+ * `RESUME_STATS=1 npx vitest run tests/resume/interrupt-stats.test.ts` measures losses, duplicates and errors over 240 interrupted
+   replications (four feeds, two orders, two buffer sizes, 15 repetitions). Its counts are written to `/tmp/resume-interrupt-stats.txt`
+   by default, or to `EXPLORE_OUT`.
+ * `RIVERBENCH=1 npx vitest run tests/ldes2/ldes2.test.ts -t 'the real RiverBench dataset'` downloads the live Jelly dataset and checks
+   that it contains 10,000 members with 116 quads in the first member. This requires network access; an offline fixture runs by default.

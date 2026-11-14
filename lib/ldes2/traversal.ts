@@ -49,8 +49,8 @@ export type Bookmark = {
     pages?: Record<string, CachedPage>;
 };
 
-/** A page that is read completely, and can change: the ETag of the response, and the description message of the page, serialized */
-export type CachedPage = { etag: string; description?: string };
+/** A page that is read completely, and can change: its final URL after redirects, ETag, and serialized description */
+export type CachedPage = { url?: string; etag: string; description?: string };
 
 /** A bookmark as it is saved in the state of the client, which is JSON: the members are an array */
 export type SavedBookmark = Omit<Bookmark, "members"> & { members: string[] };
@@ -219,7 +219,9 @@ export function cachedLog(url: string, answer: MessageLog, cached: CachedPage): 
     const headers = new Headers(answer.headers);
     // A 304 should carry the ETag, but the page is the one of this ETag in any case
     if (!headers.has("etag")) headers.set("etag", cached.etag);
-    const log = MessageLogClass.fromMessages(url, 200, headers, messages);
+    // The description names the final URL of the original response, even when the relation uses an alias.
+    // Keep it in the cache: the fetch wrapper's empty 304 response need not retain that final URL.
+    const log = MessageLogClass.fromMessages(cached.url ?? url, 200, headers, messages);
     // It is what a page of an LDES 2.0 is: the messages that were read
     log.framed = true;
     return log;
@@ -289,7 +291,7 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         if (log.status !== 304) return log;
         if (!cached) throw new Error(`${relation.page} answered HTTP 304, while the client did not send an ETag`);
         logger.debug(`${relation.page} has not changed (HTTP 304)`);
-        return cachedLog(relation.page, log, cached);
+        return cachedLog(log.url, log, cached);
     };
     const prefetchPage = (relation: Relation) => {
         const pending = (async (): Promise<Prefetched> => {
@@ -381,7 +383,11 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         } else if (page.etag) {
             // A page that can change: the next run requests it with this ETag, and does not read it when it answers that it has not changed
             const key = page.linkedAs ?? rootUrl;
-            observed.set(key, { etag: page.etag, ...(page.descriptionMessage && { description: serializeQuads(page.descriptionMessage) }) });
+            observed.set(key, {
+                url: page.url,
+                etag: page.etag,
+                ...(page.descriptionMessage && { description: serializeQuads(page.descriptionMessage) }),
+            });
         }
     };
 
@@ -425,13 +431,15 @@ export async function synchronize(traversal: Traversal): Promise<number> {
                     (comparison.certain && comparison.order === 0 && (context.mode === "implicit" || bookmark.members.has(next.id.value))) ||
                     (!comparison.certain && bookmark.members.has(next.id.value));
                 if (!skip) {
-                    // The same step for every bookmark that follows the traversal: the key and the members, decided by the order of this member
+                    // Filtered members advance the traversal but not the delivered bookmark. Compare against the
+                    // bookmark being updated, which can still be behind when the consumer reads this member.
                     const advance = (target: Bookmark) => {
-                        if (!comparison.certain) {
+                        const order = target.key ? compareKeysCertain(next.key, target.key) : { order: 1, certain: true };
+                        if (!order.certain) {
                             // Neither earlier nor later for certain: the bookmark is the key with the latest earliest instant
                             target.key = latestEarliest(target.key!, next.key);
                             target.members.add(next.id.value);
-                        } else if (comparison.order > 0) {
+                        } else if (order.order > 0) {
                             target.key = next.key;
                             target.members = new Set([next.id.value]);
                         } else {

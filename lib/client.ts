@@ -96,6 +96,8 @@ export class Client {
     /** The updates of the state for members that were read by the consumer, and that are not done yet, in the order of the members */
     private waitingCommits: Array<NonNullable<MemberDelivery["delivered"]>> = [];
     private committing?: Promise<void>;
+    private deliveryError?: { error: unknown };
+    private closing?: Promise<void>;
     /** The members that are emitted to the stream, and that the consumer has not read yet */
     private undelivered = 0;
     private deliveryWaiters: Array<() => void> = [];
@@ -497,8 +499,12 @@ export class Client {
 
     private async drainCommits() {
         const failed = (ex: unknown) => {
-            if (this.closed) this.logger.debug(`The state of a member could not be updated after the client was closed: ${ex}`);
-            else this.logger.error(`Could not update the state of a member: ${ex}`);
+            if (this.deliveryError) return;
+            this.deliveryError = { error: ex };
+            this.logger.error(`Could not update the state of a member: ${ex}`);
+            // These writes started before storage closes, including when close() is flushing them. A failure
+            // must fail the stream and close(), rather than report that progress was saved successfully.
+            this.emit("error", ex);
         };
         // Not before the caller has stored the promise of this drain: it is cleared when the drain ends
         await Promise.resolve();
@@ -570,13 +576,16 @@ export class Client {
                             // The end of the stream is the end of the client: the consumer that sees it can open the same state.
                             void this.untilDelivered()
                                 .then(() => this.close())
-                                .catch((ex) => this.logger.error(`Could not close the client: ${ex}`))
                                 .then(() => {
                                     try {
                                         controller.close();
                                     } catch (_) {
                                         // The consumer is gone
                                     }
+                                })
+                                .catch((ex) => {
+                                    this.logger.error(`Could not close the client: ${ex}`);
+                                    controller.error(ex);
                                 });
                         },
                     );
@@ -618,8 +627,13 @@ export class Client {
         });
     }
 
-    public async close() {
-        if (this.closed) return;
+    public close(): Promise<void> {
+        // Error handling, normal completion and cancellation can close the client together. All callers
+        // must wait for the same cleanup, including a delivery write that fails while it is being flushed.
+        return (this.closing ??= this.closeClient());
+    }
+
+    private async closeClient() {
         this.closed = true;
         this.releaseDeliveryWaiters();
         // The members that were read by the consumer are in the state before it is closed
@@ -632,6 +646,7 @@ export class Client {
         await this.strategy?.cancel();
         await this.clientStateManager.close();
         cleanUpHandlers();
+        if (this.deliveryError) throw this.deliveryError.error;
         this.logger.info("Client has been gracefully closed");
     }
 }
