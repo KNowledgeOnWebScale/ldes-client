@@ -216,11 +216,10 @@ describe.each(selected)("A feed published like $name", (feed: Feed) => {
     });
 
     /**
-     * A feed that removes pages, as a retention policy does (Marine Regions, the Rijksmuseum and Telraam all have one).
+     * A feed that removes pages, as a retention policy does (Marine Regions, the Rijksmuseum and MINT declare one).
      * The page was found by the first run, which was stopped before it was read, and is gone at the next. The specification says that
      * a client reports an error for a page that answers 404 (a removed page is a 410), and the page is in the state of the client:
-     * the run fails at that page, and so does every run after it. `skipMissingPages` skips the page with a warning, and the next runs
-     * do not request it.
+     * the run fails at that page, and so does every run after it, until the server answers with a 410.
      */
     const removeUnreadPage = async (context: { skip: () => never }) => {
         feed.publish(server, first);
@@ -244,17 +243,7 @@ describe.each(selected)("A feed published like $name", (feed: Feed) => {
         }
     });
 
-    test("is resumed when a page that was found, but not read yet, is removed, and skipMissingPages is set", async (context) => {
-        const unread = await removeUnreadPage(context);
-        for (const attempt of [1, 2]) {
-            const retry = await replicate(feed.entry(server), {}, { ...feed.options, skipMissingPages: true });
-            expect(retry.error, `attempt ${attempt}: ${retry.error}\n${show(retry.log)}`).toBeUndefined();
-            // The page is requested once, and never again: it is not in the state of the client any more
-            expect(retry.log.filter((r) => r.url === unread).length, show(retry.log)).toBe(attempt === 1 ? 1 : 0);
-        }
-    });
-
-    test("is not resumed past a page that is gone (410): that is a page without members and relations, and no error", async (context) => {
+    test("is resumed past a page that is gone (410): that is a page without members and relations, and no error", async (context) => {
         const unread = await removeUnreadPage(context);
         server.route(unread, { body: "", type: "text/html", status: 410 });
         const retry = await run();

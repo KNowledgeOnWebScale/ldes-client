@@ -42,9 +42,6 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   of which the consumer read the members. An LDES 2.0 has the ETag and the description message of such a page in its bookmark.
 - A client that follows (`polling: true`) and has no `statePath` or `storage` keeps its state in memory. Without it, the unordered
   strategy requested every page again in every poll.
-- `skipMissingPages` (`--skip-missing-pages`): skip a page of an LDES 1.0 that answers 404 with a warning, and do not request it again.
-  By default, a 404 is an error, as the specification says, and as the page is in the state, so is every run after it. A server removes a
-  page with 410. `HttpStatusError` is the error for a response with an error status.
 - `perf/latency.mjs` measures the latency of a client that follows a growing feed, the replication of its history, and what a poll costs.
 - A failed delivery-state write fails the stream and `close()` after storage is closed. Concurrent calls to `close()` wait for
   the same cleanup, including writes that fail during shutdown, instead of reporting successful completion with unsaved progress.

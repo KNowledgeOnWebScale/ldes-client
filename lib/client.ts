@@ -341,10 +341,7 @@ export class Client {
         }
 
         // Component that manages the fetching of RDF data over HTTP
-        this.fetcher = new Fetcher(this.dereferencer, this.config.loose, condition, this.config.defaultTimezone, this.config.fetch, {
-            skip: this.config.skipMissingPages === true,
-            entries: [this.config.url, root.url, viewId.value, ldesUri.value],
-        });
+        this.fetcher = new Fetcher(this.dereferencer, this.config.loose, condition, this.config.defaultTimezone, this.config.fetch);
 
         const notifier = this.buildNotifier(info, streamOut, close, condition);
 

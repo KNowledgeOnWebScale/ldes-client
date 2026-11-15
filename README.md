@@ -96,7 +96,6 @@ LDES 2.0 members contain all quads of their message; SHACL/CBD extraction option
 | `--basic-auth <username>:<password>` | HTTP Basic authentication. |
 | `--retry-count <number>` | Retry limit; default `3`, with `0` for unlimited retries. It also applies to a page of which the transfer is interrupted. |
 | `--http-codes <codes...>` | HTTP status codes to retry. |
-| `--skip-missing-pages` | LDES 1.0: skip a page that a relation leads to and that answers `404` with a warning, instead of failing. See [Pages that are removed](#pages-that-are-removed). |
 | `--safe` | Retry thrown fetch errors. |
 | `--context-min-ttl <seconds>` | Keep external JSON-LD contexts for at least this long, whatever their cache headers say; default `600`. |
 | `--no-context-cache` | Do not cache external JSON-LD contexts. |
@@ -249,7 +248,7 @@ The example uses named-graph membership, timestamp ordering and an immutable dat
 
 ### Pages that are removed
 
-A server that applies a retention policy removes pages. The LDES specification tells a server to answer `410 Gone` for such a page, which is a page without members and relations for the client. Any other 4xx or 5xx status code is an error, also `404`: the client stops, and as the page is in its state, the next runs stop at it too. When a server answers `404` for the pages that it removed, set `skipMissingPages` (CLI: `--skip-missing-pages`): the client skips such a page of an LDES 1.0 with a warning, and does not request it again. The members that can only be reached through that page are not replicated. The page that the client starts at is always an error.
+A server that applies a retention policy removes pages. The LDES specification tells a server to answer `410 Gone` for such a page, which is a page without members and relations for the client. Any other 4xx or 5xx status code is an error, also `404`: the client stops, and as the page is in its state, the next runs stop at it too until the server answers with a `410`.
 
 ### State Management
 
