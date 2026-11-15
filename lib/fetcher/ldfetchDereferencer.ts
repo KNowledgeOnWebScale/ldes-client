@@ -217,6 +217,14 @@ export class MessageLog implements AsyncIterable<Quad[]> {
         return log;
     }
 
+    /** A log of messages that were read before, for a page that has not changed since */
+    static fromMessages(url: string, status: number, headers: Headers, messages: Quad[][]): MessageLog {
+        const log = new MessageLog(url, status, headers, "");
+        log.queue = [...messages];
+        log.ended = true;
+        return log;
+    }
+
     /**
      * When the transfer is interrupted, the document is requested again, and the log continues after the messages that
      * it had read. Pages of an LDES are append-only logs, so these messages are the same again: if they are not, the log fails.

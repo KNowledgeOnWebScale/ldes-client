@@ -12,7 +12,7 @@ import { V } from "./vocab";
 import { isOffset } from "./key";
 import { detectVersion, isEventStreamDescription, toStore } from "./description";
 import { membershipRule } from "./membership";
-import { synchronize } from "./traversal";
+import { cachedLog, synchronize } from "./traversal";
 
 import type { KVStore } from "../storage";
 import type { Quad, Term } from "@rdfjs/types";
@@ -30,8 +30,10 @@ const logger = getLoggerFor("Ldes2Client");
 const df = new DataFactory();
 
 export type Ldes2Hooks = {
-    /** Hands a member to the consumer. Returns false when the consumer is gone. */
-    member(member: Member): boolean;
+    /** Hands a member to the consumer. Returns false when the consumer is gone. `delivered` is called when the consumer has read the member. */
+    member(member: Member, delivered?: () => Promise<void> | void): boolean;
+    /** Resolves when the consumer has read all members that were handed to it, or when it is gone */
+    delivered(): Promise<void>;
     fragment(page: FetchedPage): void;
     pollCycle(): void;
     mutable(): void;
@@ -145,13 +147,15 @@ export function readContext(first: Quad[] | undefined, configuredTimezone?: stri
  * so that problems with the root page are reported to the caller.
  * The synchronization runs themselves continue in the background, until the stream is finished or closed.
  */
-export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }> {
+export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo; persist: () => Promise<void> }> {
     const { config, dereferencer, hooks } = start;
     const { context, info } = readContext(start.root.first, config.defaultTimezone);
     start.onDescription?.(info);
     const rootUrl = start.root.log.url;
     const bookmarkKey = config.url;
 
+    // The bookmark that is saved: where the consumer has read until. The traversal has a bookmark of its own, that is
+    // ahead of it by the members that are in the buffer of the stream.
     let bookmark: Bookmark = { members: new Set() };
     if (start.bookmarks) {
         const saved = await start.bookmarks.get(bookmarkKey).catch(() => undefined);
@@ -159,7 +163,8 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
     }
     const persist = async () => {
         await start.bookmarks?.put(bookmarkKey, saveBookmark(bookmark)).catch((ex) => {
-            logger.error(`Could not save the bookmark: ${ex}`);
+            if (hooks.isClosed()) logger.debug(`Could not save the bookmark after the client was closed: ${ex}`);
+            else logger.error(`Could not save the bookmark: ${ex}`);
         });
     };
 
@@ -174,24 +179,35 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
         let first = true;
         while (!hooks.isClosed()) {
             if (!first) {
-                // Every later run starts again from the root page
-                const log = await dereferencer.dereferenceMessages(rootUrl, {
+                // Every later run starts again from the root page. It is requested with the ETag that it had when it was read
+                // completely, and a 304 means that it is as it was: its description is in the bookmark.
+                const cached = bookmark.pages?.[rootUrl];
+                const answer = await dereferencer.dereferenceMessages(rootUrl, {
                     fetch: config.fetch,
                     localFiles: true,
+                    headers: cached ? { "If-None-Match": cached.etag } : undefined,
                 });
+                const log = answer.status === 304 && cached ? cachedLog(rootUrl, answer, cached) : answer;
                 root = { log, first: await log.next() };
             }
             first = false;
 
+            const followed = loadBookmark(saveBookmark(bookmark));
             const traversal: Traversal = {
                 context,
-                bookmark,
+                bookmark: followed,
                 root,
                 // As many pages as the client may request at the same time
                 prefetch: config.concurrentFetches,
-                open: (url, options) => dereferencer.dereferenceMessages(url, { fetch: config.fetch, localFiles: true, ...options }),
+                open: (url, { etag, ...options } = {}) =>
+                    dereferencer.dereferenceMessages(url, {
+                        fetch: config.fetch,
+                        localFiles: true,
+                        ...options,
+                        ...(etag && { headers: { "If-None-Match": etag } }),
+                    }),
                 relevant,
-                emit: async (member) => {
+                emit: async (member, advance) => {
                     await hooks.gate.wait();
                     if (hooks.isClosed()) return false;
                     if (!inWindow(member, config)) return true;
@@ -207,7 +223,7 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
                         return true;
                     }
                     condition.memberEmitted(member);
-                    return hooks.member(member);
+                    return hooks.member(member, () => advance(bookmark));
                 },
                 onPage: (url, description: Description | undefined) => {
                     hooks.fragment({
@@ -219,6 +235,15 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
                 },
             };
             const emitted = await synchronize(traversal);
+            // What the consumer has read is what is saved: the run is only finished when it has read all members
+            await hooks.delivered();
+            // The pages that were read completely are known when the traversal reached its end, and the consumer is not gone
+            if (!hooks.isClosed()) {
+                if (followed.immutable) bookmark.immutable = followed.immutable;
+                else delete bookmark.immutable;
+                if (followed.pages) bookmark.pages = followed.pages;
+                else delete bookmark.pages;
+            }
             await persist();
             logger.debug(`Synchronization run finished: ${emitted} new members`);
 
@@ -234,7 +259,7 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo }>
         await persist();
         hooks.error(ex);
     });
-    return { info };
+    return { info, persist };
 }
 
 /**

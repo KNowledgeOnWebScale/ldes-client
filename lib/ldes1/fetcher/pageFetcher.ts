@@ -92,6 +92,8 @@ export class Fetcher {
     }
 
     async fetch<S>(node: Node, state: S, notifier: Notifier<FetchEvent, S>) {
+        // A client that is closed does not start requests for the pages that were queued
+        if (this.closed) return;
         try {
             const options: DereferenceOptions = {
                 localFiles: true,
@@ -181,11 +183,12 @@ export class Fetcher {
         }
 
         if (!cache.immutable && !this.closed) {
-            notifier.scheduleFetch(
+            // Before the members are extracted: the state of the page is written, and what is written when the consumer has read them comes after
+            await notifier.scheduleFetch(
                 {
                     ...node,
                     target: page.url,
-                    etag: cache.etag ?? node.etag,
+                    etag: cache.etag ?? page.etag ?? node.etag,
                     relations: toFetch.map(({ target }) => target.node),
                 },
                 state,

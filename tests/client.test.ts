@@ -1126,8 +1126,9 @@ describe("Client tests", () => {
                     memRes2 = await members2.read();
                 }
 
-                // Only 2 fragments are expected due to immutable fragments
-                expect(client2.fragmentCount).toBe(2);
+                // The immutable fragment is not requested again. The LDES, the view and the fragment that was mutable when the first run ended are:
+                // that fragment is where new members are, and it is not found through the relations when the fragment before it is immutable
+                expect(client2.fragmentCount).toBe(3);
                 // Check the total count of members
                 expect(client1.memberCount + client2.memberCount).toBe(6);
                 // Check that we received all members
@@ -1228,8 +1229,9 @@ describe("Client tests", () => {
                     memRes2 = await members2.read();
                 }
 
-                // Only 2 fragments are expected due to immutable fragments
-                expect(client2.fragmentCount).toBe(2);
+                // The immutable fragment is not requested again. The LDES, the view and the fragment that was mutable when the first run ended are:
+                // that fragment is where new members are, and it is not found through the relations when the fragment before it is immutable
+                expect(client2.fragmentCount).toBe(3);
                 // Check the total count of members
                 expect(client1.memberCount + client2.memberCount).toBe(6);
                 // Check that we received all members

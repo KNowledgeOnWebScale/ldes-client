@@ -82,6 +82,13 @@ export type Notifier<Events, S> = {
     [K in keyof Events]: (event: Events[K], state: S) => unknown;
 };
 
+/**
+ * What a strategy hands to the notifier with a member. A member is emitted when the consumer of the stream has read it,
+ * not when it is put in the buffer of the stream: `delivered` is called then, and is where the state is updated.
+ * Members that are in the buffer when the consumer stops are not delivered, and are emitted by the next run.
+ */
+export type MemberDelivery = { delivered?: () => Promise<void> | void };
+
 export type StrategyEvents = {
     member: Member;
     fragment: FetchedPage;
