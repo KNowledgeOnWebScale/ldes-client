@@ -6,19 +6,7 @@ All notable changes of the `ldes-client` package. The support for LDES 1.0 is st
 and changes with them. Such changes can be made in any release, also when they are not backwards compatible,
 and they are listed under *LDES 2.0 (experimental)* in every release. Pin the version of this package if you depend on it.
 
-## Unreleased
-
-- External JSON-LD contexts are cached following HTTP caching semantics (using the HTTP cache and the context loader of ldfetch 1.3.10) with a
-  minimum TTL of 10 minutes, instead of a fixed TTL that ignored the cache headers. Stale contexts are revalidated with
-  `ETag`/`Last-Modified`, and `Cache-Control: no-store` is honoured. Configure it with the new `contextCache` option
-  (`minTTL`, `maxTTL`, `store`, or `false`). Pages are still not cached
-  ([#32](https://github.com/KNowledgeOnWebScale/ldes-client/issues/32)).
-- A page of which the server drops the connection after it sent a successful response and a part of the body is requested
-  again, instead of failing the replication with `TypeError: terminated`. This holds for LDES 1.0 and LDES 2.0: in an
-  LDES 2.0 the client continues after the members that it read already, and it fails when the page has changed in between.
-  The schedule is that of the retries of HTTP codes (`--retry-count`, or `transferRetry` in the library). When a page keeps
-  being interrupted, the error names the page. Errors are logged with their message, instead of `{}`
-  ([#107](https://github.com/KNowledgeOnWebScale/ldes-client/issues/107)).
+## 0.6.0
 
 - A member is emitted when the consumer of the stream has read it, and not when it is put in the buffer of the stream: the state
   (the members that were emitted, the pages that were finished, the bookmark of an LDES 2.0) is updated then. A consumer that stops
@@ -45,6 +33,7 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
 - `perf/latency.mjs` measures the latency of a client that follows a growing feed, the replication of its history, and what a poll costs.
 - A failed delivery-state write fails the stream and `close()` after storage is closed. Concurrent calls to `close()` wait for
   the same cleanup, including writes that fail during shutdown, instead of reporting successful completion with unsaved progress.
+- The LICENSE (MIT) is part of the repository.
 
 ### LDES 2.0 (experimental)
 
@@ -54,6 +43,32 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
 - Revalidated pages retain their final URL after redirects, so cached descriptions and their relations are interpreted correctly.
 - A delivered member advances its own bookmark even when filtered members advanced the traversal first. Members sharing a timestamp
   with a filtered member are not repeated on resume, and mixed timestamps with and without timezones do not fail the state update.
+- `--after` and `--before` (`after` and `before` in the library) exclude their bounds on the timestamp of a member, as they do in an LDES 1.0.
+
+## 0.5.0
+
+- Storage is pluggable: the state goes through a `Storage` interface (`storage` option), with LevelDB (`statePath`, the default on Node.js),
+  `MemoryStorage` and `DOSqliteStorage` (Cloudflare Durable Objects) as implementations. Injected storage enables resume tracking without
+  `statePath`. A `storage` that returns a promise from `init(fresh)` is awaited before the client creates its stores. See *State Management* in the README.
+- The client runs on Cloudflare Workers (workerd) as well as on Node.js and in the browser. LevelDB and Winston are only loaded where they are available,
+  and a CI job runs the built package in workerd.
+- External JSON-LD contexts are cached following HTTP caching semantics (using the HTTP cache and the context loader of ldfetch 1.3.10) with a
+  minimum TTL of 10 minutes, instead of a fixed TTL that ignored the cache headers. Stale contexts are revalidated with
+  `ETag`/`Last-Modified`, and `Cache-Control: no-store` is honoured. Configure it with the new `contextCache` option
+  (`minTTL`, `maxTTL`, `store`, or `false`). Pages are still not cached
+  ([#32](https://github.com/KNowledgeOnWebScale/ldes-client/issues/32)).
+- A page of which the server drops the connection after it sent a successful response and a part of the body is requested
+  again, instead of failing the replication with `TypeError: terminated`. This holds for LDES 1.0 and LDES 2.0: in an
+  LDES 2.0 the client continues after the members that it read already, and it fails when the page has changed in between.
+  The schedule is that of the retries of HTTP codes (`--retry-count`, or `transferRetry` in the library). When a page keeps
+  being interrupted, the error names the page. Errors are logged with their message, instead of `{}`
+  ([#107](https://github.com/KNowledgeOnWebScale/ldes-client/issues/107)).
+- Code is formatted with Prettier at a print width of 150, enforced by a hook on commit.
+
+### LDES 2.0 (experimental)
+
+- The members of the bookmark are looked up in a `Set`, which speeds up resuming an LDES 2.0 with a large bookmark. The saved format did not change:
+  state saved by earlier versions still loads.
 
 ## 0.4.0
 

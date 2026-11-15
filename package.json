@@ -1,7 +1,7 @@
 {
   "name": "ldes-client",
   "description": "This package provides common tooling to work with LDESs.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "main": "dist/lib/client.js",
   "imports": {
     "#load-winston": {
