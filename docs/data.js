@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794837970810,
+  "lastUpdate": 1794838258031,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -10373,6 +10373,102 @@ window.BENCHMARK_DATA = {
             "value": 4973.681837163875,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.198–0.203 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "distinct": true,
+          "id": "c8527d4e1cdcab68ef270839ac0ee9ebc1cab756",
+          "message": "0.6.1",
+          "timestamp": "2026-11-16T15:04:12+01:00",
+          "tree_id": "dc192021f8a7537b3846433d4aacf3f0fa77722b",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/c8527d4e1cdcab68ef270839ac0ee9ebc1cab756"
+        },
+        "date": 1794838257535,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 9773.38185830457,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.007–1.055 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 22742.802339721282,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.422–0.444 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 25061.755611818917,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.392–0.419 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 10539.115267621071,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.907–0.971 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 28820.854872034808,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.336–0.352 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 32818.988026766754,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.292–0.308 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 7117.980259434863,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.395–1.448 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 29658.30266150761,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.322–0.360 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 38227.580668853756,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.260–0.267 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 2967.6175501874945,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.335–0.341 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3883.1436721181894,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.253–0.261 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 4155.581669877192,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.239–0.252 s"
           }
         ]
       }
