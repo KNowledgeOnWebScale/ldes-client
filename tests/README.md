@@ -54,10 +54,17 @@ The tests in [resume/](resume/) model four feeds as they are published (Marine R
 
 The two Marine Regions polling cases remain skipped because the fixture advertises a daily polling interval.
 
-Two checks are opt-in:
+The cancellation regression in [resume/canceledStream.test.ts](resume/canceledStream.test.ts) runs offline. It holds a delivery write
+open while extraction continues after the consumer breaks out of the stream, then checks that a resumed run emits all unread members
+exactly once, for both immutable pages and pages with an ETag (#173).
+
+Three checks are opt-in:
 
  * `RESUME_STATS=1 npx vitest run tests/resume/interrupt-stats.test.ts` measures losses, duplicates and errors over 240 interrupted
    replications (four feeds, two orders, two buffer sizes, 15 repetitions). Its counts are written to `/tmp/resume-interrupt-stats.txt`
    by default, or to `EXPLORE_OUT`.
  * `RIVERBENCH=1 npx vitest run tests/ldes2/ldes2.test.ts -t 'the real RiverBench dataset'` downloads the live Jelly dataset and checks
    that it contains 10,000 members with 116 quads in the first member. This requires network access; an offline fixture runs by default.
+ * `MARINE_REGIONS=1 npx vitest run tests/resume/marineRegions.live.test.ts` runs the live reproduction of #173: interrupt every 200
+   members, resume from the same state, and compare with an uninterrupted run. This requires network access and a stable feed during
+   the test; it uses the issue's fixed `after` filter and checks that the feed still has enough members to exercise interruption.

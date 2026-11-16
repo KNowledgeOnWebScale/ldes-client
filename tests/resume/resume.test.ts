@@ -213,6 +213,33 @@ describe.each(selected)("A feed published like $name", (feed: Feed) => {
                 ).toEqual([]);
             },
         );
+
+        /**
+         * A page with many more members than the stream buffers: when the consumer stops, the extraction of the page goes on, and the
+         * stream refuses the members that it extracts. The page is not finished then, as the members that were refused were not read.
+         */
+        test("with a page that has more members than the stream buffers: every member is emitted once", async () => {
+            const start = Date.UTC(2026, 1, 1, 10, 0, 0);
+            const big: Item[] = Array.from({ length: 400 }, (_, i) => ({ n: i + 1, t: new Date(start + i * 1000) }));
+            feed.publish(server, big);
+            const emitted: string[] = [];
+            let finished = false;
+            for (let i = 0; i < 200 && !finished; i++) {
+                const result = await run({ limit: 40, ordered, highWaterMark: 1 });
+                expect(result.error, `${result.error}\n${show(result.log)}`).toBeUndefined();
+                emitted.push(...result.ids);
+                finished = result.ids.length < 40;
+            }
+            expect(finished, "the replication does not finish").toBe(true);
+            expect(
+                ids(big).filter((id) => !emitted.includes(id)),
+                "members that were never emitted",
+            ).toEqual([]);
+            expect(
+                emitted.filter((id, i) => emitted.indexOf(id) !== i),
+                "members that were emitted twice",
+            ).toEqual([]);
+        }, 30_000);
     });
 
     /**
