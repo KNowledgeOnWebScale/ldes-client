@@ -18,7 +18,7 @@ export class UnorderedStrategy {
     /** The pages that are fetched in this pass: a poll cycle starts a new pass, a page that is mutable is fetched once in a pass */
     private fetchedInPass = new Set<string>();
     /** The pages of which the members are being extracted or have not been read by the consumer yet, by the index of the page in the modulator */
-    private pages = new Map<number, { unread: number; finishing: boolean; fragment?: FetchedPage }>();
+    private pages = new Map<number, { unread: number; finishing: boolean; incomplete?: boolean; fragment?: FetchedPage }>();
 
     private polling: boolean;
     private pollInterval?: number;
@@ -104,7 +104,11 @@ export class UnorderedStrategy {
                 this.notifier.error(error, {});
             },
             extracted: async (mem, { index }) => {
-                if (this.canceled) return;
+                if (this.canceled) {
+                    // Not emitted: the page must be requested again by the next run
+                    this.pageProgress(index).incomplete = true;
+                    return;
+                }
                 // Make sure we keep the original member iri for the state in case materialization is enabled
                 const memberIri = mem.id.value;
                 // Not a second time: it is being emitted, and the consumer has not read it yet
@@ -122,6 +126,8 @@ export class UnorderedStrategy {
                 if (!streamed) {
                     this.modulator.unmarkEmitting(memberIri);
                     page.unread--;
+                    // Not read by the consumer: the page must be requested again by the next run
+                    page.incomplete = true;
                 }
             },
             done: async (fragment: FetchedPage, { index }) => {
@@ -232,7 +238,7 @@ export class UnorderedStrategy {
      */
     private async finishPage(index: number) {
         const page = this.pages.get(index);
-        if (!page?.fragment || page.unread > 0 || page.finishing) return;
+        if (!page?.fragment || page.unread > 0 || page.finishing || page.incomplete) return;
         page.finishing = true;
         this.pages.delete(index);
         const fragment = page.fragment;
