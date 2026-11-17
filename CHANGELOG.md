@@ -6,6 +6,13 @@ All notable changes of the `ldes-client` package. The support for LDES 1.0 is st
 and changes with them. Such changes can be made in any release, also when they are not backwards compatible,
 and they are listed under *LDES 2.0 (experimental)* in every release. Pin the version of this package if you depend on it.
 
+## Unreleased
+
+- A request that fails with a network error (e.g. a server that drops the connection) frees its slot of the requests per domain.
+  It did not, so after as many failed requests to a domain as there are slots (10 by default), every next request to it waited
+  forever, and so did the stream. Since 0.5.0, a member that cannot be dereferenced gets there quickly, as its requests are retried.
+  ([#175](https://github.com/KNowledgeOnWebScale/ldes-client/issues/175))
+
 ## 0.6.0
 
 - A member is emitted when the consumer of the stream has read it, and not when it is put in the buffer of the stream: the state
