@@ -61,16 +61,17 @@ export function limit_fetch_per_domain(fetch_f: typeof fetch, concurrent: number
                 requests.push(res);
             }
         });
-        const resp = await fetch_f(input, init);
-
-        requests.shift();
-        for (let i = 0; i < concurrent; i++) {
-            if (requests[i]) {
-                requests[i]();
+        try {
+            return await fetch_f(input, init);
+        } finally {
+            // Also when the request failed: otherwise its slot is never freed, and requests to the domain wait forever
+            requests.shift();
+            for (let i = 0; i < concurrent; i++) {
+                if (requests[i]) {
+                    requests[i]();
+                }
             }
         }
-
-        return resp;
     };
 
     return out;
