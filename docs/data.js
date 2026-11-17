@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794838258031,
+  "lastUpdate": 1794917183668,
   "repoUrl": "https://github.com/KNowledgeOnWebScale/ldes-client",
   "entries": {
     "Benchmark for ldes client": [
@@ -10469,6 +10469,102 @@ window.BENCHMARK_DATA = {
             "value": 4155.581669877192,
             "unit": "members/s",
             "extra": "Median of 5 runs; range 0.239–0.252 s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "pieter.colpaert@ugent.be",
+            "name": "Pieter Colpaert",
+            "username": "pietercolpaert"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "eb0b4a060ff0f59cdeb0277143912716cae10cb4",
+          "message": "Merge pull request #176 from KNowledgeOnWebScale/fix-limit-fetch-slot\n\nFree the slot of a request that fails in limit_fetch_per_domain",
+          "timestamp": "2026-11-17T13:00:50+01:00",
+          "tree_id": "dfa7a2209057169896ed0ebd1ef0d1bab362e4ad",
+          "url": "https://github.com/KNowledgeOnWebScale/ldes-client/commit/eb0b4a060ff0f59cdeb0277143912716cae10cb4"
+        },
+        "date": 1794917183154,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "ldes1 / 10000 members / 100 × 100 / 0ms / none",
+            "value": 7585.946726306956,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.279–1.344 s"
+          },
+          {
+            "name": "trig / 10000 members / 100 × 100 / 0ms / none",
+            "value": 19039.98818302174,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.510–0.534 s"
+          },
+          {
+            "name": "jelly / 10000 members / 100 × 100 / 0ms / none",
+            "value": 21699.715778641712,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.458–0.481 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 8544.451776827762,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.165–1.202 s"
+          },
+          {
+            "name": "trig / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 23118.659869361447,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.417–0.449 s"
+          },
+          {
+            "name": "jelly / 10000 members / 10 × 1000 / 0ms / none",
+            "value": 27275.935641851607,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.356–0.380 s"
+          },
+          {
+            "name": "ldes1 / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 6068.106018987129,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 1.631–1.672 s"
+          },
+          {
+            "name": "trig / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 24069.452984252934,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.402–0.492 s"
+          },
+          {
+            "name": "jelly / 10000 members / 1 × 10000 / 0ms / none",
+            "value": 30999.399594328832,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.317–0.345 s"
+          },
+          {
+            "name": "ldes1 / 1000 members / 10 × 100 / 50ms / none",
+            "value": 2478.891974553024,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.394–0.427 s"
+          },
+          {
+            "name": "trig / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3339.3445654035563,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.292–0.301 s"
+          },
+          {
+            "name": "jelly / 1000 members / 10 × 100 / 50ms / none",
+            "value": 3626.176388279363,
+            "unit": "members/s",
+            "extra": "Median of 5 runs; range 0.273–0.287 s"
           }
         ]
       }
