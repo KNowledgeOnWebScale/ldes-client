@@ -12,6 +12,10 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   It did not, so after as many failed requests to a domain as there are slots (10 by default), every next request to it waited
   forever, and so did the stream. Since 0.5.0, a member that cannot be dereferenced gets there quickly, as its requests are retried.
   ([#175](https://github.com/KNowledgeOnWebScale/ldes-client/issues/175))
+- The client runs in a Web Worker. The Level storage decided between the browser and Node.js on `window`, which a worker
+  does not have, so it used the filesystem of Node.js there and every replication failed (`(void 0) is not a function`).
+  It now uses IndexedDB wherever `indexedDB` exists, so a worker can also resume from a `statePath`.
+  ([#177](https://github.com/KNowledgeOnWebScale/ldes-client/issues/177))
 
 ## 0.6.0
 
