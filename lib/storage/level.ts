@@ -13,6 +13,15 @@ import * as path from "path";
 import type { KVStore, Storage } from "./index";
 
 /**
+ * Whether Level stores its data in IndexedDB (a browser) rather than on the filesystem (Node.js).
+ * This checks for `indexedDB` rather than `window`: a Web Worker is a browser environment without
+ * `window`, and the filesystem modules are empty there. Node.js and Deno have no `indexedDB` by default.
+ */
+function usesIndexedDB(): boolean {
+    return typeof indexedDB !== "undefined";
+}
+
+/**
  * Structural interface for the Level sublevel methods we actually use.
  * Level sublevels always use string keys, so this reflects that reality.
  */
@@ -91,7 +100,7 @@ export class LevelStorage implements Storage {
 
     private getDefaultLocation(): string {
         const id = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
-        if (typeof window !== "undefined") {
+        if (usesIndexedDB()) {
             return `ldes-client-${id}`;
         } else {
             return path.join(os.tmpdir(), `ldes-client-${id}`);
@@ -130,7 +139,7 @@ export class LevelStorage implements Storage {
     }
 
     private clearFiles(): void {
-        if (typeof window === "undefined") {
+        if (!usesIndexedDB()) {
             if (fs.existsSync(this.location)) {
                 fs.readdirSync(this.location).forEach((file) => {
                     fs.rmSync(path.join(this.location, file), {
@@ -146,7 +155,7 @@ export class LevelStorage implements Storage {
     }
 
     private ensureStatePath(p: string): void {
-        if (typeof window === "undefined") {
+        if (!usesIndexedDB()) {
             if (!fs.existsSync(p)) {
                 fs.mkdirSync(p, { recursive: true });
             }
