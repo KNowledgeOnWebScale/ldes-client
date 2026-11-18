@@ -118,18 +118,6 @@ Supported levels, from least to most verbose, are `error`, `warn`, `info`, `http
 
 `--quiet` suppresses member output, not logs. For Docker, pass the environment variable with `-e LOG_LEVEL=debug` before the image name.
 
-### Docker
-
-Build the [Dockerfile](Dockerfile) and mount a volume for saved state:
-
-```sh
-docker build -t ldes-client .
-docker run --rm -v ldes-state:/data ldes-client \
-  https://example.org/ldes --follow --save /data/state
-```
-
-The image uses Node.js 24, runs as an unprivileged user, and uses `/data` as its working directory. Arguments after the image name are CLI arguments; running the image without arguments displays help.
-
 ## JavaScript and TypeScript
 
 Install the library in your project:
