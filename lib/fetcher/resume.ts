@@ -119,6 +119,11 @@ export class ResumeTracker {
         if (this.format === "jelly") this.jelly ??= new JellyScanner();
     }
 
+    /** Whether the bytes that the parser reads need to be scanned (Jelly: for the lookup tables) */
+    get scans(): boolean {
+        return this.jelly !== undefined;
+    }
+
     /** Bytes as the parser reads them: the preamble and the response body, decompressed */
     scan(chunk: Uint8Array) {
         this.jelly?.push(chunk);

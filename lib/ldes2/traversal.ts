@@ -147,8 +147,9 @@ class OpenPage {
     /** Reads the next member message of the page, to know its key. Closes the page when there is none. */
     async advance(message?: Quad[] | undefined, readAhead = true): Promise<void> {
         let quads = readAhead ? await this.log.next() : message;
-        // A page that is continued with range requests grows with description messages too, e.g. with new relations, and finally `ldes:immutable true`
-        while (quads && quads.length > 0 && this.onDescription && isDescriptionMessage(quads, this.url)) {
+        // A page that is continued with range requests grows with description messages too, e.g. with new relations, and finally
+        // `ldes:immutable true`. Other pages are read as before: only their first message can be the description message.
+        while (quads && quads.length > 0 && this.rangeRequests && this.onDescription && isDescriptionMessage(quads, this.url)) {
             this.onDescription(quads);
             quads = await this.log.next();
         }

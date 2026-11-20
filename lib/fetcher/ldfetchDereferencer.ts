@@ -1,4 +1,4 @@
-import { Readable } from "stream";
+import { Readable, Transform, pipeline } from "stream";
 import RdfParsers from "ldfetch/lib/RdfParsers.js";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
@@ -701,15 +701,24 @@ export class LdfetchDereferencer implements MessageDereferencer {
         });
         const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
-        if (tracker) {
-            // The tracker reads the bytes as the parser does: after the decompression of a compressed file
-            tracker.setSyntax(contentType);
-            prepared.stream.on("data", (chunk: Uint8Array) => tracker.scan(chunk));
+        let input: Readable = prepared.stream;
+        tracker?.setSyntax(contentType);
+        if (tracker?.scans) {
+            // Of Jelly, the tracker reads the bytes as the parser does (after the decompression of a compressed file),
+            // between the source and the parser: other serializations go to the parser as they did
+            const tap = new Transform({
+                transform(chunk: Uint8Array, _encoding, callback) {
+                    tracker.scan(chunk);
+                    callback(null, chunk);
+                },
+            });
+            // Destroying the tap (when the log is closed) destroys the source too
+            input = pipeline(prepared.stream, tap, () => undefined) as Readable;
         }
 
         let parser: EventEmitter;
         if (RdfParsers.isStreamable(contentType)) {
-            parser = RdfParsers.parseStream(prepared.stream, {
+            parser = RdfParsers.parseStream(input, {
                 contentType,
                 baseIRI: url,
             });
@@ -746,7 +755,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
                 requestUrl,
             });
         }
-        accept(contentType, { parser, stream: prepared.stream });
+        accept(contentType, { parser, stream: input });
     }
 }
 
