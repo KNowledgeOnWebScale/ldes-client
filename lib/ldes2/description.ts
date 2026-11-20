@@ -29,6 +29,11 @@ export type Description = {
     immutable: boolean;
     /** The pages that the description message marks as immutable, with `<P> ldes:immutable true` */
     immutablePages: Set<string>;
+    /**
+     * The pages that opt in to being continued with HTTP Range requests, with `<P> ldes:rangeRequests true` (draft, see
+     * https://github.com/SEMICeu/LinkedDataEventStreams/issues/119): the page itself, or the pages that it links to.
+     */
+    rangeRequestPages: Set<string>;
     pageNumber?: number;
 };
 
@@ -117,12 +122,15 @@ export function readDescription(quads: Quad[], pageUrl: string, mode: OrderMode,
     let immutable = false;
     let pageNumber: number | undefined;
     // `<P> ldes:immutable true` can be stated about the page itself, and about the pages that it links to
-    const immutablePages = new Set(
-        store
-            .getQuads(null, V.immutable, null, null)
-            .filter((quad) => quad.subject.termType === "NamedNode" && (quad.object.value === "true" || quad.object.value === "1"))
-            .map((quad) => quad.subject.value),
-    );
+    const flagged = (predicate: Term) =>
+        new Set(
+            store
+                .getQuads(null, predicate, null, null)
+                .filter((quad) => quad.subject.termType === "NamedNode" && (quad.object.value === "true" || quad.object.value === "1"))
+                .map((quad) => quad.subject.value),
+        );
+    const immutablePages = flagged(V.immutable);
+    const rangeRequestPages = flagged(V.rangeRequests);
 
     if (pageNode) {
         immutable = getObjects(store, pageNode, V.immutable).some((term) => term.value === "true" || term.value === "1");
@@ -131,7 +139,7 @@ export function readDescription(quads: Quad[], pageUrl: string, mode: OrderMode,
             relations.push(readRelation(store, relation, mode, defaultOffset));
         }
     }
-    return { store, relations, immutable, immutablePages, pageNumber };
+    return { store, relations, immutable, immutablePages, rangeRequestPages, pageNumber };
 }
 
 function readRelation(store: RdfStore, relation: Term, mode: OrderMode, defaultOffset?: string): Relation {
