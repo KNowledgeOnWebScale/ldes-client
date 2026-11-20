@@ -12,10 +12,12 @@
  * The client keeps that state as a *preamble*: bytes in the same serialization that put a fresh parser in that state
  * without producing any statement. The appended bytes are parsed as `preamble + appended`, with an unmodified parser.
  *
- * Jelly also has state that is not in the lookup tables: a statement can leave out a term that is the same as in the
+ * Jelly 1.1 also has state that is not in the lookup tables: a statement can leave out a term that is the same as in the
  * previous statement, and a prefix or name identifier 0 refers to the previous identifier. A preamble cannot restore
  * that, so the first statement of the first appended frame must not depend on it. That is checked before anything is
  * parsed: when it does depend on it, the page is read again from the start.
+ * Jelly 1.2 (column batches) has no such state: the lookup tables are all that crosses batches. A publisher only has to
+ * end every publication at the end of a batch (flush), which is also the end of a message.
  */
 
 /** Bytes before the resume offset that are requested again, to check that the page still starts with what was read */
@@ -186,11 +188,24 @@ function turtlePreamble(contentType: string, prefixes: Map<string, string>): Uin
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Jelly-RDF: a delimited stream of RdfStreamFrames. Only what is needed for a preamble is read: the options row, and the
-// lookup entry rows. Statements are skipped without being decoded. Field numbers are those of rdf.proto (Jelly 1.1).
+// lookup entries. Statements are skipped without being decoded; the parsing itself is done by rdfjs-jelly.
+// Field numbers are those of rdf.proto:
+// - Jelly 1.1 (protocol version 1, 2): rows; a lookup entry is a row of its own (name, prefix, datatype).
+// - Jelly 1.2 (protocol version 3): column batches (field 2 of the frame), each with the lookup entries it adds, as runs
+//   of consecutive identifiers (RdfLookupEntryPacked). The lookup tables are the only state that crosses batches.
 
 const ROW = { options: 1, triple: 2, quad: 3, graphStart: 4, graphEnd: 5, name: 9, prefix: 10, datatype: 11 } as const;
 const OPTIONS = { physicalType: 2, maxPrefixTableSize: 10, version: 15 } as const;
+const FRAME = { rows: 1, columns: 2 } as const;
+/** The lookup tables, with their field number in a Jelly 1.1 row and in a Jelly 1.2 column batch */
+const TABLES = {
+    prefix: { row: ROW.prefix, column: 3 },
+    name: { row: ROW.name, column: 2 },
+    datatype: { row: ROW.datatype, column: 4 },
+} as const;
+type TableName = keyof typeof TABLES;
 const PHYSICAL_QUADS = 2;
+const COLUMN_VERSION = 3;
 
 type Table = { entries: Map<number, string>; last: number };
 
@@ -199,11 +214,8 @@ export class JellyScanner {
     ok = true;
     private pending: Uint8Array = new Uint8Array(0);
     private options?: Uint8Array;
-    private readonly tables = new Map<number, Table>([
-        [ROW.prefix, { entries: new Map(), last: 0 }],
-        [ROW.name, { entries: new Map(), last: 0 }],
-        [ROW.datatype, { entries: new Map(), last: 0 }],
-    ]);
+    private version = 0;
+    private readonly tables = new Map<TableName, Table>((Object.keys(TABLES) as TableName[]).map((name) => [name, { entries: new Map(), last: 0 }]));
 
     /** Bytes of a frame that is not complete yet */
     get leftover() {
@@ -229,50 +241,109 @@ export class JellyScanner {
 
     private frame(frame: Uint8Array) {
         for (const field of fields(frame)) {
-            // A column batch (Jelly 1.2) has a different kind of state
-            if (field.number === 2) throw new Error("Column batches cannot be resumed");
-            if (field.number !== 1 || !field.bytes) continue;
+            if (field.number === FRAME.columns && field.bytes) {
+                if (this.version !== COLUMN_VERSION) throw new Error("A column batch in a stream that is not Jelly 1.2");
+                this.columnBatch(field.bytes);
+                continue;
+            }
+            if (field.number !== FRAME.rows || !field.bytes) continue;
             const row = fields(field.bytes).next().value;
             if (!row?.bytes) continue;
             if (row.number === ROW.options) {
                 const version = readUint(row.bytes, OPTIONS.version);
-                if (version >= 3) throw new Error("Jelly 1.2 streams cannot be resumed (yet)");
+                if (version > COLUMN_VERSION) throw new Error(`Jelly protocol version ${version} cannot be resumed`);
+                this.version ||= version;
                 this.options ??= row.bytes.slice();
             } else if (!this.options) {
                 throw new Error("A Jelly stream starts with its options");
-            } else if (this.tables.has(row.number)) {
-                const table = this.tables.get(row.number)!;
+            } else {
+                const name = (Object.keys(TABLES) as TableName[]).find((table) => TABLES[table].row === row.number);
+                if (!name) continue;
                 let id = 0;
                 let value = "";
                 for (const entry of fields(row.bytes)) {
                     if (entry.number === 1) id = entry.value;
                     else if (entry.number === 2 && entry.bytes) value = new TextDecoder().decode(entry.bytes);
                 }
-                const index = id === 0 ? table.last + 1 : id;
-                table.entries.set(index, value);
-                table.last = index;
+                this.assign(name, id, [value]);
             }
         }
+    }
+
+    /** The lookup entries of a Jelly 1.2 column batch: runs of values for consecutive identifiers */
+    private columnBatch(batch: Uint8Array) {
+        if (!this.options) throw new Error("A Jelly stream starts with its options");
+        for (const field of fields(batch)) {
+            const name = (Object.keys(TABLES) as TableName[]).find((table) => TABLES[table].column === field.number);
+            if (!name || !field.bytes) continue;
+            let id = 0;
+            const values: string[] = [];
+            for (const part of fields(field.bytes)) {
+                if (part.number === 1) id = part.value;
+                else if (part.number === 2 && part.bytes) values.push(new TextDecoder().decode(part.bytes));
+            }
+            this.assign(name, id, values);
+        }
+    }
+
+    /** Assigns values to consecutive identifiers from `id`; identifier 0 is the one after the last assigned */
+    private assign(name: TableName, id: number, values: string[]) {
+        const table = this.tables.get(name)!;
+        values.forEach((value, i) => {
+            const index = i === 0 && id !== 0 ? id : table.last + 1;
+            table.entries.set(index, value);
+            table.last = index;
+        });
     }
 
     /**
      * One frame with the options row, and every lookup entry with its identifier. The entry that was assigned last
      * comes last in its table, so that an entry with identifier 0 (the one after the last) means the same afterwards.
-     * It has no statements: parsing it gives an empty message.
+     * It has no statements: parsing it gives an empty message (Jelly 1.1) or none (Jelly 1.2).
      */
     preamble(): Uint8Array | undefined {
         if (!this.options) return undefined;
-        const rows = [field(ROW.options, this.options)];
-        for (const [number, table] of this.tables) {
-            const ids = [...table.entries.keys()].filter((id) => id !== table.last).sort((a, b) => a - b);
-            if (table.entries.has(table.last)) ids.push(table.last);
-            for (const id of ids) {
-                rows.push(field(number, concat(varintField(1, id), field(2, new TextEncoder().encode(table.entries.get(id)!)))));
+        const parts = [field(FRAME.rows, field(ROW.options, this.options))];
+        if (this.version === COLUMN_VERSION) {
+            // Jelly 1.2: one column batch without statements, with the entries as runs of consecutive identifiers
+            const entries: Uint8Array[] = [];
+            for (const [name, table] of this.tables) {
+                for (const run of runs(table)) {
+                    const values = run.values.map((value) => field(2, new TextEncoder().encode(value)));
+                    entries.push(field(TABLES[name].column, concat(varintField(1, run.id), ...values)));
+                }
+            }
+            if (entries.length > 0) parts.push(field(FRAME.columns, concat(...entries)));
+        } else {
+            // Jelly 1.1: a row for every entry
+            for (const [name, table] of this.tables) {
+                for (const run of runs(table)) {
+                    run.values.forEach((value, i) => {
+                        const entry = concat(varintField(1, run.id + i), field(2, new TextEncoder().encode(value)));
+                        parts.push(field(FRAME.rows, field(TABLES[name].row, entry)));
+                    });
+                }
             }
         }
-        const frame = concat(...rows.map((row) => field(1, row)));
+        const frame = concat(...parts);
         return concat(varint(frame.length), frame);
     }
+}
+
+/**
+ * The entries of a table as runs of consecutive identifiers, in order, except that the entry that was assigned last is
+ * a run of its own at the end
+ */
+function runs(table: Table): { id: number; values: string[] }[] {
+    const ids = [...table.entries.keys()].filter((id) => id !== table.last).sort((a, b) => a - b);
+    const out: { id: number; values: string[] }[] = [];
+    for (const id of ids) {
+        const previous = out.at(-1);
+        if (previous && previous.id + previous.values.length === id) previous.values.push(table.entries.get(id)!);
+        else out.push({ id, values: [table.entries.get(id)!] });
+    }
+    if (table.entries.has(table.last)) out.push({ id: table.last, values: [table.entries.get(table.last)!] });
+    return out;
 }
 
 /**
@@ -286,6 +357,8 @@ export function checkJellyResume(preamble: Uint8Array, appended: Uint8Array): st
     const optionsFrame = nextFrame(preamble, 0);
     const optionsRow = optionsFrame && fields(fields(preamble.subarray(optionsFrame.start, optionsFrame.end)).next().value!.bytes!).next().value;
     if (!optionsRow?.bytes) return "the preamble has no stream options";
+    // Jelly 1.2: a column batch depends on nothing of the batches before it but the lookup tables, which the preamble has
+    if (readUint(optionsRow.bytes, OPTIONS.version) === COLUMN_VERSION) return undefined;
     const quads = readUint(optionsRow.bytes, OPTIONS.physicalType) === PHYSICAL_QUADS;
     const prefixes = readUint(optionsRow.bytes, OPTIONS.maxPrefixTableSize) > 0;
 

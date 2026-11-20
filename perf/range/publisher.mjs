@@ -6,7 +6,8 @@
  * - `head`: the approach of issue #118: immutable pages of `headSize` members, and a small mutable head page that is
  *   requested again with its ETag. The root page links to all of them, and changes when the head page is sealed.
  *
- * Serializations: TriG, Jelly 1.1 that can be continued (perf/range/jelly11.mjs), and Jelly 1.2 by rdfjs-jelly.
+ * Serializations: TriG, Jelly 1.1 that can be continued (perf/range/jelly11.mjs), and Jelly 1.2 by rdfjs-jelly: appended
+ * with a flush per publication (for range requests), or written again as a whole (for ETags).
  * Compression: none, Content-Encoding gzip (as a CDN would compress every new version), or a gzip file to which
  * every publication is appended as a new gzip member (incremental compression).
  */
@@ -37,6 +38,8 @@ export const STRATEGIES = {
     "trig-head-etag-gzip": { layout: "head", syntax: "trig", encoding: "gzip", range: false },
     "jelly11-range": { layout: "single", syntax: "jelly11", encoding: "identity", range: true },
     "jelly11-range-gzmembers": { layout: "single", syntax: "jelly11", encoding: "members", range: true },
+    "jelly12-range": { layout: "single", syntax: "jelly12-append", encoding: "identity", range: true },
+    "jelly12-range-gzmembers": { layout: "single", syntax: "jelly12-append", encoding: "members", range: true },
     "jelly12-etag-gzip": { layout: "single", syntax: "jelly12", encoding: "gzip", range: false },
     "jelly12-head-etag-gzip": { layout: "head", syntax: "jelly12", encoding: "gzip", range: false },
 };
@@ -45,10 +48,40 @@ const parsed = [];
 const memberQuads = (i) => (parsed[i] ??= new Parser({ blankNodePrefix: `b${i}_` }).parse(`${trigPrefixes}\n${member(i)}`));
 const memberTrig = (i) => `MESSAGE\n${member(i)}\n`;
 
+/** A whole Jelly 1.2 stream, with the default batches of rdfjs-jelly */
 async function jelly12(messages) {
-    const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES, packMessages: false });
+    const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES });
     for (const message of messages) writer.addMessage(message);
     return new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes)))));
+}
+
+/**
+ * Jelly 1.2 as a publisher appends it: one streaming writer with its default (shared) lookup tables, and a flush at the
+ * end of every publication, so that every publication ends at a batch and message boundary
+ */
+class AppendingJelly12 {
+    constructor() {
+        this.written = [];
+        this.writer = new Writer(
+            {
+                write: (bytes, done) => {
+                    this.written.push(Buffer.from(bytes));
+                    done?.();
+                },
+                end: (done) => done?.(),
+            },
+            { version: 3, streamType: RdfStreamType.MESSAGES },
+        );
+    }
+
+    /** Writes the messages of one publication, and gives the bytes that it appends */
+    publish(messages) {
+        for (const message of messages) this.writer.addMessage(message);
+        this.writer.flush();
+        const chunk = Buffer.concat(this.written);
+        this.written = [];
+        return chunk;
+    }
 }
 
 const etagOf = (body) => `"${createHash("sha1").update(body).digest("base64url")}"`;
@@ -66,7 +99,7 @@ export class Publisher {
         this.headSize = headSize;
         this.count = 0;
         this.pages = new Map();
-        const ext = { trig: "trig", jelly11: "jelly", jelly12: "jelly" }[this.strategy.syntax];
+        const ext = { trig: "trig", jelly11: "jelly", jelly12: "jelly", "jelly12-append": "jelly" }[this.strategy.syntax];
         this.type = ext === "trig" ? "application/trig" : "application/x-jelly-rdf";
         const gz = this.strategy.encoding === "members" ? ".gz" : "";
         this.rootPath = this.strategy.layout === "single" ? `/${name}/log.${ext}${gz}` : `/${name}/root.trig`;
@@ -74,6 +107,7 @@ export class Publisher {
         // single page, appended: its chunks (one per publication), and the writer that keeps the Jelly lookup tables
         this.chunks = [];
         this.jellyWriter = new ResumableJellyWriter();
+        this.jelly12Writer = new AppendingJelly12();
         // head layout: sealed pages, and the members of the head page
         this.sealed = 0;
     }
@@ -108,8 +142,13 @@ export class Publisher {
             if (from === 0) frames.push(this.jellyWriter.frame(new Parser({ baseIRI: url }).parse(`${trigPrefixes}\n${this.descriptionTrig(url)}`)));
             for (let i = from; i < to; i++) frames.push(this.jellyWriter.frame(memberQuads(i)));
             chunk = Buffer.concat(frames);
+        } else if (syntax === "jelly12-append") {
+            const messages = [];
+            if (from === 0) messages.push(new Parser({ baseIRI: url }).parse(`${trigPrefixes}\n${this.descriptionTrig(url)}`));
+            for (let i = from; i < to; i++) messages.push(memberQuads(i));
+            chunk = this.jelly12Writer.publish(messages);
         } else {
-            // Jelly 1.2 is written again as a whole: its batches are not meant to be appended to
+            // Jelly 1.2 for ETags: written again as a whole for every version, with the default batches
             const messages = [new Parser({ baseIRI: url }).parse(`${trigPrefixes}\n${this.descriptionTrig(url)}`)];
             for (let i = 0; i < to; i++) messages.push(memberQuads(i));
             this.chunks = [];

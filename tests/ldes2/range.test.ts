@@ -3,7 +3,7 @@
  * see https://github.com/SEMICeu/LinkedDataEventStreams/issues/119
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { Writer, DataFactory as JellyFactory } from "rdfjs-jelly";
+import { RdfStreamType, Writer, DataFactory as JellyFactory } from "rdfjs-jelly";
 import { MemoryStorage, replicateLDES } from "../../lib/client";
 import { gzipSync } from "zlib";
 import { MockServer, PREFIXES } from "./server";
@@ -226,6 +226,74 @@ describe("A page in Jelly-RDF with range requests", () => {
         // Compressed again as a whole: the bytes before the offset are not the same, so the file is read from the start
         server.set("/page.jelly.gz", { type: "application/octet-stream", body: gzipSync(resumableJelly(5)), ranges: true });
         expect(await collect({ storage })).toEqual(["m4"]);
+    });
+
+    /**
+     * Jelly 1.2 as a publisher appends it: one streaming writer of rdfjs-jelly with its default (shared) lookup tables,
+     * and a flush at the end of every publication. Gives the bytes that every publication appends.
+     */
+    function jelly12(publications: number[][]): Buffer[] {
+        const { namedNode, literal, quad } = JellyFactory;
+        const chunks: Buffer[] = [];
+        let current: Buffer[] = [];
+        const writer = new Writer(
+            {
+                write: (bytes: Uint8Array, done?: (error?: Error | null) => void) => {
+                    current.push(Buffer.from(bytes));
+                    done?.();
+                },
+                end: (done?: (error?: Error | null) => void) => done?.(),
+            },
+            { version: 3, streamType: RdfStreamType.MESSAGES },
+        );
+        for (const publication of publications) {
+            for (const i of publication) {
+                writer.addMessage([quad(namedNode(ex(`m${i}`)), namedNode(ex("value")), literal(String(i)), namedNode(ex(`m${i}`)))]);
+            }
+            writer.flush();
+            chunks.push(Buffer.concat(current));
+            current = [];
+        }
+        return chunks;
+    }
+    const ex = (name: string) => EX + name;
+
+    test("Jelly 1.2 is continued with the lookup tables of the batches before it", async () => {
+        const storage = new MemoryStorage();
+        const [first, second, third] = jelly12([[0, 1], [2, 3], [4]]);
+        publish(first);
+        expect(await collect({ storage })).toEqual(["m0", "m1"]);
+
+        // The appended batches use the IRIs of the first one (ex:value, the graph names' prefix) from the lookup tables
+        publish(Buffer.concat([first, second]));
+        expect(await collect({ storage })).toEqual(["m2", "m3"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length - 32}-`, path: "/page.jelly", sent: second.length + 32 }]);
+
+        server.ranges = [];
+        server.sent = [];
+        server.requests = [];
+        publish(Buffer.concat([first, second, third]));
+        expect(await collect({ storage })).toEqual(["m4"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length + second.length - 32}-`, path: "/page.jelly", sent: third.length + 32 }]);
+    });
+
+    test("Jelly 1.2 in a gzip file with appended gzip members is continued too", async () => {
+        const storage = new MemoryStorage();
+        const members = jelly12([
+            [0, 1],
+            [2, 3],
+        ]).map((chunk) => gzipSync(chunk));
+        server.trig(
+            "/root",
+            `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/page.jelly.gz> ; ldes:pageNumber 0 ] .
+<${server.base}/page.jelly.gz> ldes:rangeRequests true .`,
+        );
+        server.set("/page.jelly.gz", { type: "application/octet-stream", body: members[0], ranges: true });
+        expect(await collect({ storage })).toEqual(["m0", "m1"]);
+        server.set("/page.jelly.gz", { type: "application/octet-stream", body: Buffer.concat(members), ranges: true });
+        expect(await collect({ storage })).toEqual(["m2", "m3"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${members[0].length - 32}-`, path: "/page.jelly.gz", sent: members[1].length + 32 }]);
     });
 });
 
