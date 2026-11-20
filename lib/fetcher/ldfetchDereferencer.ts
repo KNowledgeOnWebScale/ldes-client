@@ -1,14 +1,16 @@
-import { Readable } from "stream";
+import { Readable, Transform, pipeline } from "stream";
 import RdfParsers from "ldfetch/lib/RdfParsers.js";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
 import { errorMessage } from "../utils/general";
 import { ContextCache, uncachedDocumentLoader } from "./contextCache";
+import { JELLY, ResumeInvalid, ResumeTracker, baseType, checkJellyResume, fromBase64, nextFrame, prependBytes, readHead, sameBytes } from "./resume";
 
 import type { Quad, Stream } from "@rdfjs/types";
 import type { EventEmitter } from "events";
 import type HttpCache from "ldfetch/lib/HttpCache.js";
 import type { ContextCacheOptions } from "./contextCache";
+import type { ResumeState } from "./resume";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
@@ -63,6 +65,11 @@ export type DereferenceOptions = {
     localFiles?: boolean;
     /** How many messages of the log are buffered before the source is paused (default {@link MAX_BUFFERED_MESSAGES}) */
     bufferedMessages?: number;
+    /**
+     * Continue a page that opts in to range requests where an earlier response ended: only the bytes after the offset are requested,
+     * with an HTTP Range request. When the server cannot continue there, the page is read from the start.
+     */
+    resume?: ResumeState;
 };
 
 /**
@@ -150,10 +157,10 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const mix = (checksum: number, message: Quad[]) => (Math.imul(checksum, 31) + message.length + 1) | 0;
 
 /** One transfer of a document: the parser, and the stream it reads from */
-type Transfer = { parser: EventEmitter; stream: Readable };
+type Transfer = { parser: EventEmitter; stream: Readable; tracker?: ResumeTracker };
 
 /** What is known of a document when its parser is created */
-type TransferInfo = { url: string; status: number; headers: Headers; contentType: string };
+type TransferInfo = { url: string; status: number; headers: Headers; contentType: string; resumed: boolean };
 
 /**
  * Receives the parser of a transfer. It is called in the same tick as the parser is created, as the parser can emit events
@@ -185,6 +192,14 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     public framed = false;
     /** The number of messages that are buffered before the source is paused. It can be changed while reading. */
     public maxBuffered = MAX_BUFFERED_MESSAGES;
+    /** The response continues an earlier one (HTTP 206 or 416): it has only the messages that were appended since */
+    public resumed = false;
+    /** What follows the bytes of the transfer, to request only what is appended to the page next time */
+    private tracker?: ResumeTracker;
+    /** The resume state of a response that says nothing was appended (HTTP 416) */
+    private unchanged?: ResumeState;
+    /** The transfer was read to its end, without failure */
+    private complete = false;
 
     private queue: Quad[][] = [];
     private ended = false;
@@ -217,6 +232,30 @@ export class MessageLog implements AsyncIterable<Quad[]> {
         return log;
     }
 
+    /** A log without messages, of a page to which nothing has been appended since the resume state */
+    static unchanged(url: string, headers: Headers, state: ResumeState): MessageLog {
+        const log = MessageLog.empty(url, 416, headers);
+        log.resumed = true;
+        log.unchanged = state;
+        return log;
+    }
+
+    /**
+     * Where the next request for this page can continue, once the log was read completely.
+     * Undefined when the page cannot be continued, see {@link ResumeTracker.state}.
+     */
+    resumeState(): ResumeState | undefined {
+        if (this.unchanged) return this.unchanged;
+        if (!this.complete || this.failure) return undefined;
+        // A resumed response continues a page with message delimiters, also when nothing was appended to it (yet)
+        return this.tracker?.state(this.framed || this.resumed);
+    }
+
+    /** Puts messages before those of the transfer, such as the description of a resumed page, which is not in the appended bytes */
+    prepend(messages: Quad[][]) {
+        this.queue.unshift(...messages);
+    }
+
     /** A log of messages that were read before, for a page that has not changed since */
     static fromMessages(url: string, status: number, headers: Headers, messages: Quad[][]): MessageLog {
         const log = new MessageLog(url, status, headers, "");
@@ -238,12 +277,17 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     }
 
     /** @internal wires the parser output of ldfetch to this log */
-    attach(parser: EventEmitter, source: Readable) {
+    attach(parser: EventEmitter, source: Readable, tracker?: ResumeTracker) {
         if (this.closed) {
             source.destroy();
             return;
         }
         this.source = source;
+        this.tracker = tracker;
+        this.complete = false;
+        // The preamble of a resumed transfer gives an empty message (Jelly), and the appended bytes can start with a
+        // message delimiter (TriG): empty messages before the first appended message are not messages of the page
+        let leading = this.resumed;
         this.paused = false;
         // A transfer that comes after an interrupted one starts with the messages that have been read already
         const skip = this.read;
@@ -261,6 +305,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
             void this.recover(error);
         };
         parser
+            .on("prefix", (prefix: string, iri: string) => tracker?.prefix(prefix, iri))
             .on("data", (quad: Quad, messageCounter?: number) => {
                 if (messageCounter === undefined) {
                     unframed.push(quad);
@@ -269,6 +314,8 @@ export class MessageLog implements AsyncIterable<Quad[]> {
             .on("message", (quads: Quad[]) => {
                 if (!live) return;
                 this.framed = true;
+                if (leading && quads.length === 0) return;
+                leading = false;
                 if (seen < skip) {
                     checksum = mix(checksum, quads);
                     if (++seen === skip && checksum !== this.checksum) {
@@ -293,6 +340,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
                 if (!this.framed && unframed.length > 0) {
                     this.push(unframed);
                 }
+                this.complete = true;
                 this.finish();
             });
         // The connection can be lost without the parser noticing
@@ -458,7 +506,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
 
         let log: MessageLog | undefined;
         const reopen = async () => {
-            const again = await this.transfer(url, options, (_info, transfer) => log!.attach(transfer.parser, transfer.stream));
+            const again = await this.transfer(url, options, (_info, transfer) => log!.attach(transfer.parser, transfer.stream, transfer.tracker));
             if (again.kind === "empty") {
                 throw new Error(`${url} is not the same any more: it answered HTTP ${again.log.status} when it was requested again`);
             }
@@ -468,11 +516,18 @@ export class LdfetchDereferencer implements MessageDereferencer {
             try {
                 const opened = await this.transfer(url, options, (info, transfer) => {
                     log = new MessageLog(info.url, info.status, info.headers, info.contentType).resumable(this.transferRetry, reopen);
-                    log.attach(transfer.parser, transfer.stream);
+                    log.resumed = info.resumed;
+                    log.attach(transfer.parser, transfer.stream, transfer.tracker);
                 });
                 if (opened.kind === "empty") return opened.log;
                 break;
             } catch (error) {
+                if (error instanceof ResumeInvalid) {
+                    // The page cannot be continued where the client left it: read it from the start
+                    logger.info(`Cannot continue ${url} at byte ${options.resume?.offset}: ${error.message}. Reading it from the start.`);
+                    options = { ...options, resume: undefined };
+                    continue;
+                }
                 const next = nextAttempt(this.transferRetry, ++failures, error);
                 if (!next) throw giveUp(url, failures, error);
                 logger.warn(`Requesting ${url} was interrupted (${errorMessage(error)}), requesting it again in ${next.delay} ms`);
@@ -489,9 +544,27 @@ export class LdfetchDereferencer implements MessageDereferencer {
         if (!headers.has("accept")) {
             headers.set("accept", this.accept);
         }
+        const resume = options.resume;
+        const tail = resume ? fromBase64(resume.tail) : new Uint8Array(0);
+        const start = resume ? resume.offset - tail.length : 0;
+        if (resume) {
+            // The last bytes before the offset are requested again, to check that they are still the same
+            headers.set("range", `bytes=${start}-`);
+            // The offset is about the representation without Content-Encoding (browsers add this for a Range themselves)
+            headers.set("accept-encoding", "identity");
+        }
         const response = await (options.fetch ?? fetch)(url, { headers });
 
         const originalStatus = Number(response.headers.get(ORIGINAL_STATUS_HEADER) ?? response.status);
+        if (resume && response.status === 416) {
+            await response.body?.cancel().catch(() => undefined);
+            // Nothing after the start of the range: the page did not grow, unless it became shorter than it was
+            const length = /^bytes \*\/(\d+)/.exec(response.headers.get("content-range") ?? "")?.[1];
+            if (length === undefined || Number(length) < resume.offset) {
+                throw new ResumeInvalid(`the page is shorter than ${resume.offset} bytes`);
+            }
+            return { kind: "empty", log: MessageLog.unchanged(response.url || url, response.headers, resume) };
+        }
         if (response.status >= 400) {
             await response.body?.cancel().catch(() => undefined);
             throw new Error(`Could not dereference ${url}: HTTP ${response.status}`);
@@ -503,7 +576,23 @@ export class LdfetchDereferencer implements MessageDereferencer {
         }
 
         const finalUrl = response.url || url;
-        const source = toReadable(response.body);
+        const declaredType = baseType(response.headers.get("content-type"));
+        let body: ReadableStream<Uint8Array> = response.body;
+        let tracker: ResumeTracker;
+        // A server that does not support ranges answers 200 with the whole page, which is read as usual
+        const resumed = !!resume && response.status === 206;
+        if (resumed) {
+            body = await this.continueAt(response, resume!, start, tail, declaredType);
+            tracker = new ResumeTracker(declaredType, {
+                offset: resume!.offset,
+                preamble: fromBase64(resume!.preamble),
+                tail,
+                compression: resume!.compression,
+            });
+        } else {
+            tracker = new ResumeTracker(declaredType);
+        }
+        const source = toReadable(body.pipeThrough(tracker.stream()));
         await this.parse(
             source,
             finalUrl,
@@ -511,9 +600,68 @@ export class LdfetchDereferencer implements MessageDereferencer {
             response.headers.get("content-type") ?? "",
             response.headers.get("content-disposition"),
             options.fetch ?? fetch,
-            (contentType, transfer) => accept({ url: finalUrl, status: response.status, headers: response.headers, contentType }, transfer),
+            (contentType, transfer) =>
+                accept({ url: finalUrl, status: response.status, headers: response.headers, contentType, resumed }, { ...transfer, tracker }),
+            tracker,
         );
         return { kind: "parsed" };
+    }
+
+    /**
+     * Checks that a 206 response continues the page as the resume state expects, and gives the body after the bytes that
+     * were requested again. Throws {@link ResumeInvalid} when the page cannot be continued there.
+     */
+    private async continueAt(
+        response: Response,
+        resume: ResumeState,
+        start: number,
+        tail: Uint8Array,
+        declaredType: string,
+    ): Promise<ReadableStream<Uint8Array>> {
+        const fail = async (reason: string, body: ReadableStream | null = response.body): Promise<never> => {
+            await body?.cancel().catch(() => undefined);
+            throw new ResumeInvalid(reason);
+        };
+        const range = /^bytes (\d+)-/.exec(response.headers.get("content-range") ?? "");
+        if (!range || Number(range[1]) !== start) await fail(`the server answered another range (${response.headers.get("content-range")})`);
+        const encoding = response.headers.get("content-encoding");
+        if (encoding && encoding !== "identity") await fail(`the range has Content-Encoding ${encoding}`);
+        if (declaredType !== resume.contentType) await fail(`the media type is ${declaredType}, not ${resume.contentType}`);
+        if (resume.compression === "gzip" && !isNode) {
+            // The DecompressionStream of browsers stops at the end of the first gzip member: appended members cannot be read
+            await fail("appended gzip members can only be decompressed in Node.js");
+        }
+
+        const { head, rest } = await readHead(response.body!, () => tail.length);
+        if (!sameBytes(head, tail)) await fail("the bytes before the offset have changed", rest);
+        if (resume.syntax !== JELLY) return rest;
+
+        // Jelly: the first appended frame is read before anything is parsed, to check that the lookup tables suffice for it.
+        // Of a gzip file, it is read from a copy of the body that is decompressed.
+        const [checked, body] = resume.compression === "gzip" ? rest.tee() : [rest, rest];
+        const plain =
+            resume.compression === "gzip"
+                ? checked.pipeThrough(new DecompressionStream("gzip") as unknown as TransformStream<Uint8Array, Uint8Array>)
+                : checked;
+        let appended: Uint8Array = new Uint8Array(0);
+        let after: ReadableStream<Uint8Array> | undefined;
+        try {
+            ({ head: appended, rest: after } = await readHead(plain, (read) => nextFrame(read, 0)?.end ?? read.length + 1));
+        } catch (ex) {
+            await fail(`the first appended Jelly frame cannot be read: ${errorMessage(ex)}`, body);
+        }
+        const problem = checkJellyResume(fromBase64(resume.preamble), appended);
+        if (problem) {
+            await after?.cancel().catch(() => undefined);
+            await fail(`the appended Jelly frame cannot be read with the lookup tables alone: ${problem}`, body);
+        }
+        if (resume.compression === "gzip") {
+            // The decompressed copy was only needed for the check
+            void after?.cancel().catch(() => undefined);
+            return body;
+        }
+        // The bytes that were read for the check go to the parser first
+        return appended.length === 0 ? after! : prependBytes(appended, after!);
     }
 
     private async dereferenceFile(location: string, options: DereferenceOptions): Promise<MessageLog> {
@@ -543,6 +691,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         contentDisposition: string | null,
         fetch_f: typeof fetch,
         accept: (contentType: string, transfer: Transfer) => void,
+        tracker?: ResumeTracker,
     ): Promise<void> {
         const base = declaredType.split(";")[0].trim();
         const prepared = await RdfParsers.prepareStream(source, {
@@ -553,10 +702,24 @@ export class LdfetchDereferencer implements MessageDereferencer {
         });
         const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
+        let input: Readable = prepared.stream;
+        tracker?.setSyntax(contentType);
+        if (tracker?.scans) {
+            // Of Jelly, the tracker reads the bytes as the parser does (after the decompression of a compressed file),
+            // between the source and the parser: other serializations go to the parser as they did
+            const tap = new Transform({
+                transform(chunk: Uint8Array, _encoding, callback) {
+                    tracker.scan(chunk);
+                    callback(null, chunk);
+                },
+            });
+            // Destroying the tap (when the log is closed) destroys the source too
+            input = pipeline(prepared.stream, tap, () => undefined) as Readable;
+        }
 
         let parser: EventEmitter;
         if (RdfParsers.isStreamable(contentType)) {
-            parser = RdfParsers.parseStream(prepared.stream, {
+            parser = RdfParsers.parseStream(input, {
                 contentType,
                 baseIRI: url,
             });
@@ -593,7 +756,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
                 requestUrl,
             });
         }
-        accept(contentType, { parser, stream: prepared.stream });
+        accept(contentType, { parser, stream: input });
     }
 }
 

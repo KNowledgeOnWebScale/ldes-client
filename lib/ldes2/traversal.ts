@@ -21,6 +21,7 @@ import type { Description, OrderMode, Relation } from "./description";
 import type { MembershipRule } from "./membership";
 import type { Member } from "../types";
 import type { MessageLog } from "../fetcher/ldfetchDereferencer";
+import type { ResumeState } from "../fetcher/resume";
 import { MAX_BUFFERED_MESSAGES, MessageLog as MessageLogClass } from "../fetcher/ldfetchDereferencer";
 
 const logger = getLoggerFor("Ldes2Traversal");
@@ -49,8 +50,12 @@ export type Bookmark = {
     pages?: Record<string, CachedPage>;
 };
 
-/** A page that is read completely, and can change: its final URL after redirects, ETag, and serialized description */
-export type CachedPage = { url?: string; etag: string; description?: string };
+/**
+ * A page that is read completely, and can change: its final URL after redirects, ETag, and serialized description.
+ * Of a page that opts in to range requests, `range` tells where the next request continues, with an HTTP Range request: the next run
+ * only reads the messages that were appended, and the description (with the ones that were appended) is here.
+ */
+export type CachedPage = { url?: string; etag?: string; description?: string; range?: ResumeState; members?: number };
 
 /** A bookmark as it is saved in the state of the client, which is JSON: the members are an array */
 export type SavedBookmark = Omit<Bookmark, "members"> & { members: string[] };
@@ -83,7 +88,7 @@ export type Traversal = {
     context: StreamContext;
     bookmark: Bookmark;
     /** Opens a page: dereferences the IRI. With an `etag`, the page is requested with `If-None-Match`, and the answer can be a 304 without messages. */
-    open(url: string, options?: { bufferedMessages?: number; etag?: string }): Promise<MessageLog>;
+    open(url: string, options?: { bufferedMessages?: number; etag?: string; resume?: ResumeState }): Promise<MessageLog>;
     /**
      * The number of relations of which the page is requested before it is needed, the one that is awaited included (0 or 1: one by one).
      * They are the relations that are followed next, so a page is never fetched without being followed,
@@ -123,7 +128,13 @@ class OpenPage {
     etag?: string;
     /** The page is the one that was cached: it did not change, and has no members to read */
     cached = false;
-    private index = 0;
+    /** The page opts in to HTTP Range requests (`ldes:rangeRequests true`), by itself or via the page that links to it, and is not (yet) immutable */
+    rangeRequests = false;
+    immutable = false;
+    /** Called for a description message that was appended to the page, after members */
+    onDescription?: (quads: Quad[]) => void;
+    /** The number of member messages of the page before the next one: the position in an implicit order */
+    index = 0;
     private last?: Key;
 
     constructor(
@@ -135,7 +146,13 @@ class OpenPage {
 
     /** Reads the next member message of the page, to know its key. Closes the page when there is none. */
     async advance(message?: Quad[] | undefined, readAhead = true): Promise<void> {
-        const quads = readAhead ? await this.log.next() : message;
+        let quads = readAhead ? await this.log.next() : message;
+        // A page that is continued with range requests grows with description messages too, e.g. with new relations, and finally
+        // `ldes:immutable true`. Other pages are read as before: only their first message can be the description message.
+        while (quads && quads.length > 0 && this.rangeRequests && this.onDescription && isDescriptionMessage(quads, this.url)) {
+            this.onDescription(quads);
+            quads = await this.log.next();
+        }
         if (!quads) {
             this.next = undefined;
             this.log.close();
@@ -218,13 +235,39 @@ export function cachedLog(url: string, answer: MessageLog, cached: CachedPage): 
     const messages = cached.description ? [parseQuads(cached.description)] : [];
     const headers = new Headers(answer.headers);
     // A 304 should carry the ETag, but the page is the one of this ETag in any case
-    if (!headers.has("etag")) headers.set("etag", cached.etag);
+    if (!headers.has("etag") && cached.etag) headers.set("etag", cached.etag);
     // The description names the final URL of the original response, even when the relation uses an alias.
     // Keep it in the cache: the fetch wrapper's empty 304 response need not retain that final URL.
     const log = MessageLogClass.fromMessages(cached.url ?? url, 200, headers, messages);
     // It is what a page of an LDES 2.0 is: the messages that were read
     log.framed = true;
     return log;
+}
+
+/**
+ * Requests a page again, with what is known of it since a run read it completely: a page with range requests is continued where
+ * it ended (HTTP Range), another page is requested with its ETag. Gives the log of the page as it is now, in which the
+ * description message comes first, also when it is not in what the server sent.
+ */
+export async function reopenPage(
+    open: Traversal["open"],
+    url: string,
+    cached: CachedPage | undefined,
+    bufferedMessages?: number,
+): Promise<MessageLog> {
+    if (cached?.range) {
+        const log = await open(url, { bufferedMessages, resume: cached.range });
+        if (log.resumed) {
+            logger.debug(`${url}: continuing at byte ${cached.range.offset} (HTTP ${log.status})`);
+            if (cached.description) log.prepend([parseQuads(cached.description)]);
+        }
+        return log;
+    }
+    const log = await open(url, { bufferedMessages, etag: cached?.etag });
+    if (log.status !== 304) return log;
+    if (!cached) throw new Error(`${url} answered HTTP 304, while the client did not send an ETag`);
+    logger.debug(`${url} has not changed (HTTP 304)`);
+    return cachedLog(log.url, log, cached);
 }
 
 /**
@@ -237,6 +280,7 @@ async function openPage(
     pageNumber: number | undefined,
     isRoot: boolean,
     first?: { quads: Quad[] | undefined },
+    prepare?: (page: OpenPage, description: Description | undefined) => void,
 ): Promise<{ page: OpenPage; description?: Description }> {
     const { context } = traversal;
     let message = first ? first.quads : await log.next();
@@ -253,6 +297,7 @@ async function openPage(
     const page = new OpenPage(log.url, pageNumber, log, context);
     page.etag = log.headers.get("etag") ?? undefined;
     page.descriptionMessage = descriptionMessage;
+    prepare?.(page, description);
     await page.advance(message, false);
     return { page, description };
 }
@@ -285,14 +330,10 @@ export async function synchronize(traversal: Traversal): Promise<number> {
     const relevant = (lower: Key | undefined, upper: Key | undefined) => traversal.relevant?.(lower, upper) ?? true;
     let finishedRun = false;
     /** Opens the page of a relation. A page that has not changed since it was read completely (a 304) is read from the bookmark. */
-    const openRelation = async (relation: Relation, bufferedMessages?: number): Promise<MessageLog> => {
-        const cached = bookmark.pages?.[relation.page];
-        const log = await traversal.open(relation.page, { bufferedMessages, etag: cached?.etag });
-        if (log.status !== 304) return log;
-        if (!cached) throw new Error(`${relation.page} answered HTTP 304, while the client did not send an ETag`);
-        logger.debug(`${relation.page} has not changed (HTTP 304)`);
-        return cachedLog(log.url, log, cached);
-    };
+    const openRelation = (relation: Relation, bufferedMessages?: number): Promise<MessageLog> =>
+        reopenPage(traversal.open, relation.page, bookmark.pages?.[relation.page], bufferedMessages);
+    // The pages that are that opt in to range requests (`ldes:rangeRequests true`) by a page that links to them
+    const markedRangeRequests = new Set<string>();
     const prefetchPage = (relation: Relation) => {
         const pending = (async (): Promise<Prefetched> => {
             const log = await openRelation(relation, PREFETCH_BUFFERED_MESSAGES);
@@ -360,14 +401,30 @@ export async function synchronize(traversal: Traversal): Promise<number> {
         first?: { quads: Quad[] | undefined },
         linkedAs?: string,
     ) => {
-        const { page, description } = await openPage(traversal, log, pageNumber, isRoot, first);
-        page.linkedAs = linkedAs;
-        page.leaf = !description || description.relations.length === 0;
-        traversal.onPage?.(log.url, description);
-        if (description) {
+        // What a description message tells about the pages, both the first one and those that are appended later
+        const describe = (page: OpenPage, description: Description) => {
             description.immutablePages.forEach((url) => markedImmutable.add(url));
+            description.rangeRequestPages.forEach((url) => markedRangeRequests.add(url));
+            if (description.immutable) page.immutable = true;
+            if (description.rangeRequestPages.has(page.url) || markedRangeRequests.has(page.linkedAs ?? page.url)) page.rangeRequests = true;
+            if (description.relations.length > 0) page.leaf = false;
             addRelations(description.relations);
-        }
+            prefetchAhead();
+        };
+        const { page, description } = await openPage(traversal, log, pageNumber, isRoot, first, (page, description) => {
+            page.linkedAs = linkedAs;
+            // A resumed page continues the positions of the members that were read before
+            if (log.resumed) page.index = bookmark.pages?.[linkedAs ?? rootUrl]?.members ?? 0;
+            page.leaf = true;
+            if (description) describe(page, description);
+            else if (markedRangeRequests.has(linkedAs ?? page.url)) page.rangeRequests = true;
+            page.onDescription = (quads) => {
+                logger.debug(`${page.url}: a description message was appended`);
+                page.descriptionMessage = [...(page.descriptionMessage ?? []), ...quads];
+                describe(page, readDescription(quads, page.url, context.mode, context.defaultOffset));
+            };
+        });
+        traversal.onPage?.(log.url, description);
         if (page.next) {
             pages.push(page);
         } else {
@@ -378,8 +435,19 @@ export async function synchronize(traversal: Traversal): Promise<number> {
 
     // A page that is read completely, is immutable, and has no relations, does not have to be read again
     const finished = (page: OpenPage) => {
+        const range = page.rangeRequests && !page.immutable ? page.log.resumeState() : undefined;
         if (page.linkedAs && page.leaf && markedImmutable.has(page.linkedAs)) {
             completed.add(page.linkedAs);
+        } else if (range) {
+            // A page with range requests: the next run only requests what was appended to it
+            observed.set(page.linkedAs ?? rootUrl, {
+                url: page.url,
+                ...(page.etag && { etag: page.etag }),
+                ...(page.descriptionMessage && { description: serializeQuads(page.descriptionMessage) }),
+                range,
+                // The members that were read: the appended ones come after them in an implicit order
+                members: page.index,
+            });
         } else if (page.etag) {
             // A page that can change: the next run requests it with this ETag, and does not read it when it answers that it has not changed
             const key = page.linkedAs ?? rootUrl;

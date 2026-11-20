@@ -18,6 +18,7 @@ export const V = {
     page: ldes("page"),
     member: ldes("member"),
     immutable: ldes("immutable"),
+    rangeRequests: ldes("rangeRequests"),
     timeFrom: ldes("timeFrom"),
     timeUntil: ldes("timeUntil"),
     sequenceFrom: ldes("sequenceFrom"),

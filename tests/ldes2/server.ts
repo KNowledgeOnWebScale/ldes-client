@@ -8,6 +8,8 @@ export type Page = {
     headers?: Record<string, string>;
     /** Milliseconds before the page is sent */
     delay?: number;
+    /** Answers `Range: bytes=N-` with 206 Partial Content (or 416), as static file servers do */
+    ranges?: boolean;
 };
 
 export const PREFIXES = `PREFIX ldes: <https://w3id.org/ldes#>
@@ -25,6 +27,9 @@ PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 export class MockServer {
     public pages = new Map<string, Page>();
     public requests: string[] = [];
+    /** The Range header of every request (undefined without), and the number of body bytes of every response */
+    public ranges: Array<string | undefined> = [];
+    public sent: number[] = [];
     /** The requests that are being answered, and the largest number there have been at the same time */
     public inFlight = 0;
     public maxInFlight = 0;
@@ -55,6 +60,7 @@ export class MockServer {
         this.server.get("/*", async (request, reply) => {
             const path = request.url.split("?")[0];
             this.requests.push(path);
+            this.ranges.push(request.headers.range);
             const page = this.pages.get(path);
             if (!page) {
                 return reply.status(404).send("not found");
@@ -71,6 +77,21 @@ export class MockServer {
             for (const [key, value] of Object.entries(page.headers ?? {})) {
                 reply.header(key, value);
             }
+            const body = Buffer.from(page.body);
+            const range = /^bytes=(\d+)-$/.exec(request.headers.range ?? "");
+            if (page.ranges && range) {
+                const start = Number(range[1]);
+                if (start >= body.length) {
+                    this.sent.push(0);
+                    return reply.status(416).header("content-range", `bytes */${body.length}`).send();
+                }
+                this.sent.push(body.length - start);
+                return reply
+                    .status(206)
+                    .header("content-range", `bytes ${start}-${body.length - 1}/${body.length}`)
+                    .send(body.subarray(start));
+            }
+            this.sent.push(body.length);
             return reply.send(page.body);
         });
         await this.server.listen({ port: this.port });
