@@ -68,6 +68,16 @@ describe("A single-page LDES in TriG with range requests", () => {
         server.sent = [];
         expect(await collect({ storage })).toEqual([]);
         expect(rangeResponses()).toEqual([{ range: `bytes=${after - 32}-`, path: "/root", sent: 32 }]);
+
+        // A sync that found nothing new keeps the range state: the next one continues the page too
+        // (a cache that still serves the old version answers exactly like this)
+        const later = publish(["a1", "a2", "a3", "a4"]);
+        server.ranges = [];
+        server.requests = [];
+        server.sent = [];
+        expect(await collect({ storage })).toEqual(["a4"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${after - 32}-`, path: "/root", sent: later - after + 32 }]);
+        expect(server.requests).toEqual(["/root"]);
     });
 
     test("a polling client continues the page in every run", async () => {

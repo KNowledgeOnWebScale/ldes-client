@@ -247,7 +247,8 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     resumeState(): ResumeState | undefined {
         if (this.unchanged) return this.unchanged;
         if (!this.complete || this.failure) return undefined;
-        return this.tracker?.state(this.framed);
+        // A resumed response continues a page with message delimiters, also when nothing was appended to it (yet)
+        return this.tracker?.state(this.framed || this.resumed);
     }
 
     /** Puts messages before those of the transfer, such as the description of a resumed page, which is not in the appended bytes */
