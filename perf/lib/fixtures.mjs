@@ -95,7 +95,7 @@ export async function createFixtures(BASE) {
         const url = ldes2(name, members, size);
         for (const [key, page] of pages) {
             if (!key.startsWith(`/${name}/`)) continue;
-            const writer = new Writer({ packMessages: false });
+            const writer = new Writer({ version: 2, packMessages: false });
             for (const message of parseMessages(page.body)) writer.addMessage(message);
             const body = await new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes)))));
             pages.set(key, { type: "application/x-jelly-rdf", body });

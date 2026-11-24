@@ -155,7 +155,7 @@ class LiveFeed {
         }
         const { parseMessages } = await import("n3.js-messages");
         const { Writer } = await import("rdfjs-jelly");
-        const writer = new Writer({ packMessages: false });
+        const writer = new Writer({ version: 2, packMessages: false });
         for (const message of messages) {
             if (!this.messages.has(message)) this.messages.set(message, [...parseMessages(`VERSION "1.2-messages"\n${trigPrefixes}${message}`)]);
             for (const parsed of this.messages.get(message)) writer.addMessage(parsed);
