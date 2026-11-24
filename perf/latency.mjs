@@ -154,8 +154,8 @@ class LiveFeed {
             return;
         }
         const { parseMessages } = await import("n3.js-messages");
-        const { Writer } = await import("rdfjs-jelly");
-        const writer = new Writer({ version: 2, packMessages: false });
+        const { Writer, RdfStreamType } = await import("rdfjs-jelly");
+        const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES, packMessages: false });
         for (const message of messages) {
             if (!this.messages.has(message)) this.messages.set(message, [...parseMessages(`VERSION "1.2-messages"\n${trigPrefixes}${message}`)]);
             for (const parsed of this.messages.get(message)) writer.addMessage(parsed);

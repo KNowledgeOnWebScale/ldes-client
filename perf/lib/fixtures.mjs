@@ -88,14 +88,14 @@ export async function createFixtures(BASE) {
         return root;
     }
 
-    // Encode the exact TriG message quads as Jelly frames, one frame per message.
+    // Encode the exact TriG message quads as Jelly 1.2, with explicit message boundaries.
     async function jelly(name, members, size) {
         const { parseMessages } = await import("n3.js-messages");
-        const { Writer } = await import("rdfjs-jelly");
+        const { Writer, RdfStreamType } = await import("rdfjs-jelly");
         const url = ldes2(name, members, size);
         for (const [key, page] of pages) {
             if (!key.startsWith(`/${name}/`)) continue;
-            const writer = new Writer({ version: 2, packMessages: false });
+            const writer = new Writer({ version: 3, streamType: RdfStreamType.MESSAGES, packMessages: false });
             for (const message of parseMessages(page.body)) writer.addMessage(message);
             const body = await new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes)))));
             pages.set(key, { type: "application/x-jelly-rdf", body });
