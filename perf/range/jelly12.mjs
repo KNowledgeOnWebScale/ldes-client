@@ -7,7 +7,7 @@
  * - Jelly 1.2, packed: batches of the default size, without flushing per publication (reference: how compact 1.2 can be)
  * - Jelly 1.2, appended: flush per publication, lookup tables shared across batches (the default)
  * - Jelly 1.2, appended, self-contained: flush per publication, `persistentLookups: false` (every batch on its own)
- * compared with TriG and the resumable Jelly 1.1 of perf/range/jelly11.mjs.
+ * compared with TriG and with Jelly 1.1, appended in the same way.
  *
  * Resuming: the stream is cut at the end of a publication, and `preamble + the rest` is parsed. The preamble is a stream
  * with the same options and no messages (only its options frame). It has to give exactly the messages of the rest.
@@ -18,7 +18,6 @@ import { gzipSync } from "zlib";
 import { Parser as N3Parser } from "n3";
 import { Parser, RdfStreamType, Writer, toMessages } from "rdfjs-jelly";
 import { member } from "../lib/fixtures.mjs";
-import { ResumableJellyWriter } from "./jelly11.mjs";
 
 const arg = (name, fallback) => (process.argv.includes(`--${name}`) ? Number(process.argv[process.argv.indexOf(`--${name}`) + 1]) : fallback);
 const members = arg("members", 10_000);
@@ -258,8 +257,7 @@ for (const k of [1, 10, 100, 1000]) {
             publication.map((i) => (i === 0 ? `VERSION "1.2-messages"\n${prefixes}\n${description}\n` : `MESSAGE\n${member(i - 1)}\n`)).join(""),
         ),
     );
-    const resumable = new ResumableJellyWriter();
-    const jelly11 = publications(k).map((publication) => Buffer.concat(publication.map((i) => resumable.frame(messages[i]))));
+    const jelly11 = jelly12(k, { version: 2 });
     const packed = jelly12(k, {}, false);
     const appended = jelly12(k, {});
     const selfContained = jelly12(k, { persistentLookups: false });
@@ -277,7 +275,7 @@ for (const k of [1, 10, 100, 1000]) {
     console.log(`--- ${k} member(s) per publication`);
     console.table({
         TriG: sizes(trig),
-        "Jelly 1.1, frames independent": sizes(jelly11),
+        "Jelly 1.1, appended": sizes(jelly11),
         "Jelly 1.2, packed (not per publication)": { ...sizes([Buffer.concat(packed)]), "bytes/publication": "-" },
         "Jelly 1.2, appended (shared lookups)": sizes(appended),
         "Jelly 1.2, appended, self-contained": sizes(selfContained),

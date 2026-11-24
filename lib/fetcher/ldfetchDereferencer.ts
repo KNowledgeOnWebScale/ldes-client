@@ -1,16 +1,16 @@
-import { Readable, Transform, pipeline } from "stream";
+import { Readable } from "stream";
 import RdfParsers from "ldfetch/lib/RdfParsers.js";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import { getLoggerFor } from "../utils/logUtil";
 import { errorMessage } from "../utils/general";
 import { ContextCache, uncachedDocumentLoader } from "./contextCache";
-import { JELLY, ResumeInvalid, ResumeTracker, baseType, checkJellyResume, fromBase64, nextFrame, prependBytes, readHead, sameBytes } from "./resume";
+import { ResumeInvalid, ResumeTracker, baseType, fromBase64, readHead, sameBytes } from "./resume";
 
 import type { Quad, Stream } from "@rdfjs/types";
 import type { EventEmitter } from "events";
 import type HttpCache from "ldfetch/lib/HttpCache.js";
 import type { ContextCacheOptions } from "./contextCache";
-import type { ResumeState } from "./resume";
+import type { ParserState, ResumeState } from "./resume";
 
 const logger = getLoggerFor("LdfetchDereferencer");
 
@@ -247,8 +247,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
     resumeState(): ResumeState | undefined {
         if (this.unchanged) return this.unchanged;
         if (!this.complete || this.failure) return undefined;
-        // A resumed response continues a page with message delimiters, also when nothing was appended to it (yet)
-        return this.tracker?.state(this.framed || this.resumed);
+        return this.tracker?.state();
     }
 
     /** Puts messages before those of the transfer, such as the description of a resumed page, which is not in the appended bytes */
@@ -285,9 +284,6 @@ export class MessageLog implements AsyncIterable<Quad[]> {
         this.source = source;
         this.tracker = tracker;
         this.complete = false;
-        // The preamble of a resumed transfer gives an empty message (Jelly), and the appended bytes can start with a
-        // message delimiter (TriG): empty messages before the first appended message are not messages of the page
-        let leading = this.resumed;
         this.paused = false;
         // A transfer that comes after an interrupted one starts with the messages that have been read already
         const skip = this.read;
@@ -305,7 +301,7 @@ export class MessageLog implements AsyncIterable<Quad[]> {
             void this.recover(error);
         };
         parser
-            .on("prefix", (prefix: string, iri: string) => tracker?.prefix(prefix, iri))
+            .on("parserState", (state: ParserState) => tracker?.setParserState(state))
             .on("data", (quad: Quad, messageCounter?: number) => {
                 if (messageCounter === undefined) {
                     unframed.push(quad);
@@ -314,8 +310,6 @@ export class MessageLog implements AsyncIterable<Quad[]> {
             .on("message", (quads: Quad[]) => {
                 if (!live) return;
                 this.framed = true;
-                if (leading && quads.length === 0) return;
-                leading = false;
                 if (seen < skip) {
                     checksum = mix(checksum, quads);
                     if (++seen === skip && checksum !== this.checksum) {
@@ -583,12 +577,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         const resumed = !!resume && response.status === 206;
         if (resumed) {
             body = await this.continueAt(response, resume!, start, tail, declaredType);
-            tracker = new ResumeTracker(declaredType, {
-                offset: resume!.offset,
-                preamble: fromBase64(resume!.preamble),
-                tail,
-                compression: resume!.compression,
-            });
+            tracker = new ResumeTracker(declaredType, { offset: resume!.offset, tail, compression: resume!.compression });
         } else {
             tracker = new ResumeTracker(declaredType);
         }
@@ -602,7 +591,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             options.fetch ?? fetch,
             (contentType, transfer) =>
                 accept({ url: finalUrl, status: response.status, headers: response.headers, contentType, resumed }, { ...transfer, tracker }),
-            tracker,
+            resumed ? resume!.parserState : undefined,
         );
         return { kind: "parsed" };
     }
@@ -632,36 +621,9 @@ export class LdfetchDereferencer implements MessageDereferencer {
             await fail("appended gzip members can only be decompressed in Node.js");
         }
 
-        const { head, rest } = await readHead(response.body!, () => tail.length);
+        const { head, rest } = await readHead(response.body!, tail.length);
         if (!sameBytes(head, tail)) await fail("the bytes before the offset have changed", rest);
-        if (resume.syntax !== JELLY) return rest;
-
-        // Jelly: the first appended frame is read before anything is parsed, to check that the lookup tables suffice for it.
-        // Of a gzip file, it is read from a copy of the body that is decompressed.
-        const [checked, body] = resume.compression === "gzip" ? rest.tee() : [rest, rest];
-        const plain =
-            resume.compression === "gzip"
-                ? checked.pipeThrough(new DecompressionStream("gzip") as unknown as TransformStream<Uint8Array, Uint8Array>)
-                : checked;
-        let appended: Uint8Array = new Uint8Array(0);
-        let after: ReadableStream<Uint8Array> | undefined;
-        try {
-            ({ head: appended, rest: after } = await readHead(plain, (read) => nextFrame(read, 0)?.end ?? read.length + 1));
-        } catch (ex) {
-            await fail(`the first appended Jelly frame cannot be read: ${errorMessage(ex)}`, body);
-        }
-        const problem = checkJellyResume(fromBase64(resume.preamble), appended);
-        if (problem) {
-            await after?.cancel().catch(() => undefined);
-            await fail(`the appended Jelly frame cannot be read with the lookup tables alone: ${problem}`, body);
-        }
-        if (resume.compression === "gzip") {
-            // The decompressed copy was only needed for the check
-            void after?.cancel().catch(() => undefined);
-            return body;
-        }
-        // The bytes that were read for the check go to the parser first
-        return appended.length === 0 ? after! : prependBytes(appended, after!);
+        return rest;
     }
 
     private async dereferenceFile(location: string, options: DereferenceOptions): Promise<MessageLog> {
@@ -691,7 +653,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
         contentDisposition: string | null,
         fetch_f: typeof fetch,
         accept: (contentType: string, transfer: Transfer) => void,
-        tracker?: ResumeTracker,
+        parserState?: ParserState,
     ): Promise<void> {
         const base = declaredType.split(";")[0].trim();
         const prepared = await RdfParsers.prepareStream(source, {
@@ -702,26 +664,14 @@ export class LdfetchDereferencer implements MessageDereferencer {
         });
         const contentType = RdfParsers.resolveContentType(prepared.contentType, url, requestUrl);
         logger.debug(`Parsing ${url} as ${contentType}`);
-        let input: Readable = prepared.stream;
-        tracker?.setSyntax(contentType);
-        if (tracker?.scans) {
-            // Of Jelly, the tracker reads the bytes as the parser does (after the decompression of a compressed file),
-            // between the source and the parser: other serializations go to the parser as they did
-            const tap = new Transform({
-                transform(chunk: Uint8Array, _encoding, callback) {
-                    tracker.scan(chunk);
-                    callback(null, chunk);
-                },
-            });
-            // Destroying the tap (when the log is closed) destroys the source too
-            input = pipeline(prepared.stream, tap, () => undefined) as Readable;
-        }
 
         let parser: EventEmitter;
         if (RdfParsers.isStreamable(contentType)) {
-            parser = RdfParsers.parseStream(input, {
+            parser = RdfParsers.parseStream(prepared.stream, {
                 contentType,
                 baseIRI: url,
+                // Continue the message log from the parser state at the offset, when this transfer continues a page
+                ...(parserState && { parserState }),
             });
         } else if (JSON_TYPES.includes(contentType.split(";")[0].trim())) {
             const chunks: Buffer[] = [];
@@ -756,7 +706,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
                 requestUrl,
             });
         }
-        accept(contentType, { parser, stream: input });
+        accept(contentType, { parser, stream: prepared.stream });
     }
 }
 

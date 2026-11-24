@@ -127,112 +127,16 @@ describe("A page in Jelly-RDF with range requests", () => {
 <> ldes:relation [ ldes:page <${server.base}/page.jelly> ; ldes:pageNumber 0 ] .
 <${server.base}/page.jelly> ldes:rangeRequests true .`;
 
-    /**
-     * A Jelly stream of which every frame is a member message (m0, m1, ...) that only uses the stream options and the
-     * lookup tables of the frames before it: the prefix and the name `value` are only in the first frame, and every
-     * statement gives all its terms, with explicit identifiers.
-     */
-    function resumableJelly(count: number): Buffer {
-        const varint = (n: number) => {
-            const bytes: number[] = [];
-            while (n >= 0x80) {
-                bytes.push((n % 128) | 0x80);
-                n = Math.floor(n / 128);
-            }
-            bytes.push(n);
-            return Buffer.from(bytes);
-        };
-        const num = (field: number, value: number) => Buffer.concat([varint(field * 8), varint(value)]);
-        const len = (field: number, bytes: Buffer) => Buffer.concat([varint(field * 8 + 2), varint(bytes.length), bytes]);
-        const text = (field: number, value: string) => len(field, Buffer.from(value));
-        const row = (field: number, bytes: Buffer) => len(1, len(field, bytes));
-        const iri = (prefix: number, name: number) => Buffer.concat([num(1, prefix), num(2, name)]);
-        // QUADS, name table 64, prefix table 8, datatype table 8, protocol version 2 (Jelly 1.1)
-        const options = Buffer.concat([num(2, 2), num(9, 64), num(10, 8), num(11, 8), num(15, 2)]);
-        const frames = [];
-        for (let i = 0; i < count; i++) {
-            const rows: Buffer[] = [];
-            if (i === 0) {
-                rows.push(row(1, options), row(10, Buffer.concat([num(1, 1), text(2, EX)])), row(9, Buffer.concat([num(1, 1), text(2, "value")])));
-            }
-            const name = i + 2;
-            rows.push(row(9, Buffer.concat([num(1, name), text(2, `m${i}`)])));
-            rows.push(row(3, Buffer.concat([len(1, iri(1, name)), len(5, iri(1, 1)), len(11, text(1, String(i))), len(13, iri(1, name))])));
-            const frame = Buffer.concat(rows);
-            frames.push(varint(frame.length), frame);
-        }
-        return Buffer.concat(frames);
-    }
-
-    /** The same with the writer of rdfjs-jelly, which leaves out terms that are the same as in the statement before, also across frames */
-    async function compactJelly(count: number): Promise<Buffer> {
-        const { namedNode, literal, quad } = JellyFactory;
-        const writer = new Writer({ packMessages: false });
-        for (let i = 0; i < count; i++) {
-            writer.addMessage([quad(namedNode(`${EX}m${i}`), namedNode(`${EX}value`), literal(String(i)), namedNode(`${EX}m${i}`))]);
-        }
-        return new Promise((resolve, reject) => writer.end((error, bytes) => (error ? reject(error) : resolve(Buffer.from(bytes!)))));
-    }
-
-    function publish(body: Buffer) {
-        server.trig("/root", root);
-        server.set("/page.jelly", { type: "application/x-jelly-rdf", body, ranges: true });
-    }
-
-    test("the appended frames are parsed with the stream options and lookup tables of the frames before them", async () => {
-        const storage = new MemoryStorage();
-        const before = resumableJelly(2);
-        publish(before);
-        expect(await collect({ storage })).toEqual(["m0", "m1"]);
-
-        const after = resumableJelly(4);
-        expect(after.subarray(0, before.length).equals(before)).toBe(true);
-        publish(after);
-        expect(await collect({ storage })).toEqual(["m2", "m3"]);
-        expect(rangeResponses()).toEqual([{ range: `bytes=${before.length - 32}-`, path: "/page.jelly", sent: after.length - before.length + 32 }]);
-    });
-
-    test("a frame that depends on the statement before it cannot be continued: the page is read from the start", async () => {
-        const storage = new MemoryStorage();
-        const before = await compactJelly(2);
-        publish(before);
-        expect(await collect({ storage })).toEqual(["m0", "m1"]);
-
-        const after = await compactJelly(3);
-        expect(after.subarray(0, before.length).equals(before)).toBe(true);
-        publish(after);
-        expect(await collect({ storage })).toEqual(["m2"]);
-        const page = server.ranges.filter((_, i) => server.requests[i] === "/page.jelly");
-        expect(page.slice(-2)).toEqual([expect.stringMatching(/^bytes=/), undefined]);
-    });
-
-    test("a gzip file to which gzip members are appended is continued at the end of the last member", async () => {
-        const storage = new MemoryStorage();
-        const rootGz = `ex:ES a ldes:EventStream ; ldes:memberGraph true .
-<> ldes:relation [ ldes:page <${server.base}/page.jelly.gz> ; ldes:pageNumber 0 ] .
-<${server.base}/page.jelly.gz> ldes:rangeRequests true .`;
-        const before = resumableJelly(2);
-        const after = resumableJelly(4);
-        const first = gzipSync(before);
-        server.trig("/root", rootGz);
-        server.set("/page.jelly.gz", { type: "application/octet-stream", body: first, ranges: true });
-        expect(await collect({ storage })).toEqual(["m0", "m1"]);
-
-        const appended = gzipSync(after.subarray(before.length));
-        server.set("/page.jelly.gz", { type: "application/octet-stream", body: Buffer.concat([first, appended]), ranges: true });
-        expect(await collect({ storage })).toEqual(["m2", "m3"]);
-        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length - 32}-`, path: "/page.jelly.gz", sent: appended.length + 32 }]);
-
-        // Compressed again as a whole: the bytes before the offset are not the same, so the file is read from the start
-        server.set("/page.jelly.gz", { type: "application/octet-stream", body: gzipSync(resumableJelly(5)), ranges: true });
-        expect(await collect({ storage })).toEqual(["m4"]);
-    });
+    const ex = (name: string) => EX + name;
 
     /**
-     * Jelly 1.2 as a publisher appends it: one streaming writer of rdfjs-jelly with its default (shared) lookup tables,
-     * and a flush at the end of every publication. Gives the bytes that every publication appends.
+     * Jelly as a publisher appends it: one streaming writer of rdfjs-jelly with its defaults (shared lookup tables, and for
+     * Jelly 1.1 terms that are left out when they are the same as in the statement before, also across frames), and a
+     * flush at the end of every publication. Gives the bytes that every publication appends.
+     * Every message is a member m<i>: (m<i>, ex:value, "i") in the graph m<i>.
+     * @param version 2 (Jelly 1.1) or 3 (Jelly 1.2)
      */
-    function jelly12(publications: number[][]): Buffer[] {
+    function jellyParts(version: 2 | 3, publications: number[][]): Buffer[] {
         const { namedNode, literal, quad } = JellyFactory;
         const chunks: Buffer[] = [];
         let current: Buffer[] = [];
@@ -244,7 +148,7 @@ describe("A page in Jelly-RDF with range requests", () => {
                 },
                 end: (done?: (error?: Error | null) => void) => done?.(),
             },
-            { version: 3, streamType: RdfStreamType.MESSAGES },
+            { version, streamType: RdfStreamType.MESSAGES },
         );
         for (const publication of publications) {
             for (const i of publication) {
@@ -256,11 +160,65 @@ describe("A page in Jelly-RDF with range requests", () => {
         }
         return chunks;
     }
-    const ex = (name: string) => EX + name;
+
+    function publish(body: Buffer) {
+        server.trig("/root", root);
+        server.set("/page.jelly", { type: "application/x-jelly-rdf", body, ranges: true });
+    }
+
+    test("Jelly 1.1 is continued with the decoder state of the frames before it", async () => {
+        const storage = new MemoryStorage();
+        const [first, second, third] = jellyParts(2, [[0, 1], [2], [3]]);
+        publish(first);
+        expect(await collect({ storage })).toEqual(["m0", "m1"]);
+
+        // The appended frame uses the lookup tables of the first one, and leaves out the predicate, which is the same as
+        // in the last statement before it
+        publish(Buffer.concat([first, second]));
+        expect(await collect({ storage })).toEqual(["m2"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length - 32}-`, path: "/page.jelly", sent: second.length + 32 }]);
+
+        // Nothing appended (as a cache with the old version answers): the decoder state is kept for the next sync
+        server.ranges = [];
+        server.requests = [];
+        server.sent = [];
+        expect(await collect({ storage })).toEqual([]);
+        publish(Buffer.concat([first, second, third]));
+        server.ranges = [];
+        server.requests = [];
+        server.sent = [];
+        expect(await collect({ storage })).toEqual(["m3"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length + second.length - 32}-`, path: "/page.jelly", sent: third.length + 32 }]);
+    });
+
+    test("a gzip file to which gzip members are appended is continued at the end of the last member", async () => {
+        const storage = new MemoryStorage();
+        const rootGz = `ex:ES a ldes:EventStream ; ldes:memberGraph true .
+<> ldes:relation [ ldes:page <${server.base}/page.jelly.gz> ; ldes:pageNumber 0 ] .
+<${server.base}/page.jelly.gz> ldes:rangeRequests true .`;
+        const parts = jellyParts(2, [
+            [0, 1],
+            [2, 3],
+        ]);
+        const first = gzipSync(parts[0]);
+        server.trig("/root", rootGz);
+        server.set("/page.jelly.gz", { type: "application/octet-stream", body: first, ranges: true });
+        expect(await collect({ storage })).toEqual(["m0", "m1"]);
+
+        const appended = gzipSync(parts[1]);
+        server.set("/page.jelly.gz", { type: "application/octet-stream", body: Buffer.concat([first, appended]), ranges: true });
+        expect(await collect({ storage })).toEqual(["m2", "m3"]);
+        expect(rangeResponses()).toEqual([{ range: `bytes=${first.length - 32}-`, path: "/page.jelly.gz", sent: appended.length + 32 }]);
+
+        // Compressed again as a whole: the bytes before the offset are not the same, so the file is read from the start
+        const whole = gzipSync(Buffer.concat(jellyParts(2, [[0, 1, 2, 3, 4]])));
+        server.set("/page.jelly.gz", { type: "application/octet-stream", body: whole, ranges: true });
+        expect(await collect({ storage })).toEqual(["m4"]);
+    });
 
     test("Jelly 1.2 is continued with the lookup tables of the batches before it", async () => {
         const storage = new MemoryStorage();
-        const [first, second, third] = jelly12([[0, 1], [2, 3], [4]]);
+        const [first, second, third] = jellyParts(3, [[0, 1], [2, 3], [4]]);
         publish(first);
         expect(await collect({ storage })).toEqual(["m0", "m1"]);
 
@@ -279,7 +237,7 @@ describe("A page in Jelly-RDF with range requests", () => {
 
     test("Jelly 1.2 in a gzip file with appended gzip members is continued too", async () => {
         const storage = new MemoryStorage();
-        const members = jelly12([
+        const members = jellyParts(3, [
             [0, 1],
             [2, 3],
         ]).map((chunk) => gzipSync(chunk));

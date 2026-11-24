@@ -72,13 +72,17 @@ async function sync(url, storage) {
     const used = process.cpuUsage(cpu);
     // The state that the client keeps between runs: the bookmark, with the ETags and range states of the pages
     const saved = await storage.store("ldes2").get(url);
-    const preambleBytes = Object.values(saved?.pages ?? {}).reduce((sum, page) => sum + (page.range?.preamble.length ?? 0), 0);
+    // The parser states in it (ldfetch's parserState), as JSON
+    const parserStateBytes = Object.values(saved?.pages ?? {}).reduce(
+        (sum, page) => sum + (page.range?.parserState ? JSON.stringify(page.range.parserState).length : 0),
+        0,
+    );
     return {
         members,
         wallMs: performance.now() - started,
         clientCpuMs: (used.user + used.system) / 1000,
         stateBytes: JSON.stringify(saved ?? {}).length,
-        preambleBytes,
+        parserStateBytes,
     };
 }
 
@@ -127,7 +131,7 @@ for (const strategy of strategies) {
         bytesPerMember: sum("bodyBytes") / sum("expected"),
         wireBytesPerCycle: sum("wireBytes") / later.length,
         stateBytes: rows.at(-1).stateBytes,
-        preambleBytes: rows.at(-1).preambleBytes,
+        parserStateBytes: rows.at(-1).parserStateBytes,
         correct: rows.every((row) => row.members === row.expected),
         statuses: later.reduce((all, row) => {
             for (const [status, n] of Object.entries(row.status)) all[status] = (all[status] ?? 0) + n;

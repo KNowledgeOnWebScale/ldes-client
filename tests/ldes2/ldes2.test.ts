@@ -353,10 +353,10 @@ describe("Errors", () => {
 });
 
 describe("Jelly-RDF", () => {
-    /** Writes the messages as a Jelly stream, in which every frame is a message */
+    /** Writes the messages as a Jelly 1.1 stream, in which every frame is a message */
     async function jelly(messages: Array<Array<[string, string, string, string?]>>): Promise<Buffer> {
         const { namedNode, literal, quad } = JellyFactory;
-        const writer = new Writer({ packMessages: false });
+        const writer = new Writer({ version: 2, packMessages: false });
         for (const message of messages) {
             writer.addMessage(
                 message.map(([s, p, o, g]) =>
@@ -559,7 +559,7 @@ describe("Sample LDES: RiverBench", () => {
         const { namedNode, literal, quad } = JellyFactory;
         const atTime = namedNode("http://www.w3.org/ns/prov#atTime");
         const dateTime = namedNode("http://www.w3.org/2001/XMLSchema#dateTime");
-        const writer = new Writer({ packMessages: false });
+        const writer = new Writer({ version: 2, packMessages: false });
         // As in the dataset: the timestamp is on the graph name in the default graph, without a timezone
         for (const time of ["2023-01-02T15:36:37.065535", "2023-01-02T15:36:37.065600", "2023-01-02T15:36:47.000001"]) {
             const graph = namedNode(`https://assist-iot.eu/pilot2_rdf/graph/ws/ibs_1/${time}`);
