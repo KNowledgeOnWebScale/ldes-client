@@ -4,7 +4,7 @@ import { RdfStore } from "rdf-stores";
 import { DataFactory } from "rdf-data-factory";
 import { intoConfig } from "./config";
 import { DEFAULT_TRANSFER_RETRY, LdfetchDereferencer, ldfetchDereferencer } from "./fetcher/ldfetchDereferencer";
-import { Gate, cachedLog, detectVersion, isEventStreamDescription, startLdes2, toStore } from "./ldes2";
+import { Gate, cachedLog, detectVersion, isEventStreamDescription, reopenPage, startLdes2, toStore } from "./ldes2";
 import { handleConditions } from "./condition";
 import { OrderedStrategy, UnorderedStrategy, ModulatorFactory, Fetcher, Manager } from "./ldes1";
 import {
@@ -27,7 +27,7 @@ import type { Quad, Term } from "@rdfjs/types";
 import type { Config } from "./config";
 import { ClientStateManager } from "./state";
 import { MemoryStorage } from "./storage/memory";
-import type { MessageDereferencer } from "./fetcher/ldfetchDereferencer";
+import type { MessageDereferencer, MessageLog } from "./fetcher/ldfetchDereferencer";
 import type { SavedBookmark } from "./ldes2";
 import type { LDESInfo, Notifier, FetchedPage, Member, MemberDelivery, Ordered, StrategyEvents } from "./types";
 
@@ -182,10 +182,21 @@ export class Client {
                           .catch(() => undefined)
                   )?.pages?.[this.config.url]
                 : undefined;
-            const etag = cached?.etag ?? cachedLdes2?.etag;
-            const headers = etag ? { "If-None-Match": etag } : undefined;
-            const answer = await this.dereferencer.dereferenceMessages(this.config.url, { fetch: this.config.fetch, headers, localFiles: true });
-            const log = answer.status === 304 && cachedLdes2 && !cached ? cachedLog(answer.url, answer, cachedLdes2) : answer;
+            let log: MessageLog;
+            if (cachedLdes2?.range && !cached) {
+                // An LDES 2.0 root page with range requests is continued at the byte where the last run ended
+                log = await reopenPage(
+                    (url, { etag: _etag, ...options } = {}) =>
+                        this.dereferencer.dereferenceMessages(url, { fetch: this.config.fetch, localFiles: true, ...options }),
+                    this.config.url,
+                    cachedLdes2,
+                );
+            } else {
+                const etag = cached?.etag ?? cachedLdes2?.etag;
+                const headers = etag ? { "If-None-Match": etag } : undefined;
+                const answer = await this.dereferencer.dereferenceMessages(this.config.url, { fetch: this.config.fetch, headers, localFiles: true });
+                log = answer.status === 304 && cachedLdes2 && !cached ? cachedLog(answer.url, answer, cachedLdes2) : answer;
+            }
             const first = await log.next();
 
             // Is this an LDES 1.0 or an LDES 2.0? The first message tells.

@@ -16,6 +16,19 @@ and they are listed under *LDES 2.0 (experimental)* in every release. Pin the ve
   does not have, so it used the filesystem of Node.js there and every replication failed (`(void 0) is not a function`).
   It now uses IndexedDB wherever `indexedDB` exists, so a worker can also resume from a `statePath`.
   ([#177](https://github.com/KNowledgeOnWebScale/ldes-client/issues/177))
+- ldfetch 1.4.0 and n3.js-messages 0.3.0 (rdfjs-jelly 0.3.0 for the tests).
+
+### LDES 2.0 (experimental)
+
+- A page that opts in with `<page> ldes:rangeRequests true` (a proposal, see
+  [SEMICeu/LinkedDataEventStreams#119](https://github.com/SEMICeu/LinkedDataEventStreams/issues/119)) is continued where the last
+  run ended, with an HTTP Range request: a sync only downloads what was appended to it. The bookmark has, per page, the byte offset
+  after the last complete RDF Message, the last 32 bytes before it, and the parser state that ldfetch gives at that offset. This works
+  for RDF Message logs in the Turtle family and in Jelly-RDF 1.1 and 1.2, also in a `.gz` file to which gzip members are appended
+  (Node.js only). Description messages that are appended to such a page are read too. Whenever the page cannot be continued (another
+  range, changed bytes before the offset, a shorter page, another media type, a Content-Encoding, a server without range support, or a
+  parser state that the parser rejects), the page is read from the start, and no member is emitted twice.
+  ([#180](https://github.com/KNowledgeOnWebScale/ldes-client/pull/180))
 
 ## 0.6.0
 

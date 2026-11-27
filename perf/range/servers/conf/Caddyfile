@@ -1,0 +1,17 @@
+# Caddy with on-the-fly compression (its usual production setup), also for the RDF media types
+:80 {
+    root * /www
+    @trig path *.trig
+    header @trig Content-Type application/trig
+    @jelly path *.jelly
+    header @jelly Content-Type application/x-jelly-rdf
+    encode {
+        gzip
+        minimum_length 0
+        match {
+            header Content-Type application/trig*
+            header Content-Type application/x-jelly-rdf*
+        }
+    }
+    file_server
+}

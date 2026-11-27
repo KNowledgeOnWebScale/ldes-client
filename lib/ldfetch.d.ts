@@ -13,7 +13,14 @@ declare module "ldfetch/lib/RdfParsers.js" {
     };
 
     export function parse(options: ParseOptions): EventEmitter;
-    export function parseStream(stream: Readable, options: { contentType: string; baseIRI: string }): EventEmitter;
+    /**
+     * An RDF Message log (Turtle family with messages, Jelly) emits a `parserState` event right before `end`; passed
+     * back as `parserState`, a later parse continues that log with the bytes that followed
+     */
+    export function parseStream(
+        stream: Readable,
+        options: { contentType: string; baseIRI: string; parserState?: Record<string, unknown> },
+    ): EventEmitter;
     export function prepareStream(
         stream: Readable,
         options: {

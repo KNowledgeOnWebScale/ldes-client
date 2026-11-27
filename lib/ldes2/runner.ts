@@ -12,7 +12,7 @@ import { V } from "./vocab";
 import { isOffset } from "./key";
 import { detectVersion, isEventStreamDescription, toStore } from "./description";
 import { membershipRule } from "./membership";
-import { cachedLog, synchronize } from "./traversal";
+import { reopenPage, synchronize } from "./traversal";
 
 import type { KVStore } from "../storage";
 import type { Quad, Term } from "@rdfjs/types";
@@ -180,14 +180,19 @@ export async function startLdes2(start: Ldes2Start): Promise<{ info: LDESInfo; p
         while (!hooks.isClosed()) {
             if (!first) {
                 // Every later run starts again from the root page. It is requested with the ETag that it had when it was read
-                // completely, and a 304 means that it is as it was: its description is in the bookmark.
-                const cached = bookmark.pages?.[rootUrl];
-                const answer = await dereferencer.dereferenceMessages(rootUrl, {
-                    fetch: config.fetch,
-                    localFiles: true,
-                    headers: cached ? { "If-None-Match": cached.etag } : undefined,
-                });
-                const log = answer.status === 304 && cached ? cachedLog(rootUrl, answer, cached) : answer;
+                // completely, and a 304 means that it is as it was: its description is in the bookmark. A root
+                // page is continued at the byte where it ended.
+                const log = await reopenPage(
+                    (url, { etag, ...options } = {}) =>
+                        dereferencer.dereferenceMessages(url, {
+                            fetch: config.fetch,
+                            localFiles: true,
+                            ...options,
+                            ...(etag && { headers: { "If-None-Match": etag } }),
+                        }),
+                    rootUrl,
+                    bookmark.pages?.[rootUrl],
+                );
                 root = { log, first: await log.next() };
             }
             first = false;
