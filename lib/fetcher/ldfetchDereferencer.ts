@@ -18,6 +18,22 @@ const isCloudflareWorker = typeof navigator !== "undefined" && navigator.userAge
 const isNode = !isCloudflareWorker && typeof process !== "undefined" && !!process.versions?.node;
 
 /**
+ * Checks that the parser can still continue from a stored parser state, by continuing an empty input with it. A state
+ * that it rejects, e.g. after an update of the parser, throws {@link ResumeInvalid}, so that the page is read from the start.
+ */
+async function checkParserState(parserState: ParserState, url: string): Promise<void> {
+    // ldfetch names the syntax of the log in its state; it is not the media type of a gzip file
+    if (typeof parserState.syntax !== "string") return;
+    const parser = RdfParsers.parseStream(Readable.from([]), { contentType: parserState.syntax, baseIRI: url, parserState });
+    await new Promise<void>((resolve, reject) => {
+        parser.on("error", (error: unknown) =>
+            reject(new ResumeInvalid(`the parser cannot continue from the stored state (${errorMessage(error)})`)),
+        );
+        parser.on("end", resolve);
+    });
+}
+
+/**
  * A readable of a web stream. Node.js has Readable.fromWeb. The polyfills of `stream` for browsers do not have a working
  * one (readable-stream defines it, but it throws), so there the stream is read through its reader.
  */
@@ -539,6 +555,7 @@ export class LdfetchDereferencer implements MessageDereferencer {
             headers.set("accept", this.accept);
         }
         const resume = options.resume;
+        if (resume) await checkParserState(resume.parserState, url);
         const tail = resume ? fromBase64(resume.tail) : new Uint8Array(0);
         const start = resume ? resume.offset - tail.length : 0;
         if (resume) {

@@ -120,6 +120,28 @@ describe("A single-page LDES in TriG with range requests", () => {
         // A range request, and then the whole page
         expect(server.ranges.filter((range, i) => server.requests[i] === "/root").slice(-2)).toEqual([expect.stringMatching(/^bytes=/), undefined]);
     });
+
+    test("a stored parser state that the parser rejects, e.g. after an update of the parser, reads the page again from the start", async () => {
+        const storage = new MemoryStorage();
+        publish(["a1", "a2"]);
+        expect(await collect({ storage })).toEqual(["a1", "a2"]);
+        const bookmarks = storage.store<string, { pages: Record<string, { range: { parserState: Record<string, unknown> } }> }>("ldes2");
+        const bookmark = (await bookmarks.get(ROOT))!;
+        bookmark.pages[ROOT].range.parserState = { ...bookmark.pages[ROOT].range.parserState, n3: { version: "1.1" } };
+        await bookmarks.put(ROOT, bookmark);
+
+        publish(["a1", "a2", "a3"]);
+        server.ranges = [];
+        server.requests = [];
+        expect(await collect({ storage })).toEqual(["a3"]);
+        // The state is checked before the request: the whole page is requested, without a range
+        expect(server.ranges).toEqual([undefined]);
+        // The state of the full read is stored again: the next run continues with a range request
+        server.ranges = [];
+        publish(["a1", "a2", "a3", "a4"]);
+        expect(await collect({ storage })).toEqual(["a4"]);
+        expect(server.ranges).toEqual([expect.stringMatching(/^bytes=/)]);
+    });
 });
 
 describe("A page in Jelly-RDF with range requests", () => {
